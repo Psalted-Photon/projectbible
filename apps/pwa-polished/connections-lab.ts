@@ -39,7 +39,7 @@ import {
   chapterSpan,
   type ConnectionsData,
 } from './src/lib/connections/data';
-import { CONFIG, type ArcSide, type ChapterWidth, type ConnectionsConfig, type Orientation } from './src/lib/connections/layout';
+import { CONFIG, frameFor, type ArcSide, type ChapterWidth, type ConnectionsConfig, type Orientation } from './src/lib/connections/layout';
 import { chapterAt, draw, pick, type DrawStats } from './src/lib/connections/render';
 import { palette, type ConnectionsPalette } from './src/lib/connections/palette';
 import {
@@ -456,14 +456,37 @@ function toCanvas(e: PointerEvent): { x: number; y: number } {
  * landed on. Phase 2 takes this further; here it is enough to check that the
  * shapes and the lighting line up with what is drawn.
  */
+/**
+ * How near the axis a tap counts as aiming at a chapter rather than an arc.
+ *
+ * This matters more than it looks. Every arc has a foot on the axis, so near
+ * the rule the arcs are packed shoulder to shoulder: measured over the real
+ * set, a tap within 40px of the axis hits an arc **100% of the time**, at every
+ * point along the whole Bible. Trying `pick` first therefore made tapping a
+ * chapter impossible — the tap always found some arc and lit its two verses
+ * instead of the 176 in Psalm 119, which read as the selection being lost.
+ *
+ * So the axis wins near the axis: a tap in this band means the chapter under
+ * it, and only a tap out in the field where arcs are separable means the arc.
+ */
+const AXIS_GRAB_PX = 44;
+
 function tap(e: PointerEvent) {
   if (!data) return;
   const at = toCanvas(e);
 
-  const hit = pick(data, CONFIG, { width: W, height: H }, at, 7 / view.k);
-  if (hit !== null) {
-    showLink(hit);
-    return;
+  // How far the tap is from the rule, across the axis.
+  const frame = frameFor({ width: W, height: H }, CONFIG);
+  const across = Math.abs(
+    (CONFIG.orientation === 'horizontal' ? at.y : at.x) - frame.originAcross,
+  );
+
+  if (across > AXIS_GRAB_PX) {
+    const hit = pick(data, CONFIG, { width: W, height: H }, at, 7 / view.k);
+    if (hit !== null) {
+      showLink(hit);
+      return;
+    }
   }
 
   const chapter = chapterAt(data, CONFIG, { width: W, height: H }, at);
@@ -513,11 +536,16 @@ function showLink(hit: number) {
       `<div class="votes">${data.votes[hit].toLocaleString()} votes</div>`
     : '';
 
-  // Light both ends, so the arc that was tapped stands out of the field.
-  light([
-    { start: data.from[hit], end: data.from[hit] + 1 },
-    { start: data.toStart[hit], end: data.toEnd[hit] + 1 },
-  ]);
+  // Light both ends by their chapters, not by the two bare verses: two verses
+  // out of 31,102 light almost nothing, which reads as the selection having
+  // been lost rather than as an arc having been chosen. The chapters either end
+  // sits in are what a reader is actually asking about.
+  const spans: Span[] = [];
+  const fromSpan = fromRef ? chapterSpan(fromRef.book, fromRef.chapter) : null;
+  if (fromSpan) spans.push(fromSpan);
+  const toSpan = a ? chapterSpan(a.book, a.chapter) : null;
+  if (toSpan) spans.push(toSpan);
+  light(spans.length ? spans : [{ start: data.from[hit], end: data.from[hit] + 1 }]);
   refreshPicked();
 }
 

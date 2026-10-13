@@ -277,7 +277,13 @@ function batchesFor(
   // moving case therefore builds into its own scratch batches and never
   // touches the cache.
   const moving = !!light?.shape && !light.settled;
-  const litKey = litKeyOf(lit);
+  // Keyed on the spans the batching actually uses, not on `lit`. The two agree
+  // on every frame that reaches the cache today — the opening sweep is the one
+  // state where they differ, and a sweep is always moving, so it never caches —
+  // but keying on the value that is used is what keeps that true if the sweep
+  // ever gains a settled frame.
+  const spans = light ? light.spans : lit;
+  const litKey = litKeyOf(spans);
   // dimFloor only changes the batching when it crosses zero, where dimmed arcs
   // stop being built at all; its exact value is a stroke-time alpha.
   const dimFloorOff = config.dimFloor <= 0;
@@ -304,7 +310,6 @@ function batchesFor(
   const shape = moving ? light!.shape! : null;
   const elapsedMs = light?.elapsedMs ?? 0;
   const lightOrder = light?.order ?? 'together';
-  const spans = light?.spans ?? lit;
   const origin = light?.origin ?? 0;
   const floor = light?.floor ?? 0;
   const restingDim = light?.dimFloor ?? config.dimFloor;
@@ -544,7 +549,22 @@ function gradientFor(
 }
 
 /** How long the longest chapter bar gets, in pixels off the axis. */
-const BAR_MAX = 26;
+const BAR_MAX = 72;
+/** How far a book divider reaches either side of the rule. */
+const BOOK_NOTCH = 4;
+/**
+ * The curve verse counts are drawn through, as an exponent.
+ *
+ * Straight proportion wastes the ruler. Psalm 119's 176 verses is an outlier —
+ * the median chapter is about 25 verses, so on a linear scale half the Bible
+ * is squeezed into the bottom seventh of the bar height and reads as a flat
+ * fuzz. A square root spends the height where the chapters actually are: 25
+ * verses reaches 38% of full rather than 14%, while 176 still stands clearly
+ * tallest. The ordering is untouched, since a root is monotonic.
+ */
+const BAR_CURVE = 0.5;
+/** The shortest bar, so a one-verse chapter is still a mark and not a gap. */
+const BAR_MIN = 2;
 /** The gap between the bars and the book names. */
 const NAME_GAP = 6;
 /** Room a sideways book name is given, in pixels across the axis. */
@@ -595,7 +615,8 @@ function drawAxis(
     // The middle of the chapter's own slot, so a bar sits under its chapter
     // rather than on the boundary between two.
     const along = ((a0 + a1) / 2) * frame.along;
-    const length = BAR_MAX * (axis.chapterVerses[c] / longest);
+    const share = Math.pow(axis.chapterVerses[c] / longest, BAR_CURVE);
+    const length = BAR_MIN + (BAR_MAX - BAR_MIN) * share;
     const a = pointAt(frame, along, 0);
     const b = pointAt(frame, along, -length);
     ctx.moveTo(a.x, a.y);
@@ -612,13 +633,19 @@ function drawAxis(
   ctx.lineTo(end.x, end.y);
   ctx.stroke();
 
-  // ── A tick at every book boundary, past the bars so it reads as a divider ──
+  // ── A notch at every book boundary ─────────────────────────────────────
+  //
+  // Short on purpose, and deliberately shorter than a bar. These ran past the
+  // longest bar before, which made 66 dividers the tallest thing on the ruler
+  // and the chapter lengths — the actual information — look like noise under
+  // them. A divider only has to say "a book ends here", so it sits across the
+  // rule and stops.
   ctx.strokeStyle = palette.rule;
   ctx.beginPath();
   for (const book of data.books) {
     const along = fractionOf(axis, book.start) * frame.along;
-    const a = pointAt(frame, along, 2);
-    const b = pointAt(frame, along, -(BAR_MAX + 3));
+    const a = pointAt(frame, along, BOOK_NOTCH);
+    const b = pointAt(frame, along, -BOOK_NOTCH);
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
   }
