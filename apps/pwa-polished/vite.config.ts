@@ -294,6 +294,9 @@ export default defineConfig({
         //                     chunks the app precaches anyway.
         //   motion-lab.html   tunes the app's motion (library flip, work tabs,
         //                     dropdowns). Self-contained, like gem-lab.
+        //   connections-lab   tunes the cross-reference arcs. Built from the
+        //                     app's own source, like tree-motion-lab, so its
+        //                     entry chunk is kept out as well as the page.
         //   reset.html       the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -312,6 +315,8 @@ export default defineConfig({
           '**/tree-motion-lab.html',
           '**/assets/tree-motion-lab-*.js',
           '**/motion-lab.html',
+          '**/connections-lab.html',
+          '**/assets/connections-lab-*.js',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
@@ -320,6 +325,7 @@ export default defineConfig({
           /^\/gem-lab\.html$/,
           /^\/tree-motion-lab\.html$/,
           /^\/motion-lab\.html$/,
+          /^\/connections-lab\.html$/,
         ],
         runtimeCaching: [
           {
@@ -427,11 +433,12 @@ export default defineConfig({
     emptyOutDir: true,
     copyPublicDir: true,
     rollupOptions: {
-      // The motion lab is a page of its own that runs the real tree code, so
-      // it is built alongside the app rather than living in public/.
+      // The labs that run the app's real code are pages of their own, so they
+      // are built alongside the app rather than living in public/.
       input: {
         main: resolve(__dirname, 'index.html'),
-        'tree-motion-lab': resolve(__dirname, 'tree-motion-lab.html')
+        'tree-motion-lab': resolve(__dirname, 'tree-motion-lab.html'),
+        'connections-lab': resolve(__dirname, 'connections-lab.html')
       }
     }
   }
