@@ -6,11 +6,15 @@
  * (connections-lab.html) runs this module rather than a copy of it, so what is
  * tuned there is what the app shows.
  *
- * Each arc wears both books' colors, the source's at its own foot and the
- * target's at the other, crossing over in between. That is the one thing that
- * makes a picture of 344,799 links legible: a band leaving Genesis is brown at
- * the Genesis end whatever it reaches, so where the Law is answered reads as
- * color rather than as counting.
+ * Each arc wears both books' colors crossed over: it leaves its source wearing
+ * the color of where it is *going*, and lands wearing the color of where it
+ * came *from*. That inversion is the whole legibility trick. An arc leaving
+ * Genesis for Revelation lifts off Genesis in Revelation's cyan and touches
+ * down in Revelation wearing Genesis's brown — so standing anywhere on the
+ * axis, the colors arriving at your feet tell you where they came from, which
+ * is the question a reader actually has. Coloring each end with its own book
+ * would say nothing: everything leaving Genesis would be brown, and brown is
+ * already what Genesis is.
  *
  * Two things are done for the sake of drawing this many arcs at 60fps:
  *
@@ -187,37 +191,91 @@ interface Batch {
  */
 const STRENGTH_STEPS = 8;
 
-export function draw(
-  ctx: CanvasRenderingContext2D,
+/**
+ * Every link's two feet as fractions along the axis, 0 to 1, kept between
+ * frames.
+ *
+ * `fractionOf` is two binary searches and a division, and the draw loop wanted
+ * it 689,598 times a frame — twice per link — which was the rest of the cost of
+ * a pan. A verse's place along the axis depends only on the pack and the
+ * spacing, so it is computed once per spacing and multiplied by the frame
+ * length at stroke time. Float32 is plenty: the error is a fraction of a pixel
+ * across a 1,189-chapter axis, and it halves the memory against Float64.
+ */
+interface FeetCache {
+  width: ChapterWidth;
+  fromAt: Float32Array;
+  toAt: Float32Array;
+}
+const feetCache = new WeakMap<ConnectionsData, FeetCache>();
+
+function feetFor(data: ConnectionsData, axis: Axis, width: ChapterWidth): FeetCache {
+  const cached = feetCache.get(data);
+  if (cached && cached.width === width) return cached;
+
+  const fromAt = new Float32Array(data.count);
+  const toAt = new Float32Array(data.count);
+  for (let i = 0; i < data.count; i++) {
+    fromAt[i] = fractionOf(axis, data.from[i]);
+    toAt[i] = fractionOf(axis, data.toStart[i]);
+  }
+  const entry = { width, fromAt, toAt };
+  feetCache.set(data, entry);
+  return entry;
+}
+
+/**
+ * The batches, kept between frames.
+ *
+ * This is the one that matters for a smooth pan. Sorting 344,799 links into
+ * batches walks the whole set, binary-searches two book indexes per link and
+ * pushes into 8,700 arrays — tens of milliseconds, and it was running on every
+ * frame of a drag even though a pan cannot change which arcs share a gradient.
+ * The grouping depends only on the data, the vote dials and the lit set; the
+ * viewport, the pan and the zoom are applied later, at stroke time.
+ */
+interface BatchCache {
+  floor: number;
+  maxArcs: number;
+  dimFloorOff: boolean;
+  voteCurve: number;
+  litKey: string;
+  sorted: Batch[];
+  skipped: number;
+}
+const batchCache = new WeakMap<ConnectionsData, BatchCache>();
+
+/** A lit set as a comparable string, so a cache hit is a string compare. */
+function litKeyOf(lit: Array<{ start: number; end: number }> | undefined): string {
+  if (!lit?.length) return '';
+  return lit.map((s) => `${s.start}-${s.end}`).join(',');
+}
+
+function batchesFor(
   data: ConnectionsData,
   config: ConnectionsConfig,
-  view: Viewport,
-  options: DrawOptions,
-): DrawStats {
-  const t0 = performance.now();
-  const { palette } = options;
-
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = palette.bg;
-  ctx.fillRect(0, 0, view.width, view.height);
-
-  if (options.view) {
-    const { x, y, k } = options.view;
-    ctx.translate(view.width / 2, view.height / 2);
-    ctx.scale(k, k);
-    ctx.translate(-view.width / 2 + x, -view.height / 2 + y);
+  lit: Array<{ start: number; end: number }> | undefined,
+): { sorted: Batch[]; skipped: number } {
+  const litKey = litKeyOf(lit);
+  // dimFloor only changes the batching when it crosses zero, where dimmed arcs
+  // stop being built at all; its exact value is a stroke-time alpha.
+  const dimFloorOff = config.dimFloor <= 0;
+  const cached = batchCache.get(data);
+  if (
+    cached &&
+    cached.floor === config.voteFloor &&
+    cached.maxArcs === config.maxArcs &&
+    cached.dimFloorOff === dimFloorOff &&
+    cached.voteCurve === config.voteCurve &&
+    cached.litKey === litKey
+  ) {
+    return cached;
   }
 
-  const axis = axisFor(data, config.width);
-  const frame = frameFor(view, config);
   const starts = bookStarts(data);
   const { order, skipped: culled } = orderFor(data, config);
-  // Arcs the vote floor and the cap took out, plus the ones a dimFloor of 0
-  // hides entirely — so the readout's count adds up to the whole set.
   let skipped = culled;
 
-  // ── Batch by book pair and strength ────────────────────────────────────
   const batches = new Map<number, Batch>();
   const total = order.length;
   for (let n = 0; n < total; n++) {
@@ -231,8 +289,8 @@ export function draw(
     const step = Math.round(strength * STRENGTH_STEPS);
     // An arc counts as lit if either foot is in the lit set, so a tapped book
     // shows what it reaches and what reaches it.
-    const dim = !(isLit(options.lit, from) || isLit(options.lit, to));
-    if (dim && config.dimFloor <= 0) {
+    const dim = !(isLit(lit, from) || isLit(lit, to));
+    if (dim && dimFloorOff) {
       skipped++;
       continue;
     }
@@ -246,11 +304,71 @@ export function draw(
     batch.indexes.push(i);
   }
 
-  // ── Stroke ─────────────────────────────────────────────────────────────
-  //
   // Dimmed arcs go down first, so the lit ones read on top of them rather than
   // through them.
-  const sorted = [...batches.values()].sort((a, b) => Number(b.dim) - Number(a.dim) || a.step - b.step);
+  const sorted = [...batches.values()].sort(
+    (a, b) => Number(b.dim) - Number(a.dim) || a.step - b.step,
+  );
+
+  const entry: BatchCache = {
+    floor: config.voteFloor,
+    maxArcs: config.maxArcs,
+    dimFloorOff,
+    voteCurve: config.voteCurve,
+    litKey,
+    sorted,
+    skipped,
+  };
+  batchCache.set(data, entry);
+  return entry;
+}
+
+export function draw(
+  ctx: CanvasRenderingContext2D,
+  data: ConnectionsData,
+  config: ConnectionsConfig,
+  view: Viewport,
+  options: DrawOptions,
+): DrawStats {
+  const t0 = performance.now();
+  const { palette } = options;
+
+  // Clear in device pixels, not CSS pixels. The caller has already scaled the
+  // context by the device pixel ratio, so filling `view.width × view.height`
+  // under an identity transform would wipe only the top-left 1/dpr of a
+  // retina canvas and leave the rest of last frame behind — a sticky trail
+  // smeared across every pan and zoom. `canvas.width/height` is the backing
+  // store's real size, which is what needs covering.
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = palette.bg;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
+
+  ctx.save();
+  if (options.view) {
+    const { x, y, k } = options.view;
+    ctx.translate(view.width / 2, view.height / 2);
+    ctx.scale(k, k);
+    ctx.translate(-view.width / 2 + x, -view.height / 2 + y);
+  }
+
+  const axis = axisFor(data, config.width);
+  const frame = frameFor(view, config);
+  const { sorted, skipped: culled } = batchesFor(data, config, options.lit);
+  const { fromAt, toAt } = feetFor(data, axis, config.width);
+  // Arcs the vote floor, the cap and a dimFloor of 0 took out — so the
+  // readout's count adds up to the whole set.
+  let skipped = culled;
+
+  // Everything the inner loop would otherwise recompute 344,799 times.
+  const horizontal = frame.orientation === 'horizontal';
+  const { originAlong, originAcross } = frame;
+  const heightMin = config.heightMin;
+  const heightRange = config.heightMax - config.heightMin;
+  const splitSide = config.side === 'split';
+  const sideSign: 1 | -1 = config.side === 'bottom' ? -1 : 1;
+
   ctx.lineCap = 'round';
 
   let drawn = 0;
@@ -270,18 +388,31 @@ export function draw(
 
     ctx.beginPath();
     for (const i of batch.indexes) {
-      const shape = arcShape(axis, frame, config, data.from[i], data.toStart[i]);
-      const a = pointAt(frame, shape.fromAlong, 0);
-      const b = pointAt(frame, shape.toAlong, 0);
-      const mid = pointAt(
-        frame,
-        (shape.fromAlong + shape.toAlong) / 2,
-        // A quadratic reaches half its control height, so the control point
-        // goes to twice the height wanted.
-        shape.height * 2 * shape.direction,
-      );
-      ctx.moveTo(a.x, a.y);
-      ctx.quadraticCurveTo(mid.x, mid.y, b.x, b.y);
+      // `arcShape` inlined, and the feet read from the cache: this body runs
+      // 344,799 times a frame, so an object per arc and two binary searches per
+      // foot are the difference between a pan that tracks the finger and one
+      // that does not. The math is `arcShape`'s, kept in step with it.
+      const fromAlong = fromAt[i] * frame.along;
+      const toAlong = toAt[i] * frame.along;
+      const span = Math.abs(toAlong - fromAlong) / frame.along;
+      const curved = Math.pow(span < 0 ? 0 : span > 1 ? 1 : span, config.heightCurve);
+      const height = frame.across * (heightMin + heightRange * curved);
+      const direction = splitSide ? (data.toStart[i] >= data.from[i] ? 1 : -1) : sideSign;
+
+      const a0 = originAlong + fromAlong;
+      const b0 = originAlong + toAlong;
+      const m0 = originAlong + (fromAlong + toAlong) / 2;
+      // A quadratic reaches half its control height, so the control point goes
+      // to twice the height wanted.
+      const mc = originAcross - height * 2 * direction;
+
+      if (horizontal) {
+        ctx.moveTo(a0, originAcross);
+        ctx.quadraticCurveTo(m0, mc, b0, originAcross);
+      } else {
+        ctx.moveTo(originAcross, a0);
+        ctx.quadraticCurveTo(mc, m0, originAcross, b0);
+      }
       drawn++;
     }
     ctx.stroke();
@@ -295,8 +426,12 @@ export function draw(
 }
 
 /**
- * The gradient a batch is stroked with: the source book's color at one end, the
- * target's at the other.
+ * The gradient a batch is stroked with — crossed over, which is the point.
+ *
+ * The *target* book's color sits at the source end of the gradient and the
+ * *source* book's color at the target end, so every arc leaves home wearing
+ * where it is headed and arrives wearing where it set out from. See the file
+ * header for why that way round.
  *
  * Built across the batch's own extent rather than per arc, which is the whole
  * point of batching — a gradient is the expensive object here. Arcs in a batch
@@ -313,10 +448,12 @@ function gradientFor(
   batch: Batch,
   alpha: number,
 ): CanvasGradient | string {
-  const [r1, g1, b1] = BOOK_RGB[batch.fromBook] ?? [138, 143, 152];
-  const [r2, g2, b2] = BOOK_RGB[batch.toBook] ?? [138, 143, 152];
+  // Crossed on purpose: r1 is the TARGET's color and sits at the SOURCE end.
+  const [r1, g1, b1] = BOOK_RGB[batch.toBook] ?? [138, 143, 152];
+  const [r2, g2, b2] = BOOK_RGB[batch.fromBook] ?? [138, 143, 152];
 
-  // A link inside one book has one color; no gradient needed.
+  // A link inside one book is that book's own color either way round, and a
+  // gradient between two identical colors is wasted work.
   if (batch.fromBook === batch.toBook) {
     return `rgba(${r1}, ${g1}, ${b1}, ${alpha})`;
   }
@@ -341,12 +478,27 @@ function gradientFor(
   return grad;
 }
 
+/** How long the longest chapter bar gets, in pixels off the axis. */
+const BAR_MAX = 26;
+/** The gap between the bars and the book names. */
+const NAME_GAP = 6;
+/** Room a sideways book name is given, in pixels across the axis. */
+const NAME_BAND = 62;
+
 /**
- * The axis: a rule along the whole Bible, a tick at each book, and the book
- * names where there is room for them.
+ * The axis: a bar per chapter, a tick at each book, and all 66 book names.
+ *
+ * The chapters are a bar graph pointing away from the arcs, each bar as long as
+ * its chapter has verses — so Psalm 119 is the longest bar in the Bible at 176
+ * verses and the one-verse chapters are stubs. That gives the axis a texture
+ * you can navigate by: the Psalms are a comb, the genealogies are a plateau.
  *
  * The names are drawn in the book's own color, which is the legend: a reader
- * who sees a brown arc has brown "Genesis" under one end of it.
+ * who sees brown arriving has brown "Genesis" somewhere under the other end.
+ * Written sideways when the axis is horizontal, because 66 names laid flat need
+ * about 2,600 pixels and a phone has 400 — upright they need 66 × 11, which
+ * fits anywhere, so every book gets named instead of the back third of the New
+ * Testament silently dropping off.
  */
 function drawAxis(
   ctx: CanvasRenderingContext2D,
@@ -358,23 +510,50 @@ function drawAxis(
 ): void {
   const horizontal = frame.orientation === 'horizontal';
 
-  // The rule itself.
+  // ── Chapter bars ───────────────────────────────────────────────────────
+  //
+  // Away from the arcs, so they never fight the picture. One path for all
+  // 1,189 of them; the longest chapter in the Bible sets the scale, so the
+  // bars mean the same thing whichever spacing the axis is in.
+  let longest = 1;
+  for (let i = 0; i < axis.chapterVerses.length; i++) {
+    if (axis.chapterVerses[i] > longest) longest = axis.chapterVerses[i];
+  }
+
+  ctx.strokeStyle = palette.muted;
+  ctx.lineWidth = 1;
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  for (let c = 0; c < axis.chapterStarts.length; c++) {
+    const a0 = axis.offsets[c];
+    const a1 = axis.offsets[c + 1];
+    // The middle of the chapter's own slot, so a bar sits under its chapter
+    // rather than on the boundary between two.
+    const along = ((a0 + a1) / 2) * frame.along;
+    const length = BAR_MAX * (axis.chapterVerses[c] / longest);
+    const a = pointAt(frame, along, 0);
+    const b = pointAt(frame, along, -length);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+
+  // ── The rule ───────────────────────────────────────────────────────────
   const start = pointAt(frame, 0, 0);
   const end = pointAt(frame, frame.along, 0);
   ctx.strokeStyle = palette.rule;
-  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(start.x, start.y);
   ctx.lineTo(end.x, end.y);
   ctx.stroke();
 
-  // A tick at every book boundary.
-  ctx.strokeStyle = palette.muted;
+  // ── A tick at every book boundary, past the bars so it reads as a divider ──
+  ctx.strokeStyle = palette.rule;
   ctx.beginPath();
   for (const book of data.books) {
     const along = fractionOf(axis, book.start) * frame.along;
-    const a = pointAt(frame, along, 0);
-    const b = pointAt(frame, along, -5);
+    const a = pointAt(frame, along, 2);
+    const b = pointAt(frame, along, -(BAR_MAX + 3));
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
   }
@@ -382,31 +561,39 @@ function drawAxis(
 
   if (!labels) return;
 
-  // Book names, skipped where a neighbour would collide. Measured once per
-  // book, which is 66 measurements and not worth caching.
+  // ── Book names ─────────────────────────────────────────────────────────
+  //
+  // Sideways on a horizontal axis and upright on a vertical one — either way
+  // each name needs only its line height across the axis, so all 66 fit and
+  // none has to be dropped or abbreviated.
   ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.textBaseline = horizontal ? 'top' : 'middle';
-  ctx.textAlign = horizontal ? 'center' : 'left';
+  const base = BAR_MAX + NAME_GAP;
 
-  let lastEdge = -Infinity;
   data.books.forEach((book, i) => {
     const mid = fractionOf(axis, (book.start + book.end) / 2) * frame.along;
-    const label = book.name.length > 12 ? shortName(book.name) : book.name;
-    const w = horizontal ? ctx.measureText(label).width : 11;
-    if (mid - w / 2 < lastEdge + 3) return;
-    lastEdge = mid + w / 2;
-
-    const at = pointAt(frame, mid, -9);
+    const at = pointAt(frame, mid, -base);
     ctx.fillStyle = `rgba(${BOOK_RGB[i][0]}, ${BOOK_RGB[i][1]}, ${BOOK_RGB[i][2]}, 0.95)`;
-    ctx.fillText(label, at.x, at.y);
+
+    ctx.save();
+    ctx.translate(at.x, at.y);
+    if (horizontal) {
+      // Reading bottom-to-top, which is the convention for a sideways axis
+      // label and keeps the name's start at the axis end.
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+    } else {
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+    }
+    ctx.fillText(book.name, 0, 0);
+    ctx.restore();
   });
 }
 
-/** "1 Thessalonians" in a space meant for "Ruth". */
-function shortName(name: string): string {
-  const m = name.match(/^([123])\s+(.*)$/);
-  if (m) return `${m[1]} ${m[2].slice(0, 4)}`;
-  return name.slice(0, 5);
+/** How much room the axis furniture takes across the axis, in pixels. */
+export function axisDepth(labels: boolean): number {
+  return labels ? BAR_MAX + NAME_GAP + NAME_BAND : BAR_MAX + 4;
 }
 
 /**

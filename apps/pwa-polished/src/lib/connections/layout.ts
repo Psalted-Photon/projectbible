@@ -66,6 +66,14 @@ export interface ConnectionsConfig {
   padding: number;
   /** How much of the short side the axis sits in from the edge, 0.5 centred. */
   axisAt: number;
+  /**
+   * Room kept past the rule for the chapter bars and the book names, in pixels.
+   *
+   * The bars are a bar graph of verse counts and the names are written sideways
+   * under them, so this is the longest bar plus a name's length — about 94 with
+   * names and 30 without. render.ts's `axisDepth` gives the right number.
+   */
+  axisDepth: number;
 }
 
 /** What the app ships, and what the lab's Reset puts back. */
@@ -88,6 +96,7 @@ export const CONFIG: ConnectionsConfig = {
   dimFloor: 0.06,
   padding: 18,
   axisAt: 1,
+  axisDepth: 94,
 };
 
 /** The box the picture is drawn into, in CSS pixels. */
@@ -193,7 +202,11 @@ export function frameFor(view: Viewport, config: ConnectionsConfig): Frame {
   const pad = config.padding;
   const horizontal = config.orientation === 'horizontal';
   const along = Math.max(1, (horizontal ? view.width : view.height) - pad * 2);
-  const shortSide = Math.max(1, (horizontal ? view.height : view.width) - pad * 2);
+  // The chapter bars and the book names hang off the far side of the rule, so
+  // the arcs have the short side less that much to rise into. Without this the
+  // rule sits on the canvas edge at axisAt 1 and the names fall off it.
+  const furniture = config.axisDepth;
+  const shortSide = Math.max(1, (horizontal ? view.height : view.width) - pad * 2 - furniture);
   // Split draws to both sides, so each side gets half the room.
   const across = config.side === 'split' ? shortSide / 2 : shortSide;
   const axisOffset = config.side === 'split' ? shortSide / 2 : shortSide * config.axisAt;

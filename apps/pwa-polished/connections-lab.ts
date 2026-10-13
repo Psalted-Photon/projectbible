@@ -470,6 +470,8 @@ function buildDrawer() {
   });
   slider('axis at', () => CONFIG.axisAt, (v) => { CONFIG.axisAt = v; }, 0, 1, 0.01);
   slider('padding', () => CONFIG.padding, (v) => { CONFIG.padding = v; }, 0, 60, 1);
+  // Room past the rule for the chapter bars and the sideways book names.
+  slider('ruler room', () => CONFIG.axisDepth, (v) => { CONFIG.axisDepth = v; }, 0, 160, 2);
 
   heading('Height');
   slider('curve', () => CONFIG.heightCurve, (v) => { CONFIG.heightCurve = v; }, 0.1, 2, 0.01);
