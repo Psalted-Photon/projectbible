@@ -1,11 +1,21 @@
 /**
- * Connections lab v1.0 — tunes the look of the cross-reference arcs: all
- * 344,799 links over one line of the whole Bible.
+ * Connections lab v2.0 — tunes the look of the cross-reference arcs, and the
+ * light that travels over them: all 344,799 links over one line of the whole
+ * Bible.
  *
  * Runs the real code: lib/connections/data.ts for the pack, layout.ts for the
- * shapes and render.ts for the frame. Every slider writes straight into CONFIG,
- * so what is drawn here is what the app will draw. Copy values prints the block
- * ready to paste back into src/lib/connections/layout.ts.
+ * shapes, lights.ts for the travelling light and render.ts for the frame. Every
+ * slider writes straight into CONFIG or LIGHTS, so what is drawn here is what
+ * the app will draw. Copy values prints both blocks, ready to paste back into
+ * src/lib/connections/layout.ts and lights.ts.
+ *
+ * The light is the v2.0 addition. Tapping a chapter, picking a book or dragging
+ * a range lights what it touches and dims the rest, and the light arrives
+ * rather than appearing — it spreads from the tap using the family tree's own
+ * easing and wave dials, so the two pictures move like one app. An opening
+ * sweep runs Genesis to Revelation when the picture first appears. All of it
+ * follows the Motion setting; the Motion section forces a level so 'full',
+ * 'reduced' and 'off' can each be checked without leaving the page.
  *
  * The pack comes from whatever this origin already installed — the lab is on
  * the same site as the app, so it shares its IndexedDB. If it is not installed
@@ -32,10 +42,27 @@ import {
 import { CONFIG, type ArcSide, type ChapterWidth, type ConnectionsConfig, type Orientation } from './src/lib/connections/layout';
 import { chapterAt, draw, pick, type DrawStats } from './src/lib/connections/render';
 import { palette, type ConnectionsPalette } from './src/lib/connections/palette';
+import {
+  LIGHTS,
+  LIGHT_ORDER_NAMES,
+  countReach,
+  lightFrame,
+  litSetFor,
+  waveDurationMs,
+  type ConnectionsLights,
+  type LightOrder,
+  type LitSet,
+  type Span,
+} from './src/lib/connections/lights';
+import { CURVE_NAMES, type Curve } from './src/lib/familyTree/motion';
+import { motionLevel } from './src/lib/motion';
+import { BIBLE_BOOKS } from './src/lib/bibleData';
+import { BOOK_COLORS } from './src/lib/connections/palette';
 import { importPackFromBytes } from './src/adapters/pack-import';
 import { PACK_BASE_URL } from './src/lib/packInstaller';
 
 const SHIPPED: ConnectionsConfig = JSON.parse(JSON.stringify(CONFIG));
+const SHIPPED_LIGHTS: ConnectionsLights = JSON.parse(JSON.stringify(LIGHTS));
 const STORE_KEY = 'connections-lab-values';
 
 const stage = document.getElementById('stage') as HTMLDivElement;
@@ -54,10 +81,26 @@ let colors: ConnectionsPalette = palette();
 /** Pan and zoom, as the family tree does it. */
 let view = { x: 0, y: 0, k: 1 };
 
-/** The lit spans, from a tapped book or chapter. Empty means everything is lit. */
-let lit: Array<{ start: number; end: number }> = [];
+/**
+ * What is lit, and when its light began. Null means everything is lit, which
+ * is the resting state.
+ */
+let lit: LitSet | null = null;
+/** The opening sweep, while it is running. */
+let opening: { startedAt: number } | null = null;
 /** What the last tap landed on, printed in the drawer. */
 let picked: string = '';
+/**
+ * The Motion level the lab draws at.
+ *
+ * 'setting' follows the app, which is what ships; the other three force a level
+ * so all three can be checked without leaving the page. The app itself only
+ * ever reads the setting.
+ */
+let motionMode: 'setting' | 'full' | 'reduced' | 'off' = 'setting';
+function motionNow(): 'full' | 'reduced' | 'off' {
+  return motionMode === 'setting' ? motionLevel() : motionMode;
+}
 
 let showLabels = true;
 /** The theme the canvas paints in. The lab is outside the app's themed subtree,
@@ -74,7 +117,7 @@ function save() {
   try {
     localStorage.setItem(
       STORE_KEY,
-      JSON.stringify({ config: CONFIG, prefs: { showLabels, themeName } }),
+      JSON.stringify({ config: CONFIG, lights: LIGHTS, prefs: { showLabels, themeName, motionMode } }),
     );
   } catch {
     // Storage blocked: the lab still works, it just forgets on reload.
@@ -87,8 +130,19 @@ function load() {
     if (!raw) return;
     const v = JSON.parse(raw);
     if (v?.config) Object.assign(CONFIG, v.config);
+    // The light specs are nested, so each is merged rather than replaced: a set
+    // saved before a dial existed still loads, with the new dial at its
+    // shipped value instead of undefined.
+    if (v?.lights) {
+      const l = v.lights;
+      if (l.open) Object.assign(LIGHTS.open, l.open);
+      if (l.tap) Object.assign(LIGHTS.tap, l.tap);
+      if (typeof l.order === 'string') LIGHTS.order = l.order;
+      if (typeof l.openOnLoad === 'boolean') LIGHTS.openOnLoad = l.openOnLoad;
+    }
     if (typeof v?.prefs?.showLabels === 'boolean') showLabels = v.prefs.showLabels;
     if (typeof v?.prefs?.themeName === 'string') themeName = v.prefs.themeName;
+    if (typeof v?.prefs?.motionMode === 'string') motionMode = v.prefs.motionMode;
   } catch {
     // Nothing saved, or storage blocked.
   }
@@ -96,6 +150,7 @@ function load() {
 
 function resetValues() {
   Object.assign(CONFIG, JSON.parse(JSON.stringify(SHIPPED)));
+  Object.assign(LIGHTS, JSON.parse(JSON.stringify(SHIPPED_LIGHTS)));
   try {
     localStorage.removeItem(STORE_KEY);
   } catch {
@@ -154,12 +209,22 @@ function measure() {
   dirty = true;
 }
 
-function render() {
+/** True while a light is still travelling, so the loop keeps asking for frames. */
+let animating = false;
+
+function render(now = performance.now()) {
   if (!data) return;
+  const light = lightFrame(LIGHTS, lit, opening, now, CONFIG.dimFloor, motionNow());
+  // Once the opening sweep has settled it is spent; clearing it here means the
+  // picture does not re-light on the next unrelated redraw.
+  if (opening && !light.opening && light.settled) opening = null;
+  animating = !light.settled;
+
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   lastStats = draw(ctx, data, CONFIG, { width: W, height: H }, {
     palette: colors,
-    lit,
+    lit: lit?.spans,
+    light,
     labels: showLabels,
     view,
   });
@@ -172,9 +237,10 @@ let flashUntil = 0;
 function frame() {
   const now = performance.now();
 
-  if (dirty) {
+  // A travelling light needs a frame a frame; everything else redraws once.
+  if (dirty || animating) {
     dirty = false;
-    render();
+    render(now);
   }
 
   fpsFrames++;
@@ -182,8 +248,14 @@ function frame() {
     if (now > flashUntil) {
       const fps = Math.round((fpsFrames * 1000) / (now - fpsT0));
       const s = lastStats;
+      // While a light travels, say so and say how long it runs: the frame rate
+      // during a wave is the number that decides whether the light is
+      // affordable, and it is not the same as the resting one.
+      const wave = animating
+        ? ` · lighting ${(waveDurationMs(opening ? LIGHTS.open : LIGHTS.tap) / 1000).toFixed(1)}s`
+        : '';
       fpsEl.textContent = s
-        ? `${fps} fps · ${s.ms.toFixed(1)} ms/draw\n${s.drawn.toLocaleString()} arcs · ${s.batches} batches${s.skipped ? ` · ${s.skipped.toLocaleString()} skipped` : ''}`
+        ? `${fps} fps · ${s.ms.toFixed(1)} ms/draw${wave}\n${s.drawn.toLocaleString()} arcs · ${s.batches} batches${s.skipped ? ` · ${s.skipped.toLocaleString()} skipped` : ''}`
         : `${fps} fps`;
       fpsEl.style.whiteSpace = 'pre';
     }
@@ -218,6 +290,77 @@ let lastY = 0;
 const pointers = new Map<number, { x: number; y: number }>();
 let pinchStart: { dist: number; k: number } | null = null;
 
+/**
+ * Dragging a range instead of panning.
+ *
+ * A toggle rather than a long-press, because a long-press-then-drag and a pan
+ * are the same gesture on a phone and the picture is something you pan a lot.
+ * While it is on, a drag along the axis picks the passage under it.
+ */
+let rangeMode = false;
+let rangeFrom: number | null = null;
+
+const rangeBtn = document.getElementById('range') as HTMLButtonElement;
+rangeBtn.addEventListener('click', () => {
+  rangeMode = !rangeMode;
+  rangeBtn.setAttribute('aria-pressed', String(rangeMode));
+  rangeFrom = null;
+});
+
+/** The verse position under a point, or null if it missed the axis. */
+function positionAt(at: { x: number; y: number }): number | null {
+  if (!data) return null;
+  const chapter = chapterAt(data, CONFIG, { width: W, height: H }, at);
+  return chapter === null ? null : data.chapterStarts[chapter];
+}
+
+/**
+ * Light everything between two verse positions.
+ *
+ * `restart` is false while a drag is still in progress: re-stamping the light's
+ * start time on every pointermove would hold the wave at its first frame
+ * forever, so the span updates live and the wave only runs when the drag ends.
+ */
+function lightRange(a: number, b: number, restart = true) {
+  if (!data) return;
+  const lo = Math.min(a, b);
+  // The chapter the drag ended in is included whole, so a drag across Matthew
+  // lights all of Matthew rather than stopping mid-chapter.
+  const end = endOfChapterAt(Math.max(a, b));
+  const spans = [{ start: lo, end }];
+  if (restart) light(spans);
+  else {
+    // Mid-drag the light is simply there: a start time far enough back that the
+    // wave has already finished, so the reader sees the range they are choosing
+    // rather than a wave restarting under their finger.
+    lit = { spans, origin: (lo + end) / 2, startedAt: -1e9 };
+    dirty = true;
+  }
+  const from = refAt(lo);
+  const to = refAt(Math.max(end - 1, lo));
+  if (from && to) {
+    const reach = countReach(data, { start: lo, end });
+    picked =
+      `<b>${from.book} ${from.chapter} – ${to.book} ${to.chapter}</b><br>` +
+      `${reach.out.toLocaleString()} out, ${reach.in.toLocaleString()} in`;
+    refreshPicked();
+  }
+}
+
+/** One past the last verse of the chapter a position falls in. */
+function endOfChapterAt(position: number): number {
+  if (!data) return position + 1;
+  const starts = data.chapterStarts;
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= position) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo + 1 < starts.length ? starts[lo + 1] : data.totalVerses;
+}
+
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -225,6 +368,9 @@ canvas.addEventListener('pointerdown', (e) => {
   moved = false;
   lastX = e.clientX;
   lastY = e.clientY;
+  if (rangeMode && pointers.size === 1) {
+    rangeFrom = positionAt(toCanvas(e));
+  }
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     pinchStart = { dist: Math.hypot(a.x - b.x, a.y - b.y), k: view.k };
@@ -250,6 +396,14 @@ canvas.addEventListener('pointermove', (e) => {
   if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
   lastX = e.clientX;
   lastY = e.clientY;
+
+  // In range mode the drag picks a passage instead of moving the picture.
+  if (rangeMode && rangeFrom !== null) {
+    const to = positionAt(toCanvas(e));
+    if (to !== null) lightRange(rangeFrom, to, false);
+    return;
+  }
+
   view.x += dx / view.k;
   view.y += dy / view.k;
   dirty = true;
@@ -260,6 +414,14 @@ function endPointer(e: PointerEvent) {
   if (pointers.size < 2) pinchStart = null;
   if (pointers.size === 0) {
     dragging = false;
+    // A finished range drag runs its wave now, over the span the reader chose.
+    if (rangeMode && rangeFrom !== null && moved) {
+      const to = positionAt(toCanvas(e));
+      if (to !== null) lightRange(rangeFrom, to);
+      rangeFrom = null;
+      return;
+    }
+    rangeFrom = null;
     if (!moved) tap(e);
   }
 }
@@ -300,21 +462,7 @@ function tap(e: PointerEvent) {
 
   const hit = pick(data, CONFIG, { width: W, height: H }, at, 7 / view.k);
   if (hit !== null) {
-    const from = refAt(data.from[hit]);
-    const a = refAt(data.toStart[hit]);
-    const b = refAt(data.toEnd[hit]);
-    const target =
-      a && b && data.toStart[hit] !== data.toEnd[hit]
-        ? `${a.book} ${a.chapter}:${a.verse}–${b.chapter === a.chapter ? b.verse : `${b.chapter}:${b.verse}`}`
-        : a
-          ? `${a.book} ${a.chapter}:${a.verse}`
-          : '?';
-    picked = from
-      ? `<b>${from.book} ${from.chapter}:${from.verse}</b> → <b>${target}</b><br>${data.votes[hit]} votes`
-      : '';
-    lit = [{ start: data.from[hit], end: data.from[hit] + 1 }];
-    refreshPicked();
-    dirty = true;
+    showLink(hit);
     return;
   }
 
@@ -324,24 +472,63 @@ function tap(e: PointerEvent) {
   const ref = refAt(start);
   const span = ref ? chapterSpan(ref.book, ref.chapter) : null;
   if (span && ref) {
-    lit = [span];
+    light([span]);
     const reach = countReach(data, span);
     picked = `<b>${ref.book} ${ref.chapter}</b><br>${reach.out.toLocaleString()} out, ${reach.in.toLocaleString()} in`;
     refreshPicked();
-    dirty = true;
   }
 }
 
-/** How many links leave a span, and how many arrive in it. */
-function countReach(d: ConnectionsData, span: { start: number; end: number }) {
-  let out = 0;
-  let inward = 0;
-  for (let i = 0; i < d.count; i++) {
-    const f = d.from[i];
-    if (f >= span.start && f < span.end) out++;
-    if (d.toStart[i] >= span.start && d.toStart[i] < span.end) inward++;
-  }
-  return { out, in: inward };
+/** Light a set of spans, starting the wave from now. */
+function light(spans: Span[]) {
+  lit = spans.length ? litSetFor(spans, performance.now()) : null;
+  dirty = true;
+}
+
+/**
+ * A tapped arc, shown as both of its verses.
+ *
+ * The rows are the app's standard reference row — the reference in its book's
+ * color over the opening words, with a bar of that color down the left. The lab
+ * builds them in plain DOM because this page carries no Svelte; the real window
+ * in Phase 3 uses `components/VerseRefRow.svelte` itself, which is also where
+ * the verse text comes from. Here the shape is what matters: the two ends of a
+ * cross-reference read as references, not as coordinates.
+ */
+function showLink(hit: number) {
+  if (!data) return;
+  const fromRef = refAt(data.from[hit]);
+  const a = refAt(data.toStart[hit]);
+  const b = refAt(data.toEnd[hit]);
+  const ranged = a && b && data.toStart[hit] !== data.toEnd[hit];
+  const target = ranged
+    ? `${a!.book} ${a!.chapter}:${a!.verse}–${b!.chapter === a!.chapter ? b!.verse : `${b!.chapter}:${b!.verse}`}`
+    : a
+      ? `${a.book} ${a.chapter}:${a.verse}`
+      : '?';
+
+  picked = fromRef
+    ? refRow(fromRef.book, `${fromRef.book} ${fromRef.chapter}:${fromRef.verse}`) +
+      refRow(a?.book ?? fromRef.book, target) +
+      `<div class="votes">${data.votes[hit].toLocaleString()} votes</div>`
+    : '';
+
+  // Light both ends, so the arc that was tapped stands out of the field.
+  light([
+    { start: data.from[hit], end: data.from[hit] + 1 },
+    { start: data.toStart[hit], end: data.toEnd[hit] + 1 },
+  ]);
+  refreshPicked();
+}
+
+/** One reference row, in its book's color. */
+function refRow(book: string, label: string): string {
+  const color = BOOK_COLORS[BIBLE_BOOKS.findIndex((b) => b.name === book)] ?? '#8a8f98';
+  return (
+    `<div class="refrow" style="border-left-color:${color}">` +
+    `<span class="refname" style="color:${color}">${label}</span>` +
+    `</div>`
+  );
 }
 
 document.getElementById('redraw')!.addEventListener('click', () => {
@@ -353,15 +540,24 @@ document.getElementById('whole')!.addEventListener('click', () => {
   dirty = true;
 });
 document.getElementById('clear')!.addEventListener('click', () => {
-  lit = [];
+  light([]);
   picked = '';
   bookSel.value = '';
   refreshPicked();
+});
+document.getElementById('replay')!.addEventListener('click', () => {
+  // The opening sweep, from scratch: clear whatever is lit so it runs over the
+  // whole Bible the way it does when the window first opens.
+  light([]);
+  picked = '';
+  bookSel.value = '';
+  refreshPicked();
+  opening = { startedAt: performance.now() };
   dirty = true;
 });
 bookSel.addEventListener('change', () => {
   const span = bookSel.value ? bookSpan(bookSel.value) : null;
-  lit = span ? [span] : [];
+  light(span ? [span] : []);
   if (span && data) {
     const reach = countReach(data, span);
     picked = `<b>${bookSel.value}</b><br>${reach.out.toLocaleString()} out, ${reach.in.toLocaleString()} in`;
@@ -383,6 +579,45 @@ function el<K extends keyof HTMLElementTagNameMap>(
   Object.assign(e, props);
   parent?.appendChild(e);
   return e;
+}
+
+/** A line of explanation under a heading. */
+function note(text: string) {
+  el('p', { className: 'note', textContent: text }, drawer);
+}
+
+/**
+ * The dials every wave shares, so the tap light and the opening sweep are tuned
+ * by the same controls and read the same way.
+ *
+ * Each change replays its own wave, because a spread or a curve cannot be
+ * judged from a still picture.
+ */
+function waveDials(spec: { spreadMs: number; fadeMs: number; orderCurve: Curve; jitter: number; flash: number; flicker: number; flickerHz: number }, replay: () => void) {
+  slider('spread ms', () => spec.spreadMs, (v) => { spec.spreadMs = v; replay(); }, 0, 4000, 25);
+  slider('fade ms', () => spec.fadeMs, (v) => { spec.fadeMs = v; replay(); }, 0, 1200, 10);
+  choice(
+    'order curve',
+    CURVE_NAMES,
+    () => (Array.isArray(spec.orderCurve) ? 'cubic' : spec.orderCurve),
+    (v) => { spec.orderCurve = v; replay(); },
+  );
+  slider('jitter', () => spec.jitter, (v) => { spec.jitter = v; replay(); }, 0, 1, 0.01);
+  slider('flash', () => spec.flash, (v) => { spec.flash = v; replay(); }, 0, 1, 0.01);
+  slider('flicker', () => spec.flicker, (v) => { spec.flicker = v; replay(); }, 0, 1, 0.01);
+  slider('flicker hz', () => spec.flickerHz, (v) => { spec.flickerHz = v; replay(); }, 1, 30, 1);
+}
+
+/** Run the tap light again over whatever is lit, so a dial can be judged. */
+function replayTap() {
+  if (lit) light(lit.spans);
+  else replayOpen();
+}
+
+/** Run the opening sweep again. */
+function replayOpen() {
+  opening = { startedAt: performance.now() };
+  dirty = true;
 }
 
 function heading(text: string, action?: { label: string; onClick: () => void }) {
@@ -501,6 +736,35 @@ function buildDrawer() {
   heading('Light');
   slider('dim floor', () => CONFIG.dimFloor, (v) => { CONFIG.dimFloor = v; }, 0, 0.5, 0.005);
 
+  heading('Tap light', { label: 'Replay', onClick: replayTap });
+  note(
+    'Tap a chapter, pick a book, or turn on Select range and drag along the axis. ' +
+      'The light travels out from where you tapped. A wave redraws every frame, so ' +
+      'the readout shows its real cost: near 3ms at a 20,000 cap, near 40ms uncapped.',
+  );
+  choice<LightOrder>(
+    'travels',
+    Object.keys(LIGHT_ORDER_NAMES) as LightOrder[],
+    () => LIGHTS.order,
+    (v) => { LIGHTS.order = v; replayTap(); },
+  );
+  waveDials(LIGHTS.tap, replayTap);
+
+  heading('Opening sweep', { label: 'Replay', onClick: replayOpen });
+  note('Runs Genesis to Revelation when the picture first appears.');
+  checks([['on when it opens', () => LIGHTS.openOnLoad, (v) => { LIGHTS.openOnLoad = v; }]]);
+  slider('starts at', () => LIGHTS.open.floor, (v) => { LIGHTS.open.floor = v; replayOpen(); }, 0, 0.5, 0.005);
+  waveDials(LIGHTS.open, replayOpen);
+
+  heading('Motion');
+  note(
+    'The app follows the Motion setting: reduced keeps the fade but drops the travel, ' +
+      'off puts the light straight on. The other three force a level so all of them can be checked here.',
+  );
+  choice('level', ['setting', 'full', 'reduced', 'off'] as const, () => motionMode, (v) => {
+    motionMode = v;
+  });
+
   heading('Look');
   choice('theme', ['reader', 'dark', 'light', 'sepia'] as const, () => themeName, (v) => {
     themeName = v;
@@ -545,7 +809,10 @@ function fmt(v: unknown, indent: string): string {
 }
 
 function readout(): string {
-  return `// src/lib/connections/layout.ts\nexport const CONFIG: ConnectionsConfig = ${fmt(CONFIG, '')};\n`;
+  return (
+    `// src/lib/connections/layout.ts\nexport const CONFIG: ConnectionsConfig = ${fmt(CONFIG, '')};\n` +
+    `\n// src/lib/connections/lights.ts\nexport const LIGHTS: ConnectionsLights = ${fmt(LIGHTS, '')};\n`
+  );
 }
 
 async function copyValues() {
@@ -613,6 +880,9 @@ ensurePack()
     buildBookPicker(loaded);
     measure();
     buildDrawer();
+    // The opening sweep, the first thing the picture does — the same light the
+    // window will run when it opens in the app.
+    if (LIGHTS.openOnLoad && motionNow() !== 'off') opening = { startedAt: performance.now() };
     requestAnimationFrame(frame);
     spin(2000);
   })

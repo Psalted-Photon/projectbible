@@ -43,6 +43,14 @@ import {
   type Viewport,
 } from './layout';
 import { BOOK_RGB, bookIndexAt, type ConnectionsPalette } from './palette';
+import {
+  LIGHT_STEPS,
+  inSpans,
+  lightAt,
+  rankOf,
+  type LightFrame,
+  type Span,
+} from './lights';
 
 /** What one draw needs beyond the data and the dials. */
 export interface DrawOptions {
@@ -52,7 +60,13 @@ export interface DrawOptions {
    * spans are drawn at full strength, the rest fall to `dimFloor`. Empty or
    * absent means everything is lit, which is the resting state.
    */
-  lit?: Array<{ start: number; end: number }>;
+  lit?: Span[];
+  /**
+   * The travelling light, if one is running. Absent or settled means the arcs
+   * take their resting brightness and the draw follows the same path it did
+   * before any of the lighting existed.
+   */
+  light?: LightFrame;
   /** Draw the book names and the chapter ruler. */
   labels?: boolean;
   /** Pan and zoom, applied around the canvas centre. */
@@ -157,13 +171,6 @@ function orderFor(data: ConnectionsData, config: ConnectionsConfig): OrderCache 
   return entry;
 }
 
-/** Is a position inside any lit span? */
-function isLit(lit: Array<{ start: number; end: number }> | undefined, position: number): boolean {
-  if (!lit?.length) return true;
-  for (const span of lit) if (position >= span.start && position < span.end) return true;
-  return false;
-}
-
 /**
  * One batch of arcs: every link joining the same pair of books, at the same
  * rounded thickness and brightness, so they share one gradient and one path.
@@ -177,6 +184,13 @@ interface Batch {
   /** Quantised strength, 0..STRENGTH_STEPS. */
   step: number;
   dim: boolean;
+  /**
+   * Quantised travelling light, 0..LIGHT_STEPS, or -1 when no light is moving.
+   *
+   * -1 is the resting case and takes the `dim` flag's brightness, which is how
+   * a settled picture costs exactly what it did before the lighting existed.
+   */
+  lightStep: number;
   indexes: number[];
 }
 
@@ -254,27 +268,49 @@ function litKeyOf(lit: Array<{ start: number; end: number }> | undefined): strin
 function batchesFor(
   data: ConnectionsData,
   config: ConnectionsConfig,
-  lit: Array<{ start: number; end: number }> | undefined,
+  lit: Span[] | undefined,
+  light: LightFrame | undefined,
 ): { sorted: Batch[]; skipped: number } {
+  // A travelling light changes every arc's brightness every frame, so its
+  // batches cannot be cached — but it also cannot be allowed to evict the
+  // resting ones, or every tap would cost a full rebuild when it settled. The
+  // moving case therefore builds into its own scratch batches and never
+  // touches the cache.
+  const moving = !!light?.shape && !light.settled;
   const litKey = litKeyOf(lit);
   // dimFloor only changes the batching when it crosses zero, where dimmed arcs
   // stop being built at all; its exact value is a stroke-time alpha.
   const dimFloorOff = config.dimFloor <= 0;
-  const cached = batchCache.get(data);
-  if (
-    cached &&
-    cached.floor === config.voteFloor &&
-    cached.maxArcs === config.maxArcs &&
-    cached.dimFloorOff === dimFloorOff &&
-    cached.voteCurve === config.voteCurve &&
-    cached.litKey === litKey
-  ) {
-    return cached;
+
+  if (!moving) {
+    const cached = batchCache.get(data);
+    if (
+      cached &&
+      cached.floor === config.voteFloor &&
+      cached.maxArcs === config.maxArcs &&
+      cached.dimFloorOff === dimFloorOff &&
+      cached.voteCurve === config.voteCurve &&
+      cached.litKey === litKey
+    ) {
+      return cached;
+    }
   }
 
   const starts = bookStarts(data);
   const { order, skipped: culled } = orderFor(data, config);
   let skipped = culled;
+
+  // Everything the per-arc light needs, hoisted out of the loop.
+  const shape = moving ? light!.shape! : null;
+  const elapsedMs = light?.elapsedMs ?? 0;
+  const lightOrder = light?.order ?? 'together';
+  const spans = light?.spans ?? lit;
+  const origin = light?.origin ?? 0;
+  const floor = light?.floor ?? 0;
+  const restingDim = light?.dimFloor ?? config.dimFloor;
+  const totalVerses = data.totalVerses;
+  const maxVotes = data.maxVotes;
+  const opening = light?.opening ?? false;
 
   const batches = new Map<number, Batch>();
   const total = order.length;
@@ -288,27 +324,48 @@ function batchesFor(
     const strength = strengthOf(config, data.votes[i], data.maxVotes);
     const step = Math.round(strength * STRENGTH_STEPS);
     // An arc counts as lit if either foot is in the lit set, so a tapped book
-    // shows what it reaches and what reaches it.
-    const dim = !(isLit(lit, from) || isLit(lit, to));
-    if (dim && dimFloorOff) {
+    // shows what it reaches and what reaches it. The opening sweep lights the
+    // whole Bible, so it has no dimmed set at all.
+    const dim = opening ? false : !(inSpans(spans, from) || inSpans(spans, to));
+
+    let lightStep = -1;
+    if (shape) {
+      // Where this arc sits in the order, and how far its own fade has got.
+      const rank = rankOf(lightOrder, from, to, data.votes[i], maxVotes, origin, totalVerses);
+      // An arc rises to full if it is lit and to the dim floor if it is not.
+      // The opening sweep starts everything from `floor` (0 means the picture
+      // assembles out of nothing); a tap starts from the dimmed level, so the
+      // lit arcs come up out of the dimmed field rather than off a black page.
+      const start = opening ? floor : restingDim;
+      const end = dim ? restingDim : 1;
+      const v = lightAt(shape, elapsedMs, rank, start, end, i);
+      lightStep = Math.round(Math.min(Math.max(v, 0), 1.5) * LIGHT_STEPS);
+    } else if (dim && dimFloorOff) {
       skipped++;
       continue;
     }
 
-    const key = (fromBook * 66 + toBook) * (STRENGTH_STEPS + 1) * 2 + step * 2 + (dim ? 1 : 0);
+    // A moving light is part of the key, so arcs at the same brightness still
+    // share one gradient and one path.
+    const key =
+      ((fromBook * 66 + toBook) * (STRENGTH_STEPS + 1) + step) * 2 * (LIGHT_STEPS + 2) +
+      (dim ? 1 : 0) * (LIGHT_STEPS + 2) +
+      (lightStep + 1);
     let batch = batches.get(key);
     if (!batch) {
-      batch = { fromBook, toBook, step, dim, indexes: [] };
+      batch = { fromBook, toBook, step, dim, lightStep, indexes: [] };
       batches.set(key, batch);
     }
     batch.indexes.push(i);
   }
 
   // Dimmed arcs go down first, so the lit ones read on top of them rather than
-  // through them.
+  // through them, and dimmer light goes under brighter for the same reason.
   const sorted = [...batches.values()].sort(
-    (a, b) => Number(b.dim) - Number(a.dim) || a.step - b.step,
+    (a, b) => Number(b.dim) - Number(a.dim) || a.lightStep - b.lightStep || a.step - b.step,
   );
+
+  if (moving) return { sorted, skipped };
 
   const entry: BatchCache = {
     floor: config.voteFloor,
@@ -355,7 +412,7 @@ export function draw(
 
   const axis = axisFor(data, config.width);
   const frame = frameFor(view, config);
-  const { sorted, skipped: culled } = batchesFor(data, config, options.lit);
+  const { sorted, skipped: culled } = batchesFor(data, config, options.lit, options.light);
   const { fromAt, toAt } = feetFor(data, axis, config.width);
   // Arcs the vote floor, the cap and a dimFloor of 0 took out — so the
   // readout's count adds up to the whole set.
@@ -374,7 +431,15 @@ export function draw(
   let drawn = 0;
   for (const batch of sorted) {
     const t = batch.step / STRENGTH_STEPS;
-    const alpha = (config.alphaMin + (config.alphaMax - config.alphaMin) * t) * (batch.dim ? config.dimFloor : 1);
+    // A batch's brightness comes from the travelling light when one is moving,
+    // and from the dim flag when nothing is. The light already carries the
+    // dimmed level in it, so the two must not both be applied.
+    const level = batch.lightStep >= 0
+      ? batch.lightStep / LIGHT_STEPS
+      : batch.dim
+        ? config.dimFloor
+        : 1;
+    const alpha = (config.alphaMin + (config.alphaMax - config.alphaMin) * t) * level;
     // Too faint to leave a mark: not worth a gradient and a path, and counted
     // as skipped rather than silently vanishing from both totals.
     if (alpha <= 0.002) {
