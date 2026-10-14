@@ -172,18 +172,24 @@ export function buildAxis(data: ConnectionsData, width: ChapterWidth): Axis {
 /**
  * A verse position as a fraction along the axis, 0 to 1.
  *
- * Under 'verses' spacing this is just the position over the total. Under
- * 'equal' it is the chapter's own slot plus how far into that chapter the verse
- * sits, so a verse still lands in the right place inside its chapter.
+ * The chapter's own slot, plus how far into that chapter the verse sits: each
+ * verse gets an equal share of its chapter and lands in the middle of it, so
+ * verse 1 is at the left and the last verse at the right.
+ *
+ * `fill` is how much of the slot the chapter's bar covers (the config's
+ * barFill). The verses are spread across the bar rather than the whole slot,
+ * so with gaps between the bars every arc still lands on its own chapter's bar
+ * and never in the gap beside it.
  */
-export function fractionOf(axis: Axis, position: number): number {
+export function fractionOf(axis: Axis, position: number, fill = 1): number {
   const chapter = chapterIndexAt(axis, position);
   const start = axis.chapterStarts[chapter];
   const verses = axis.chapterVerses[chapter] || 1;
-  const within = Math.min(Math.max((position - start) / verses, 0), 1);
+  const within = Math.min(Math.max((position - start + 0.5) / verses, 0), 1);
+  const f = Math.min(Math.max(fill, 0), 1);
   const a = axis.offsets[chapter];
   const b = axis.offsets[chapter + 1];
-  return a + (b - a) * within;
+  return a + (b - a) * ((1 - f) / 2 + f * within);
 }
 
 /** Which chapter a verse position falls in, by binary search. */
@@ -279,8 +285,8 @@ export function arcShape(
   from: number,
   to: number,
 ): ArcShape {
-  const fromAlong = fractionOf(axis, from) * frame.along;
-  const toAlong = fractionOf(axis, to) * frame.along;
+  const fromAlong = fractionOf(axis, from, config.barFill) * frame.along;
+  const toAlong = fractionOf(axis, to, config.barFill) * frame.along;
 
   // Distance is measured along the axis as drawn, so under 'equal' spacing a
   // link across many short chapters is correctly tall.

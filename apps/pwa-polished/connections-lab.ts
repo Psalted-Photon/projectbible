@@ -285,8 +285,8 @@ function spin(ms = 1200) {
  * back into view.
  */
 const MIN_K = 0.05;
-/** One wheel notch: three of the old 1.12 steps, so one swipe does what three used to. */
-const WHEEL_STEP = 1.12 ** 3;
+/** One wheel notch: two of the old 1.12 steps, so one swipe does what two used to. */
+const WHEEL_STEP = 1.12 ** 2;
 const MAX_K = 60;
 
 let dragging = false;
@@ -776,7 +776,7 @@ function buildDrawer() {
     () => CONFIG.barFill,
     (v) => { CONFIG.barFill = v; },
     0.1, 1, 0.05,
-    'How much of its own space each chapter bar fills. 1 is touching; lower leaves a gap between bars. Shows once chapters are a few pixels wide.',
+    'How much of its own space each chapter bar fills. 1 is touching; lower leaves a gap between bars. Arcs always land on their own bar, verse 1 at its left edge and the last verse at its right.',
   );
   slider(
     'number size',
@@ -806,7 +806,7 @@ function buildDrawer() {
     'thickness',
     () => CONFIG.thickness,
     (v) => { CONFIG.thickness = v; },
-    0.2, 4, 0.05,
+    0.1, 4, 0.05,
     'Every arc is the same width, in screen pixels, and stays that width when you zoom.',
   );
   slider(

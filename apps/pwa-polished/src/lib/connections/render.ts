@@ -203,22 +203,23 @@ interface Batch {
  */
 interface FeetCache {
   width: ChapterWidth;
+  fill: number;
   fromAt: Float32Array;
   toAt: Float32Array;
 }
 const feetCache = new WeakMap<ConnectionsData, FeetCache>();
 
-function feetFor(data: ConnectionsData, axis: Axis, width: ChapterWidth): FeetCache {
+function feetFor(data: ConnectionsData, axis: Axis, width: ChapterWidth, fill: number): FeetCache {
   const cached = feetCache.get(data);
-  if (cached && cached.width === width) return cached;
+  if (cached && cached.width === width && cached.fill === fill) return cached;
 
   const fromAt = new Float32Array(data.count);
   const toAt = new Float32Array(data.count);
   for (let i = 0; i < data.count; i++) {
-    fromAt[i] = fractionOf(axis, data.from[i]);
-    toAt[i] = fractionOf(axis, data.toStart[i]);
+    fromAt[i] = fractionOf(axis, data.from[i], fill);
+    toAt[i] = fractionOf(axis, data.toStart[i], fill);
   }
-  const entry = { width, fromAt, toAt };
+  const entry = { width, fill, fromAt, toAt };
   feetCache.set(data, entry);
   return entry;
 }
@@ -350,7 +351,8 @@ export function draw(
   const frame = frameFor(view, config);
   const lit = options.flight ? options.flight.spans : options.lit;
   const { sorted, skipped: culled, lo, hi } = batchesFor(data, config, lit);
-  const { fromAt, toAt } = feetFor(data, axis, config.width);
+  // Feet land on their chapter's bar, so they move with the bar width.
+  const { fromAt, toAt } = feetFor(data, axis, config.width, Math.min(Math.max(config.barFill, 0.05), 1));
   let skipped = culled;
 
   // Everything the inner loop would otherwise recompute 344,799 times.
@@ -949,7 +951,11 @@ function drawRuler(
     // through by the lines either side of it.
     ctx.fillStyle = palette.bg;
     ctx.beginPath();
-    if (horizontal) rect(from, top, column, name.length * size);
+    // Centered in the band, so a name that couldn't reach the full height
+    // (the clamps on letter size) sits in the middle rather than up top.
+    const stack = name.length * size;
+    const nameTop = horizontal ? top + (config.nameHeight - stack) / 2 : top;
+    if (horizontal) rect(from, nameTop, column, stack);
     else rect(from, top, column, ctx.measureText(name).width);
     ctx.fill();
     ctx.fillStyle = nameColor(BOOK_RGB[n.book] ?? [138, 143, 152], palette);
@@ -957,7 +963,7 @@ function drawRuler(
       ctx.textAlign = 'center';
       for (let i = 0; i < name.length; i++) {
         if (name[i] === ' ') continue;
-        ctx.fillText(name[i], n.mid, rule + top + i * size + size / 2);
+        ctx.fillText(name[i], n.mid, rule + nameTop + i * size + size / 2);
       }
     } else {
       // A vertical axis runs down the screen already, so the name reads across
