@@ -171,7 +171,7 @@
   import { readResume, saveResume } from "../lib/resume";
   import { parallelStore } from "../stores/parallelStore";
   import * as parallelSync from "../lib/parallelSync";
-  import { soloRunsIn } from "../lib/parallelIndex";
+  import { soloRunsIn, segmentBySoloRuns } from "../lib/parallelIndex";
   import { openMapWindow } from "../lib/openMapWindow";
   import { searchQuery, triggerSearch } from "../stores/searchStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
@@ -2227,14 +2227,18 @@
     // it touches, so the running total overshot the budget almost immediately
     // and the heading above was never picked up.
     const verseTop = verseEl.getBoundingClientRect().top;
-    let prev = verseEl.previousElementSibling as HTMLElement | null;
-    while (prev) {
+    // Walked in document order rather than by sibling: verses sit in
+    // .verse-run wrappers, so the heading above may not be a sibling.
+    const flow = Array.from(
+      verseEl.closest('.verses')?.querySelectorAll<HTMLElement>('.verse, .section-heading') ?? [],
+    );
+    for (let i = flow.indexOf(verseEl) - 1; i >= 0; i--) {
+      const prev = flow[i];
       if (verseTop - prev.getBoundingClientRect().top > budget) break;
       if (prev.classList.contains('section-heading')) {
         scrollTarget = prev;
         break;
       }
-      prev = prev.previousElementSibling as HTMLElement | null;
     }
     // Arriving somewhere shows the bar, so the crumbs stay in reach and can be
     // tapped through like tabs. Only the reader's own scroll down hides it.
@@ -6701,140 +6705,151 @@
             class:il-show-parse={isInterlinearActive && interlinearSettings.showParsing}
             style="--verse-num-color:{getBookColor(chapterData.book)}"
           >
-            {#each chapterData.verses as { verse, text, html, interlinearHtml, heading, headingLevel, paraStart, poetryLevel, stanzaBreak }, verseIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
-              {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
-              {@const soloRun = chSoloRuns.find((r) => verse >= r.from && verse <= r.to) ?? null}
-              {#if heading && showSectionHeadings}
-                <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
-              {/if}
-              {#if soloRun && verse === soloRun.from}
-                <!-- Named once, at the verse the run starts on, rather than on
-                     every verse it covers: the tint already carries the run's
+            <!-- Verses come in stretches: inside an "Only in" run or not. A run
+                 gets one box, which carries the edge; the stretches between are
+                 display: contents, so they lay out exactly as bare verses. -->
+            {#each segmentBySoloRuns(chapterData.verses, chSoloRuns) as seg (seg.key)}
+              {@const lead = chapterData.verses[seg.start]}
+              {#if seg.run}
+                <!-- The run's heading and label sit above its box, outside the
+                     edge. Named once, at the start of the run, rather than on
+                     every verse it covers: the edge already carries the run's
                      extent, so repeating the label would be the same sentence
                      several times down a chapter. -->
-                <div class="solo-label" title="Robertson §{soloRun.section} — {soloRun.title}">
+                {#if lead.heading && showSectionHeadings}
+                  <div class="section-heading section-heading--s{lead.headingLevel || 1}">{lead.heading}</div>
+                {/if}
+                <div class="solo-label" title="Robertson §{seg.run.section} — {seg.run.title}">
                   Only in {chapterData.book}
                 </div>
               {/if}
-              <div
-                class="verse"
-                class:solo-only={soloRun !== null}
-                class:para-start={paraStart}
-                class:poetry-1={poetryLevel === 1}
-                class:poetry-2={poetryLevel === 2}
-                class:stanza-break={stanzaBreak}
-                class:tts-speaking={ttsHighlightVerse &&
-                  $ttsCurrentVerse?.book === chapterData.book &&
-                  $ttsCurrentVerse?.chapter === chapterData.chapter &&
-                  $ttsCurrentVerse?.verse === verse}
-                data-verse={verse}
-              >
-                <span class="verse-gutter">
-                <span class="verse-number">{verse}</span>
-                <!-- ── An Old Testament quotation on this verse ───────────
-                     First among the markers, straight after the number: the
-                     commentator pills vary in count, so anything placed after
-                     them moves about from verse to verse, and a mark you have
-                     to hunt for is worse than no mark. Nothing is drawn onto
-                     the verse text itself — a tint or underline there would be
-                     indistinguishable from the user's own highlighter. -->
-                {#if showOtQuotes && otQuoteByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
-                  {@const otEntry = otQuoteByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!}
-                  <span
-                    class="ot-quote-mark"
-                    class:ot-allusion={otEntry.grade === 'allusion'}
-                    class:anno-breathing={otQuoteHit?.book === chapterData.book &&
-                      otQuoteHit?.chapter === chapterData.chapter &&
-                      otQuoteHit?.verse === verse}
-                    title={otEntry.grade === 'quote'
-                      ? 'Quotes the Old Testament'
-                      : 'Alludes to the Old Testament'}
-                    role="button"
-                    tabindex="0"
-                    on:click|stopPropagation={(e) =>
-                      openOtQuote(e.currentTarget as HTMLElement, chapterData.book, chapterData.chapter, verse, otEntry)}
-                    on:keypress|stopPropagation={(e) =>
-                      e.key === 'Enter' &&
-                      openOtQuote(e.currentTarget as HTMLElement, chapterData.book, chapterData.chapter, verse, otEntry)}
-                  >❝OT❞</span>
+              <div class="verse-run" class:solo-run={seg.run !== null}>
+                {#each chapterData.verses.slice(seg.start, seg.end) as { verse, text, html, interlinearHtml, heading, headingLevel, paraStart, poetryLevel, stanzaBreak }, segIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
+                {@const verseIdx = seg.start + segIdx}
+                {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
+                {#if heading && showSectionHeadings && !(seg.run && segIdx === 0)}
+                  <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
                 {/if}
-                {#if showCommentaries && commentaryByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
-                  {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
-                    <AuthorPill
-                      extraClass="anno-icon"
-                      color={getAuthorColor(author)}
-                      initials={getAuthorInitials(author)}
-                      title={author}
-                      interactive
-                      breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'commentary', author)}
-                      on:select={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter, author)}
-                    />
-                  {/each}
-                {/if}
-                {#if showReferences && tskByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
-                  <span
-                    class="anno-ref"
-                    class:anno-breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'references')}
-                    style="color:{TSK_COLOR}"
-                    title="TSK cross-references"
-                    role="button"
-                    tabindex="0"
-                    on:click|stopPropagation={() => openAnnotationPanel(verse, 'references', chapterData.book, chapterData.chapter)}
-                    on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'references', chapterData.book, chapterData.chapter)}
-                  >◆</span>
-                {/if}
-                {#if showArt && artByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
-                  {@const artScene = artByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))![0]}
-                  <span
-                    class="art-icon"
-                    title={`Art: ${artScene.title}`}
-                    role="button"
-                    tabindex="0"
-                    on:click|stopPropagation={() => openArtWindow(artScene)}
-                    on:keypress|stopPropagation={(e) => e.key === 'Enter' && openArtWindow(artScene)}
-                  ><ImageIcon size={13} weight="bold" class="ph-inline" /></span>
-                {/if}
-                </span>
-                <span class="verse-body">
-                <span class="verse-text"
-                  class:interlinear={isInterlinearActive && !!interlinearHtml}
-                  >{@html (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text))}</span
+                <div
+                  class="verse"
+                  class:para-start={paraStart}
+                  class:poetry-1={poetryLevel === 1}
+                  class:poetry-2={poetryLevel === 2}
+                  class:stanza-break={stanzaBreak}
+                  class:tts-speaking={ttsHighlightVerse &&
+                    $ttsCurrentVerse?.book === chapterData.book &&
+                    $ttsCurrentVerse?.chapter === chapterData.chapter &&
+                    $ttsCurrentVerse?.verse === verse}
+                  data-verse={verse}
                 >
-                {#if verseNotesMap.has(annotationKey(chapterData.book, chapterData.chapter, verse)) && $userProfileStore.isSignedIn}
-                  <span
-                    class="verse-note-icon"
-                    role="button"
-                    tabindex="0"
-                    title="View note"
-                    on:click|stopPropagation={() => openNotePopup(verse, chapterData.book, chapterData.chapter)}
-                    on:keypress|stopPropagation={(e) => e.key === 'Enter' && openNotePopup(verse, chapterData.book, chapterData.chapter)}
-                  ><NotePencil size="1em" weight="bold" class="ph-inline" /></span>
-                {/if}
-                </span>
-                {#if hCtxsForVerse.length > 0}
-                  {#each hCtxsForVerse as hCtx}
-                    <div class="harmony-btn-row" dir="ltr">
-                      {#if hCtx.isLastPassage}
-                        <button
-                          class="harmony-finish-btn"
-                          on:click={() => handleHarmonyCheckAndFinishDay(hCtx)}
-                          title="Mark this passage and day complete"
-                        >✓ Finish Day ({hCtx.passageIndex + 1} of {hCtx.totalPassages})</button>
-                      {:else}
-                        <button
-                          class="harmony-continue-only-btn"
-                          on:click={() => handleHarmonyContinueOnly(hCtx)}
-                          title="Go to next passage without marking this one"
-                        >Continue ({hCtx.passageIndex + 1} of {hCtx.totalPassages})</button>
-                        <button
-                          class="harmony-check-continue-btn"
-                          on:click={() => handleHarmonyCheckAndContinue(hCtx)}
-                          title="Check off this passage and continue"
-                        >✓ Check off &amp; continue</button>
-                      {/if}
-                    </div>
-                  {/each}
-                {/if}
+                  <span class="verse-gutter">
+                  <span class="verse-number">{verse}</span>
+                  <!-- ── An Old Testament quotation on this verse ───────────
+                       First among the markers, straight after the number: the
+                       commentator pills vary in count, so anything placed after
+                       them moves about from verse to verse, and a mark you have
+                       to hunt for is worse than no mark. Nothing is drawn onto
+                       the verse text itself — a tint or underline there would be
+                       indistinguishable from the user's own highlighter. -->
+                  {#if showOtQuotes && otQuoteByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
+                    {@const otEntry = otQuoteByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!}
+                    <span
+                      class="ot-quote-mark"
+                      class:ot-allusion={otEntry.grade === 'allusion'}
+                      class:anno-breathing={otQuoteHit?.book === chapterData.book &&
+                        otQuoteHit?.chapter === chapterData.chapter &&
+                        otQuoteHit?.verse === verse}
+                      title={otEntry.grade === 'quote'
+                        ? 'Quotes the Old Testament'
+                        : 'Alludes to the Old Testament'}
+                      role="button"
+                      tabindex="0"
+                      on:click|stopPropagation={(e) =>
+                        openOtQuote(e.currentTarget as HTMLElement, chapterData.book, chapterData.chapter, verse, otEntry)}
+                      on:keypress|stopPropagation={(e) =>
+                        e.key === 'Enter' &&
+                        openOtQuote(e.currentTarget as HTMLElement, chapterData.book, chapterData.chapter, verse, otEntry)}
+                    >❝OT❞</span>
+                  {/if}
+                  {#if showCommentaries && commentaryByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
+                    {#each [...new Set(commentaryByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))!.map((e) => e.author))] as author}
+                      <AuthorPill
+                        extraClass="anno-icon"
+                        color={getAuthorColor(author)}
+                        initials={getAuthorInitials(author)}
+                        title={author}
+                        interactive
+                        breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'commentary', author)}
+                        on:select={() => openAnnotationPanel(verse, 'commentary', chapterData.book, chapterData.chapter, author)}
+                      />
+                    {/each}
+                  {/if}
+                  {#if showReferences && tskByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
+                    <span
+                      class="anno-ref"
+                      class:anno-breathing={isOpenAnnotation(chapterData.book, chapterData.chapter, verse, 'references')}
+                      style="color:{TSK_COLOR}"
+                      title="TSK cross-references"
+                      role="button"
+                      tabindex="0"
+                      on:click|stopPropagation={() => openAnnotationPanel(verse, 'references', chapterData.book, chapterData.chapter)}
+                      on:keypress|stopPropagation={() => openAnnotationPanel(verse, 'references', chapterData.book, chapterData.chapter)}
+                    >◆</span>
+                  {/if}
+                  {#if showArt && artByVerse.has(annotationKey(chapterData.book, chapterData.chapter, verse))}
+                    {@const artScene = artByVerse.get(annotationKey(chapterData.book, chapterData.chapter, verse))![0]}
+                    <span
+                      class="art-icon"
+                      title={`Art: ${artScene.title}`}
+                      role="button"
+                      tabindex="0"
+                      on:click|stopPropagation={() => openArtWindow(artScene)}
+                      on:keypress|stopPropagation={(e) => e.key === 'Enter' && openArtWindow(artScene)}
+                    ><ImageIcon size={13} weight="bold" class="ph-inline" /></span>
+                  {/if}
+                  </span>
+                  <span class="verse-body">
+                  <span class="verse-text"
+                    class:interlinear={isInterlinearActive && !!interlinearHtml}
+                    >{@html (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text))}</span
+                  >
+                  {#if verseNotesMap.has(annotationKey(chapterData.book, chapterData.chapter, verse)) && $userProfileStore.isSignedIn}
+                    <span
+                      class="verse-note-icon"
+                      role="button"
+                      tabindex="0"
+                      title="View note"
+                      on:click|stopPropagation={() => openNotePopup(verse, chapterData.book, chapterData.chapter)}
+                      on:keypress|stopPropagation={(e) => e.key === 'Enter' && openNotePopup(verse, chapterData.book, chapterData.chapter)}
+                    ><NotePencil size="1em" weight="bold" class="ph-inline" /></span>
+                  {/if}
+                  </span>
+                  {#if hCtxsForVerse.length > 0}
+                    {#each hCtxsForVerse as hCtx}
+                      <div class="harmony-btn-row" dir="ltr">
+                        {#if hCtx.isLastPassage}
+                          <button
+                            class="harmony-finish-btn"
+                            on:click={() => handleHarmonyCheckAndFinishDay(hCtx)}
+                            title="Mark this passage and day complete"
+                          >✓ Finish Day ({hCtx.passageIndex + 1} of {hCtx.totalPassages})</button>
+                        {:else}
+                          <button
+                            class="harmony-continue-only-btn"
+                            on:click={() => handleHarmonyContinueOnly(hCtx)}
+                            title="Go to next passage without marking this one"
+                          >Continue ({hCtx.passageIndex + 1} of {hCtx.totalPassages})</button>
+                          <button
+                            class="harmony-check-continue-btn"
+                            on:click={() => handleHarmonyCheckAndContinue(hCtx)}
+                            title="Check off this passage and continue"
+                          >✓ Check off &amp; continue</button>
+                        {/if}
+                      </div>
+                    {/each}
+                  {/if}
+                </div>
+                {/each}
               </div>
             {/each}
           </div>
@@ -7806,8 +7821,18 @@
 
      currentColor is not used anywhere here. The marking means one specific
      thing, so it keeps one color rather than inheriting whatever the theme
-     has made the text. */
-  .verse.solo-only {
+     has made the text.
+
+     The edge belongs to the run's box, not to each verse: in the paragraph
+     layouts a verse is inline, and an inline box's edge lands wherever the
+     verse starts on its line, so a per-verse edge broke into a stagger. The
+     stretches between runs are display: contents and add nothing to layout. */
+  .verse-run {
+    display: contents;
+  }
+
+  .verse-run.solo-run {
+    display: block;
     box-shadow: inset 2px 0 0 var(--solo-edge, #b8924e66);
     padding-left: 10px;
   }
@@ -7879,7 +7904,10 @@
     }
   }
 
-  .section-heading:first-child {
+  /* First in the chapter only. Verses sit inside .verse-run wrappers, so a
+     heading opening a later stretch is its wrapper's first child too. */
+  .verses > .section-heading:first-child,
+  .verses > .verse-run:first-child > .section-heading:first-child {
     margin-top: 0;
     border-top: none;
   }

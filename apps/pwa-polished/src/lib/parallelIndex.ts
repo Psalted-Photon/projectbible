@@ -353,6 +353,42 @@ export function soloRunsIn(book: string, chapter: number): SoloRun[] {
   return runs;
 }
 
+/** A stretch of a chapter's verses, [start, end) by index, inside or outside a solo run. */
+export interface VerseSegment {
+  key: string;
+  run: SoloRun | null;
+  start: number;
+  end: number;
+}
+
+/**
+ * Split a chapter's verses into stretches that are inside a solo run and
+ * stretches that are not, so the reader can give each run one box of its own.
+ *
+ * The marking edge has to belong to a box spanning the whole run. Drawn on each
+ * verse it only works while verses are blocks: in paragraph layout a verse is
+ * an inline box, and an inline box's left edge sits wherever the verse happens
+ * to start on its line — mid-line, a broken stagger down the page.
+ */
+export function segmentBySoloRuns(verses: { verse: number }[], runs: SoloRun[]): VerseSegment[] {
+  if (runs.length === 0) return [{ key: 'all', run: null, start: 0, end: verses.length }];
+
+  const segments: VerseSegment[] = [];
+  let i = 0;
+  while (i < verses.length) {
+    const run = runs.find((r) => verses[i].verse >= r.from && verses[i].verse <= r.to) ?? null;
+    let j = i + 1;
+    while (j < verses.length) {
+      const next = runs.find((r) => verses[j].verse >= r.from && verses[j].verse <= r.to) ?? null;
+      if (next !== run) break;
+      j++;
+    }
+    segments.push({ key: `${run ? 'solo' : 'plain'}-${verses[i].verse}`, run, start: i, end: j });
+    i = j;
+  }
+  return segments;
+}
+
 // ---------------------------------------------------------------------------
 // Targeting — where inside its own passage a follower should sit
 // ---------------------------------------------------------------------------
