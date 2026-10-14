@@ -23,7 +23,7 @@
 
 import { BIBLE_BOOKS } from '../bibleData';
 import { BOOK_MAP } from '../parseRefString';
-import { otQuotesForChapter } from '../otQuotesIndex';
+import { otQuotesForChapter, type OtQuoteGrade } from '../otQuotesIndex';
 import { parallelGroups } from '../parallelIndex';
 import { HIGHLIGHT_CATEGORIES, HIGHLIGHT_PALETTE, categoryKeyFor, categoryMeaning } from '../highlightCategories';
 import { syncedUserDataStore } from '../../adapters/SyncedUserDataStore';
@@ -39,7 +39,7 @@ export interface SetItem {
 }
 
 /** Where a ready-made set's passages come from. */
-export type ReadySource = 'ot-quotes' | 'parallels' | `highlight:${string}`;
+export type ReadySource = 'ot-quotes' | 'ot-echoes' | 'parallels' | `highlight:${string}`;
 
 /** A set as it is saved and synced. */
 export interface ConnectionSet {
@@ -209,16 +209,19 @@ function spanOfRef(book: string, chapter: number, verse: number, endVerse = vers
 }
 
 /**
- * Every verse in the New Testament that quotes or alludes to the Old, and
- * every Old Testament verse it draws on. Both ends, so the arcs between a
- * quotation and its source light from either side.
+ * Every verse in the New Testament that quotes the Old (grade 'quote') or
+ * echoes it (grade 'allusion'), and every Old Testament verse it draws on.
+ * Both ends, so the arcs between a quotation and its source light from
+ * either side. A verse that does both is graded by the stronger, as the
+ * reader marks it, so it sits in the quotations set only.
  */
-function otQuoteSpans(): Span[] {
+function otQuoteSpans(grade: OtQuoteGrade): Span[] {
   const spans: Span[] = [];
   const ntStart = BIBLE_BOOKS.findIndex((b) => b.name === 'Matthew');
   for (const book of BIBLE_BOOKS.slice(ntStart)) {
     for (let chapter = 1; chapter <= book.chapters; chapter++) {
       for (const [verse, entry] of otQuotesForChapter(book.name, chapter)) {
+        if (entry.grade !== grade) continue;
         const here = spanOfRef(book.name, chapter, verse);
         if (here) spans.push(here);
         for (const ref of entry.refs) {
@@ -270,6 +273,14 @@ const LINE_COLORS: Record<string, string> = {
   'line-wavy': '#ff8fd1',
 };
 
+const OT_QUOTES_NAME = 'Old Testament quotations';
+/** What the quotations set was called while it held the echoes too, and the yellow it wore. */
+const OT_QUOTES_OLD_NAME = 'Old Testament in the New';
+const OT_QUOTES_OLD_COLOR = '#ffd23f';
+/** Quotations in gold, echoes in silver: the louder metal for the plainer borrowing. */
+const OT_GOLD = '#e0b03a';
+const OT_SILVER = '#b2bac4';
+
 /**
  * The ready-made sets on offer: the two indexes always, and one per highlight
  * category the reader has actually used.
@@ -278,9 +289,15 @@ export async function readyOffers(names: Record<string, string>): Promise<ReadyO
   const offers: ReadyOffer[] = [
     {
       source: 'ot-quotes',
-      name: 'Old Testament in the New',
-      color: '#ffd23f',
-      blurb: 'Every New Testament verse that quotes or echoes the Old, and the verses it draws on',
+      name: OT_QUOTES_NAME,
+      color: OT_GOLD,
+      blurb: 'Every New Testament verse that quotes the Old, and the verses it quotes',
+    },
+    {
+      source: 'ot-echoes',
+      name: 'Old Testament echoes',
+      color: OT_SILVER,
+      blurb: 'Every New Testament verse that alludes to or echoes the Old, and the verses it echoes',
     },
     {
       source: 'parallels',
@@ -357,7 +374,8 @@ function rgbOf(hex: string): [number, number, number] {
 /** The passages a set covers right now, as spans. Ready-made sets are rebuilt. */
 export async function spansOfSet(set: ConnectionSet): Promise<Span[]> {
   if (!set.ready) return set.items.map(spanOfItem).filter((s): s is Span => s !== null);
-  if (set.ready === 'ot-quotes') return otQuoteSpans();
+  if (set.ready === 'ot-quotes') return otQuoteSpans('quote');
+  if (set.ready === 'ot-echoes') return otQuoteSpans('allusion');
   if (set.ready === 'parallels') return parallelSpans();
   const key = set.ready.slice('highlight:'.length);
   try {
@@ -431,7 +449,7 @@ const isRef = (r: unknown): r is ConnectionRef =>
 const isColor = (c: unknown): c is string => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
 
 function isReady(r: unknown): r is ReadySource {
-  return r === 'ot-quotes' || r === 'parallels' || (typeof r === 'string' && r.startsWith('highlight:'));
+  return r === 'ot-quotes' || r === 'ot-echoes' || r === 'parallels' || (typeof r === 'string' && r.startsWith('highlight:'));
 }
 
 /**
@@ -448,7 +466,12 @@ export function savedSets(): ConnectionSet[] {
     const items = Array.isArray(s.items)
       ? s.items.filter((i): i is SetItem => !!i && isRef(i.start) && isRef(i.end))
       : [];
-    out.push({ id: s.id, name: s.name, color: s.color, items, ...(isReady(s.ready) ? { ready: s.ready } : {}) });
+    // The quotations set once held the echoes too, under a broader name; one
+    // still wearing that name gets the narrower one it now deserves.
+    // Its old yellow likewise turns gold, unless the reader picked a color of their own.
+    const name = s.ready === 'ot-quotes' && s.name === OT_QUOTES_OLD_NAME ? OT_QUOTES_NAME : s.name;
+    const color = s.ready === 'ot-quotes' && s.color.toLowerCase() === OT_QUOTES_OLD_COLOR ? OT_GOLD : s.color;
+    out.push({ id: s.id, name, color, items, ...(isReady(s.ready) ? { ready: s.ready } : {}) });
   }
   return out.slice(0, MAX_SETS);
 }
