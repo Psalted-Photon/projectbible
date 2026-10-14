@@ -199,7 +199,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     id: "connections",
     name: "Connections",
     description: "Every cross-reference, drawn as one picture",
-    info: "All 344,799 cross-references in Scripture on one screen: every verse that echoes another, arching from where it is written to where it is answered. Each link carries the votes readers gave it, so the strongest connections are the brightest ones.\n\nTap a book or a chapter to light only what it reaches. Tap an arc for both verses. Opens from the Connections window.\n\nCross references: OpenBible.info (CC BY).",
+    info: "All 344,799 cross-references in Scripture on one screen: every verse that echoes another, arching from where it is written to where it is answered. Each link carries the votes readers gave it, and the picture shows the ones readers voted for most.\n\nTap a book or a chapter to light only what it reaches. Tap an arc for both verses and open either in the reader. Opens from the Connections window.\n\nCross references: OpenBible.info (CC BY).",
     size: "1.68 MB",
     icons: [Rainbow],
     url: `${PACK_BASE_URL}/connections.sqlite`,

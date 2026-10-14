@@ -1,7 +1,7 @@
 /**
  * windowTypes.ts
  *
- * The twelve things a window can show, and how each one starts out.
+ * The thirteen things a window can show, and how each one starts out.
  *
  * Three places offer this list: the tile grid in a brand-new window, the apps
  * button on the bar, and the swap button in a window's header. They used to be
@@ -27,7 +27,7 @@ import type { PanelIconName } from '../components/icons/PanelIcon.svelte';
  * instead, after asking which set.
  */
 export type WindowChoice =
-  | 'bible' | 'map' | 'timeline' | 'notes' | 'isbe' | 'person' | 'naves' | 'strongs'
+  | 'bible' | 'map' | 'timeline' | 'connections' | 'notes' | 'isbe' | 'person' | 'naves' | 'strongs'
   | 'commentaries' | 'journal' | 'art' | 'harmony';
 
 export interface WindowTypeInfo {
@@ -46,6 +46,7 @@ export const WINDOW_TYPES: WindowTypeInfo[] = [
   { type: 'bible',        icon: 'bible',        label: 'Bible',        accent: '#a67c52' },
   { type: 'map',          icon: 'map',          label: 'Map',          accent: '#61f1ff' },
   { type: 'timeline',     icon: 'timeline',     label: 'Timeline',     accent: '#f0c040' },
+  { type: 'connections',  icon: 'connections',  label: 'Connections',  accent: '#a45be9' },
   { type: 'commentaries', icon: 'commentary',   label: 'Commentary',   accent: '#a3e635' },
   { type: 'notes',        icon: 'notes',        label: 'Notes',        accent: '#fde047' },
   { type: 'journal',      icon: 'journal',      label: 'Journal',      accent: '#f2893e' },

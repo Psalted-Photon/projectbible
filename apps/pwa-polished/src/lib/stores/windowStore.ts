@@ -1,7 +1,7 @@
 import { writable, get } from 'svelte/store';
 import { libraryPrefsStore, type LibrarySource } from '../../stores/libraryPrefsStore';
 
-export type WindowContentType = 'selector' | 'bible' | 'map' | 'timeline' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves' | 'strongs';
+export type WindowContentType = 'selector' | 'bible' | 'map' | 'timeline' | 'connections' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves' | 'strongs';
 /**
  * Which edge a window is docked to — plus `harmony`, which is not an edge at
  * all.

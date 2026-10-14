@@ -84,6 +84,7 @@
     CaretRight,
     Graph,
     Hourglass,
+    Rainbow,
     ChatText,
     MagnifyingGlass,
     Microscope,
@@ -949,6 +950,7 @@
     plan: BookOpenText,
     map: MapTrifold,
     timeline: Hourglass,
+    connections: Rainbow,
     art: PaintBrush,
     otquote: Quotes,
     // A book with a ribbon. The praying hands are kept for the prayer section.

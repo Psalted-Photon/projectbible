@@ -271,13 +271,14 @@
 
 <!-- `themed` is a whole-panel color inversion on the light and sepia themes.
      Maps can't take it (the tiles invert), nor can the art gallery for the same
-     reason -- paintings came out as color negatives -- and neither can the encyclopedia or
+     reason -- paintings came out as color negatives -- nor Connections, whose
+     canvas paints the reader's theme in real colors -- and neither can the encyclopedia or
      a person's bio, which paint their own dark card in every theme so a pinned
      page looks exactly like the modal it came out of. -->
 <div
   in:arrive
   class="panel panel-{window.edge} panel-{window.contentType}"
-  class:themed={!['map', 'art', 'isbe', 'person', 'naves', 'wordstudy', 'strongs'].includes(window.contentType)}
+  class:themed={!['map', 'connections', 'art', 'isbe', 'person', 'naves', 'wordstudy', 'strongs'].includes(window.contentType)}
   style="
     {window.edge === 'left' || window.edge === 'right' ? `width: ${window.size}%` : `height: ${window.size}%`};
   "

@@ -25,6 +25,9 @@
   // pane and the map library are a large share of the app, and most sessions
   // never open a map.
   const loadAtlasPane = () => import("./AtlasPane.svelte");
+  // Connections loads the same way: its drawing code is only wanted by the
+  // readers who open it.
+  const loadConnectionsPane = () => import("./ConnectionsPane.svelte");
 
   // What goes inside a window, for every edge. WindowContainer renders one of
   // these per docked window; keeping the list here means a new content type is
@@ -51,6 +54,12 @@
   {/await}
 {:else if panel.contentType === 'timeline'}
   <TimelinePane windowId={panel.id} />
+{:else if panel.contentType === 'connections'}
+  {#await loadConnectionsPane() then { default: ConnectionsPane }}
+    <ConnectionsPane windowId={panel.id} />
+  {:catch}
+    <p class="load-failed">Connections couldn't load. Close this window and open it again.</p>
+  {/await}
 {:else if panel.contentType === 'commentaries'}
   <CommentaryReader windowId={panel.id} />
 {:else if panel.contentType === 'journal'}

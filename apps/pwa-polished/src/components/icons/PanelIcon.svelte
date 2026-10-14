@@ -1,6 +1,6 @@
 <script lang="ts" context="module">
   export type PanelIconName =
-    | 'bible' | 'map' | 'timeline' | 'commentary' | 'notes' | 'journal'
+    | 'bible' | 'map' | 'timeline' | 'connections' | 'commentary' | 'notes' | 'journal'
     | 'encyclopedia' | 'topical' | 'people' | 'strongs' | 'art' | 'harmony';
 
   /**
@@ -9,7 +9,7 @@
    * the library panes: no fills, stroke only, round caps and joins, so a single
    * drawing carries both the dark halo and the white line (see the markup).
    *
-   * The twelve have to stay legible at 20px and, more importantly, tell each other
+   * The thirteen have to stay legible at 20px and, more importantly, tell each other
    * apart at 20px — hence three different book silhouettes rather than three
    * books: the Bible is open and spread, the journal is closed and clasped, the
    * encyclopedia is a shelf of volumes.
@@ -43,6 +43,15 @@
       'M11.4 7.4h7.8',
       'M11.4 12h6',
       'M11.4 16.6h7',
+    ],
+    // Arcs springing off one line, a long one over two short ones and one
+    // dipping below — the Connections picture in miniature.
+    connections: [
+      'M2.6 15.6h18.8',
+      'M4.4 15.6a7.6 7.6 0 0115.2 0',
+      'M7 15.6a3 3 0 016 0',
+      'M15.2 15.6a1.9 1.9 0 013.8 0',
+      'M9.6 15.6a3.4 3.4 0 006.8 0',
     ],
     // Scroll: rolled bars top and bottom, two rules of text between them.
     commentary: [

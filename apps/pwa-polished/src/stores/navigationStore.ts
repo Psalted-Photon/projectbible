@@ -126,6 +126,7 @@ export type CrumbKind =
   | 'plan'
   | 'map'
   | 'timeline'
+  | 'connections'
   | 'art'
   /**
    * A tap through an Old Testament quotation mark. The only kind that routinely

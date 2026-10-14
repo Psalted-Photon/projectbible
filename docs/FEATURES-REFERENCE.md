@@ -821,7 +821,7 @@ Two independent docking systems.
 
 `src/lib/stores/windowStore.ts`, `src/components/Window.svelte`, `src/components/WindowContainer.svelte`, `src/components/WindowContentSelector.svelte`, `src/components/WindowContent.svelte`, `src/components/Pane.svelte`.
 
-- `WindowContentType` — `'selector' | 'bible' | 'map' | 'timeline' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves' | 'strongs'`
+- `WindowContentType` — `'selector' | 'bible' | 'map' | 'timeline' | 'connections' | 'notes' | 'wordstudy' | 'commentaries' | 'journal' | 'art' | 'isbe' | 'person' | 'naves' | 'strongs'`
 - `WindowEdge` — `'top' | 'left' | 'right' | 'bottom'`
 - `MAX_WINDOWS = 6`; `createWindow()` returns `null` at capacity
 - `setWindowContent(id, contentType, contentState?)` — each window carries its own `contentState`, so a second Bible window can sit on a different chapter from the main reader
