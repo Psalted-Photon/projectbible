@@ -33,7 +33,7 @@ import {
   chapterSpan,
   type ConnectionsData,
 } from './src/lib/connections/data';
-import { CONFIG, frameFor, type ArcSide, type ChapterWidth, type ConnectionsConfig, type Orientation } from './src/lib/connections/layout';
+import { CONFIG, frameFor, type ArcSide, type ConnectionsConfig, type Orientation } from './src/lib/connections/layout';
 import { axisDepth, chapterAtScreen, draw, pick, rulerAt, rulerHit, type DrawStats } from './src/lib/connections/render';
 import { palette, type ConnectionsPalette } from './src/lib/connections/palette';
 import {
@@ -137,6 +137,9 @@ function load() {
     adopt(LIGHTS.open, v?.lights?.open);
     adopt(LIGHTS.tap, v?.lights?.tap);
     if (typeof v?.lights?.openOnLoad === 'boolean') LIGHTS.openOnLoad = v.lights.openOnLoad;
+    if (typeof v?.lights?.dotSize === 'number') LIGHTS.dotSize = v.lights.dotSize;
+    // Chapters are always equal width now; an older saved 'verses' must not stick.
+    CONFIG.width = 'equal';
     if (typeof v?.prefs?.showLabels === 'boolean') showLabels = v.prefs.showLabels;
     if (typeof v?.prefs?.themeName === 'string') themeName = v.prefs.themeName;
     if (typeof v?.prefs?.motionMode === 'string') motionMode = v.prefs.motionMode;
@@ -276,7 +279,14 @@ function spin(ms = 1200) {
 
 // ── Gestures: drag to pan, pinch or wheel to zoom, tap to light ──────────
 
-const MIN_K = 1;
+/**
+ * Zoom runs out past the whole picture, not just down to it: with the line
+ * stretched wider than the screen, zooming out is how the whole Bible comes
+ * back into view.
+ */
+const MIN_K = 0.05;
+/** One wheel notch: three of the old 1.12 steps, so one swipe does what three used to. */
+const WHEEL_STEP = 1.12 ** 3;
 const MAX_K = 60;
 
 let dragging = false;
@@ -428,7 +438,7 @@ canvas.addEventListener(
   (e) => {
     e.preventDefault();
     const at = onScreen(e);
-    zoomAt(at.x, at.y, view.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+    zoomAt(at.x, at.y, view.k * (e.deltaY < 0 ? WHEEL_STEP : 1 / WHEEL_STEP));
   },
   { passive: false },
 );
@@ -752,19 +762,12 @@ function buildDrawer() {
     (v) => { CONFIG.side = v; },
     { top: 'all above the line', split: 'forward above, backward below' },
   );
-  choice<ChapterWidth>(
-    'chapter widths',
-    ['verses', 'equal'],
-    () => CONFIG.width,
-    (v) => { CONFIG.width = v; },
-    { verses: 'by verse count', equal: 'all the same' },
-  );
   slider(
     'Bible length',
     () => CONFIG.stretch,
     (v) => { CONFIG.stretch = v; },
     1, 12, 0.25,
-    'Stretches the line wider than the screen so every chapter gets wider. Drag sideways to travel along it. Unlike zooming, the arcs keep their height.',
+    'Stretches the line wider than the screen so every chapter gets wider and more numbers fit. Drag sideways to travel along it, or zoom out to see all of it. Unlike zooming, the arcs keep their height.',
   );
 
   heading('Chapter ruler');
@@ -780,14 +783,21 @@ function buildDrawer() {
     () => CONFIG.numberSize,
     (v) => { CONFIG.numberSize = v; },
     7, 20, 0.5,
-    'Chapter numbers sit on a tag at the tip of each bar, and climb their own bar where two would overlap. They show once a chapter is wide enough: zoom in, or lengthen the line.',
+    'Chapter numbers sit at the tip of each bar, and climb their own bar where two would overlap. They show once a chapter is wide enough: zoom in, or lengthen the line.',
   );
   slider(
-    'name size',
-    () => CONFIG.nameSize,
-    (v) => { CONFIG.nameSize = v; },
-    8, 18, 0.5,
-    'Book-name letters. Tap a name to light the whole book. Where names would collide the bigger book is named and the rest appear as you zoom in.',
+    'number outline',
+    () => CONFIG.numberOutline,
+    (v) => { CONFIG.numberOutline = v; },
+    0, 4, 0.1,
+    'The dark edge around each number (light on a light theme), so it reads on top of its own bar. 0 is no edge.',
+  );
+  slider(
+    'name height',
+    () => CONFIG.nameHeight,
+    (v) => { CONFIG.nameHeight = v; },
+    30, 200, 2,
+    'How tall every book name stands. Long names get small letters and short names big ones, so they all end level. Tap a name to light the whole book.',
   );
   checks([['show numbers and names', () => showLabels, (v) => { showLabels = v; }]]);
 
@@ -859,6 +869,15 @@ function buildDrawer() {
     (v) => { CONFIG.maxArcs = v; },
     0, 344799, 1000,
     'Keep only this many links, most-voted first. 0 keeps all 344,799. Fewer makes dragging and zooming smoother.',
+  );
+
+  heading('Dots', { label: 'Replay', onClick: replayTap });
+  slider(
+    'dot size',
+    () => LIGHTS.dotSize,
+    (v) => { LIGHTS.dotSize = v; replayTap(); },
+    0.5, 8, 0.1,
+    'The dot at the front of each flying arc. It wears the color of the book it was shot from all the way to where it lands.',
   );
 
   heading('Tap: arcs fly in', { label: 'Replay', onClick: replayTap });

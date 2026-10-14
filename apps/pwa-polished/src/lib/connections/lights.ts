@@ -57,6 +57,8 @@ export interface ConnectionsLights {
   tap: Volley;
   /** Whether the opening volley runs at all. */
   openOnLoad: boolean;
+  /** The dot at the head of an arc in flight: its radius in screen pixels. */
+  dotSize: number;
 }
 
 /** What the app ships, and what the lab's Reset puts back. */
@@ -64,6 +66,7 @@ export const LIGHTS: ConnectionsLights = {
   open: { flightMs: 900, staggerMs: 1500 },
   tap: { flightMs: 650, staggerMs: 250 },
   openOnLoad: true,
+  dotSize: 1.8,
 };
 
 /**
@@ -104,6 +107,8 @@ export interface FlightFrame {
   settled: boolean;
   /** True while the opening volley is in the air. */
   opening: boolean;
+  /** The arrowhead's radius, in screen pixels. */
+  dotSize: number;
 }
 
 /**
@@ -122,21 +127,22 @@ export function flightFrame(
   motion: 'full' | 'reduced' | 'off',
 ): FlightFrame {
   const spans = lit?.spans ?? [];
-  const still: FlightFrame = { spans, elapsedMs: 0, volley: null, settled: true, opening: false };
+  const { dotSize } = lights;
+  const still: FlightFrame = { spans, elapsedMs: 0, volley: null, settled: true, opening: false, dotSize };
   if (motion !== 'full') return still;
 
   if (opening) {
     const elapsedMs = now - opening.startedAt;
     if (elapsedMs < volleyMs(lights.open)) {
       // The opening flies the whole Bible, whatever was lit before it.
-      return { spans: [], elapsedMs, volley: lights.open, settled: false, opening: true };
+      return { spans: [], elapsedMs, volley: lights.open, settled: false, opening: true, dotSize };
     }
   }
 
   if (!lit) return still;
   const elapsedMs = now - lit.startedAt;
   if (elapsedMs >= volleyMs(lights.tap)) return still;
-  return { spans, elapsedMs, volley: lights.tap, settled: false, opening: false };
+  return { spans, elapsedMs, volley: lights.tap, settled: false, opening: false, dotSize };
 }
 
 /** A lit set from spans, stamped with the moment it was loosed. */

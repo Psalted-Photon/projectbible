@@ -73,8 +73,13 @@ export interface ConnectionsConfig {
   barFill: number;
   /** Chapter-number size, in screen pixels at rest. They grow a little as you zoom in. */
   numberSize: number;
-  /** Book-name letter size, in screen pixels. */
-  nameSize: number;
+  /** The dark (or, on a pale theme, light) edge around each chapter number, in pixels. */
+  numberOutline: number;
+  /**
+   * How tall every book name stands, in screen pixels. Each name's letters are
+   * sized to fill it, so long names get small letters and short names big ones.
+   */
+  nameHeight: number;
   /** The margin around the picture, in pixels before zoom. */
   padding: number;
   /** How much of the short side the axis sits in from the edge, 0.5 centred. */
@@ -92,7 +97,7 @@ export interface ConnectionsConfig {
 export const CONFIG: ConnectionsConfig = {
   orientation: 'horizontal',
   side: 'top',
-  width: 'verses',
+  width: 'equal',
   stretch: 1,
   heightCurve: 0.62,
   heightMax: 0.92,
@@ -104,11 +109,12 @@ export const CONFIG: ConnectionsConfig = {
   voteFloor: 0,
   maxArcs: 0,
   barFill: 0.8,
-  numberSize: 10,
-  nameSize: 11,
+  numberSize: 11,
+  numberOutline: 1.2,
+  nameHeight: 96,
   padding: 18,
   axisAt: 1,
-  axisDepth: 235,
+  axisDepth: 166,
 };
 
 /** The box the picture is drawn into, in CSS pixels. */

@@ -309,11 +309,9 @@ function batchesFor(data: ConnectionsData, config: ConnectionsConfig, spans: Spa
   return entry;
 }
 
-/** The heads of arcs in flight, reused between frames: x, y pairs. */
+/** The heads of arcs in flight, reused between frames: x, y pairs, and each one's source book. */
 let heads = new Float32Array(4096);
-
-/** The arrowhead on an arc in flight, in screen pixels. */
-const HEAD_RADIUS = 1.8;
+let headBooks = new Uint8Array(2048);
 /** The most arrowheads a volley shows, so the dots stay dots. */
 const HEAD_LIMIT = 4000;
 
@@ -444,9 +442,13 @@ export function draw(
               const grown = new Float32Array(heads.length * 2);
               grown.set(heads);
               heads = grown;
+              const grownBooks = new Uint8Array(headBooks.length * 2);
+              grownBooks.set(headBooks);
+              headBooks = grownBooks;
             }
             heads[headCount * 2] = horizontal ? ea : ec;
             heads[headCount * 2 + 1] = horizontal ? ec : ea;
+            headBooks[headCount] = batch.fromBook;
             headCount++;
           }
           flying++;
@@ -465,30 +467,36 @@ export function draw(
     for (const batch of sorted) skipped += batch.indexes.length;
   }
 
-  // The dots at the front of every arc still flying: the arrowheads. One path,
-  // drawn over the arcs so each reads as pulling its line behind it. Past a few
-  // thousand they are squares, which are far cheaper than circles and look the
-  // same at this size.
+  // The dots at the front of every arc still flying: the arrowheads, drawn over
+  // the arcs so each reads as pulling its line behind it. A dot wears the color
+  // of the book it was shot from and keeps it all the way down — the arc's own
+  // colors cross over mid-flight, but the dot's movement already says where it
+  // is going, so it only has to say where it came from. One path per book.
   if (headCount > 0) {
-    const r = HEAD_RADIUS / k;
-    ctx.fillStyle = palette.text;
-    ctx.beginPath();
-    if (headCount <= HEAD_LIMIT) {
+    const r = Math.max(options.flight?.dotSize ?? 1.8, 0.2) / k;
+    for (let b = 0; b < data.books.length; b++) {
+      let any = false;
       for (let n = 0; n < headCount; n++) {
+        if (headBooks[n] !== b) continue;
+        if (!any) {
+          ctx.beginPath();
+          any = true;
+        }
         const x = heads[n * 2];
         const y = heads[n * 2 + 1];
         ctx.moveTo(x + r, y);
         ctx.arc(x, y, r, 0, Math.PI * 2);
       }
-    } else {
-      for (let n = 0; n < headCount; n++) ctx.rect(heads[n * 2] - r, heads[n * 2 + 1] - r, r * 2, r * 2);
+      if (!any) continue;
+      const [cr, cg, cb] = BOOK_RGB[b] ?? [138, 143, 152];
+      ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+      ctx.fill();
     }
-    ctx.fill();
   }
 
   ctx.restore();
 
-  // The ruler is drawn in screen space, after the zoom is undone: see drawRuler.
+  // The ruler is drawn at screen size, after the zoom is undone: see drawRuler.
   const names = drawRuler(ctx, data, axis, frame, config, palette, view, options.view, options.labels !== false);
 
   return { drawn, skipped, flying, batches: sorted.length, ms: performance.now() - t0, names };
@@ -566,20 +574,23 @@ const BOOK_NOTCH = 5;
 const BAR_CURVE = 0.5;
 /** The shortest bar, so a one-verse chapter is still a mark and not a gap. */
 const BAR_MIN = 2;
-/**
- * How strongly a chapter bar wears its book's color. The number tags at the
- * tips are full strength, so they stand out as the thing to read.
- */
+/** How strongly a chapter bar wears its book's color. */
 const BAR_ALPHA = 0.7;
 /** The gap between the bars and the book names. */
 const NAME_GAP = 8;
-/** The most letters a book name stacks: "1 Thessalonians" and "Song of Solomon". */
-const NAME_LETTERS = 15;
 /**
- * How many chapters' worth of room a number tag may take, by rank: a round
- * number (1 and the tens) may be ten slots wide, a five five slots, and any
- * other three — so the staircase of tags stays a few steps deep and the round
- * numbers show first as you zoom in.
+ * The smallest and largest letters a book name may use. Every name is sized to
+ * the same height, so the longest ("1 Thessalonians") gets the smallest
+ * letters and the shortest ("Job") the largest — within these bounds, so a
+ * fifteen-letter name stays legible and a three-letter one doesn't shout.
+ */
+const NAME_FONT_MIN = 7;
+const NAME_FONT_MAX = 24;
+/**
+ * How many chapters' worth of room a number may take, by rank: a round number
+ * (1 and the tens) may be ten slots wide, a five five slots, and any other
+ * three — so where numbers have to climb they stay a few steps deep, and the
+ * round numbers show first as you zoom in.
  */
 const TAG_SHARE = [10, 5, 3];
 /**
@@ -592,14 +603,14 @@ const NUMBER_MIN_SLOT = 4;
 
 const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
-/** One step down a stacked name: a capital's height plus air. */
-function nameStep(config: ConnectionsConfig): number {
-  return config.nameSize;
+/** A stacked name's letter size: whatever makes it `nameHeight` tall, within bounds. */
+function nameFont(config: ConnectionsConfig, letters: number): number {
+  return Math.min(Math.max(config.nameHeight / Math.max(letters, 1), NAME_FONT_MIN), NAME_FONT_MAX);
 }
 
 /** How much room the ruler takes across the axis, in screen pixels. */
 export function axisDepth(labels: boolean, config: ConnectionsConfig): number {
-  return labels ? BAR_MAX + NAME_GAP + NAME_LETTERS * nameStep(config) + 4 : BAR_MAX + 4;
+  return labels ? BAR_MAX + NAME_GAP + config.nameHeight + 4 : BAR_MAX + 4;
 }
 
 /** Relative luminance, 0 for black to 1 for white. */
@@ -617,10 +628,6 @@ function luminanceOf([r, g, b]: [number, number, number]): number {
  */
 const DARK_COLOR = 0.179;
 
-/** The text color for a book color: black, unless the color is too dark to read black on. */
-function inkOn(color: [number, number, number]): string {
-  return luminanceOf(color) > DARK_COLOR ? '#000' : '#fff';
-}
 
 /**
  * A book's color as name text. On a dark background the two darkest colors
@@ -634,28 +641,27 @@ function nameColor(color: [number, number, number], palette: ConnectionsPalette)
 }
 
 /**
- * Where the ruler sits on screen.
+ * Where the ruler sits on screen: hanging off the rule, wherever the pan and
+ * zoom have put it. `rule` is the screen coordinate across the axis (y for a
+ * horizontal axis), and the ruler hangs `depth` past it.
  *
- * Under the rule while the rule is on screen, and pinned to the bottom edge
- * once zooming or panning carries the rule off it — so the chapter bars and the
- * book names are always in view to steer by. `rule` is the screen coordinate
- * across the axis (y for a horizontal axis), and the ruler hangs `depth` past it.
+ * It moves with the picture and scrolls off the screen with it. Pinning it to
+ * the bottom edge kept the names in view but took a third of the screen from
+ * the arcs, which are the point.
  */
 export function rulerAt(
   view: Viewport,
   config: ConnectionsConfig,
   labels: boolean,
   pan?: Pan,
-): { rule: number; depth: number; pinned: boolean } {
+): { rule: number; depth: number } {
   const frame = frameFor(view, config);
   const horizontal = frame.orientation === 'horizontal';
   const k = pan?.k ?? 1;
   const size = horizontal ? view.height : view.width;
   const shift = (horizontal ? pan?.y : pan?.x) ?? 0;
   const natural = size / 2 + k * (frame.originAcross + shift - size / 2);
-  const depth = axisDepth(labels, config);
-  const rule = Math.max(0, Math.min(natural, size - depth - 2));
-  return { rule, depth, pinned: Math.abs(rule - natural) > 0.5 };
+  return { rule: natural, depth: axisDepth(labels, config) };
 }
 
 /** The chapter whose slot holds a fraction along the axis. */
@@ -671,14 +677,14 @@ function chapterAtFraction(offsets: Float64Array, fraction: number): number {
 }
 
 /**
- * The ruler: a bar per chapter, a number tag at each bar's tip, a divider at
- * every book, and the 66 book names.
+ * The ruler: a bar per chapter, a number at each bar's tip, a divider at every
+ * book, and the 66 book names.
  *
- * Drawn in screen pixels, not in the zoomed picture. Zooming widens the
- * chapters — that is what the reader zooms for — but the bars keep their
- * length, the numbers and names keep a readable size, and the whole ruler stays
- * on screen. Drawn inside the zoom, a 30× view put the names 1,700 pixels below
- * the bottom edge and shrank the text to nothing.
+ * It hangs off the rule and moves with the picture, but is drawn at screen
+ * size rather than scaled with the zoom. Zooming widens the chapters — that is
+ * what the reader zooms for — while the bars keep their length and the numbers
+ * and names a readable size. Scaled with the zoom, a 30× view put the names
+ * 1,700 pixels below the bars and the text shrank to nothing.
  *
  * Returns where the names landed, so a tap on a name can light its book.
  */
@@ -721,11 +727,8 @@ function drawRuler(
     }
   };
 
-  // The ruler's own ground, so arcs under a pinned ruler don't show through it.
-  ctx.fillStyle = palette.bg;
-  ctx.beginPath();
-  rect(0, 0, alongSize, Math.min(depth + 2, acrossSize - rule));
-  ctx.fill();
+  // Off the screen altogether: nothing to draw.
+  if (rule - BOOK_NOTCH > acrossSize || rule + depth < 0) return [];
 
   // Only the chapters on screen are drawn.
   const offsets = axis.offsets;
@@ -805,14 +808,15 @@ function drawRuler(
 
   if (!labels) return [];
 
-  // ── Chapter numbers, on tags at the bars' tips ─────────────────────────
+  // ── Chapter numbers, at the bars' tips ─────────────────────────────────
   //
-  // Each number sits on a tag of its book's full color at the tip of its own
-  // bar, in black (white on the two darkest colors). Bars differ in length, so
-  // neighboring tips are already at different heights and most numbers clear
-  // each other without help. Where two would still touch, the later one climbs
-  // its own bar toward the rule until it is clear, and if the bar has no room
-  // left it goes unnumbered rather than floating loose.
+  // Each number is its book's color with a thin edge — dark on a dark theme,
+  // light on a pale one — the way the family tree writes its names, so it reads
+  // on top of its own bar without a box around it. It sits at the bar's tip.
+  // Bars differ in length, so neighboring tips are already at different
+  // heights and most numbers clear each other without help; where two would
+  // still touch, the later one climbs its own bar toward the rule, and if the
+  // bar has no room left it goes unnumbered rather than floating loose.
   //
   // They grow a little as you zoom in, and stay in screen pixels so a deep
   // zoom can't blow them up past the ruler.
@@ -820,8 +824,11 @@ function drawRuler(
   const numberFont = config.numberSize * Math.min(1.6, 1 + 0.15 * Math.log2(spread));
   ctx.font = `bold ${numberFont}px ${FONT_FAMILY}`;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  ctx.textBaseline = 'alphabetic';
   const digitWidth = [0, 1, 2, 3].map((d) => (d ? ctx.measureText('0'.repeat(d)).width : 0));
+  // A digit's height: digits are cap height, about 0.72 of the font size.
+  const digitHeight = numberFont * 0.72;
+  const edge = Math.max(config.numberOutline, 0);
 
   // Every visible chapter that has room for a number, with how much it matters.
   // When there isn't room for all of them, the round ones go first — chapter
@@ -840,10 +847,10 @@ function drawRuler(
       const n = c - first + 1;
       const text = String(n);
       const textWidth = digitWidth[text.length] ?? ctx.measureText(text).width;
-      // The tag's size along and across the axis. On a vertical axis the
-      // number still reads left to right, so the two swap.
-      const la = horizontal ? textWidth + 5 : numberFont + 3;
-      const lc = horizontal ? numberFont + 3 : textWidth + 5;
+      // The number's size along and across the axis, its edge included. On a
+      // vertical axis it still reads left to right, so the two swap.
+      const la = (horizontal ? textWidth : digitHeight) + edge * 2;
+      const lc = (horizontal ? digitHeight : textWidth) + edge * 2;
       const rank = n === 1 || n % 10 === 0 ? 0 : n % 5 === 0 ? 1 : 2;
       if (s1 - s0 < NUMBER_MIN_SLOT || (s1 - s0) * TAG_SHARE[rank] < la) continue;
       wanted.push({ c, book: b, rank, s0, s1, text, la, lc });
@@ -851,7 +858,7 @@ function drawRuler(
   }
   wanted.sort((x, y) => x.rank - y.rank || x.c - y.c);
 
-  // Placed tags, filed by where they sit along the axis so a clash test only
+  // Placed numbers, filed by where they sit along the axis so a clash test only
   // looks at its neighbors.
   const BUCKET = 48;
   const filed = new Map<number, Array<{ a0: number; a1: number; c0: number; c1: number }>>();
@@ -862,15 +869,15 @@ function drawRuler(
     }
     return false;
   };
-  const tags: Array<{ book: number; a: number; c: number; la: number; lc: number; text: string }> = [];
+  const numbers: Array<{ book: number; along: number; c: number; lc: number; text: string }> = [];
 
   for (const w of wanted) {
     const mid = (w.s0 + w.s1) / 2;
     const a0 = mid - w.la / 2;
     const a1 = mid + w.la / 2;
-    // Start with the tag's far edge on the bar's tip — or, for a bar shorter
-    // than its tag, as the bar's own continuation — and climb toward the rule.
-    let c0 = Math.max(barLength(w.c), w.lc + 1) - w.lc;
+    // Start with the number's far edge on the bar's tip — or, for a bar shorter
+    // than its number, just past the rule — and climb toward the rule.
+    let c0 = Math.max(barLength(w.c), w.lc + 2) - w.lc;
     while (c0 >= 1 && clashes(a0, a1, c0, c0 + w.lc)) c0 -= w.lc + 1;
     if (c0 < 1) continue;
     const box = { a0, a1, c0, c1: c0 + w.lc };
@@ -879,46 +886,42 @@ function drawRuler(
       if (list) list.push(box);
       else filed.set(k, [box]);
     }
-    tags.push({ book: w.book, a: a0, c: c0, la: w.la, lc: w.lc, text: w.text });
+    numbers.push({ book: w.book, along: mid, c: c0, lc: w.lc, text: w.text });
   }
 
-  // Drawn a book at a time: one path of tags in its color, then its numbers.
-  tags.sort((x, y) => x.book - y.book);
-  for (let start = 0; start < tags.length; ) {
-    let end = start;
-    while (end < tags.length && tags[end].book === tags[start].book) end++;
-    const color = BOOK_RGB[tags[start].book] ?? [138, 143, 152];
-    ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-    ctx.beginPath();
-    for (let i = start; i < end; i++) rect(tags[i].a, tags[i].c, tags[i].la, tags[i].lc);
-    ctx.fill();
-    ctx.fillStyle = inkOn(color);
-    for (let i = start; i < end; i++) {
-      const t = tags[i];
-      const along = t.a + t.la / 2;
-      const across = rule + t.c + t.lc / 2 + 0.5;
-      if (horizontal) ctx.fillText(t.text, along, across);
-      else ctx.fillText(t.text, across, along);
+  // Stroke then fill, a book at a time so the color is set once per book.
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = edge * 2;
+  ctx.strokeStyle = palette.pale ? '#fff' : '#0c0c0c';
+  if (!horizontal) ctx.textAlign = 'left';
+  numbers.sort((x, y) => x.book - y.book);
+  let inked = -1;
+  for (const t of numbers) {
+    if (t.book !== inked) {
+      inked = t.book;
+      ctx.fillStyle = nameColor(BOOK_RGB[t.book] ?? [138, 143, 152], palette);
     }
-    start = end;
+    // Horizontal: centered on the bar, baseline at the number's far edge.
+    // Vertical: starting at its near edge, centered on the bar.
+    const x = horizontal ? t.along : rule + t.c + edge;
+    const y = horizontal ? rule + t.c + t.lc - edge : t.along + digitHeight / 2;
+    if (edge > 0) ctx.strokeText(t.text, x, y);
+    ctx.fillText(t.text, x, y);
   }
 
   // ── Book names ─────────────────────────────────────────────────────────
   //
   // Bold capitals, one upright letter under the next, with a word's space kept
-  // as a gap. Each name sits in the middle of the part of its book that is on
-  // screen, so panning along a long book keeps its name in view rather than
-  // leaving it at a center that has scrolled away.
+  // as a gap. Every name is sized to stand the same height, so the band they
+  // make is level: long names get small letters, short names big ones. Each
+  // sits in the middle of the part of its book that is on screen, so panning
+  // along a long book keeps its name in view.
   //
   // Where two names would collide the wider book wins — at rest the twelve
   // minor prophets share about forty pixels and can't all be named — and the
   // rest appear as you zoom in and they get room.
-  const step = nameStep(config);
-  ctx.font = `bold ${config.nameSize}px ${FONT_FAMILY}`;
   ctx.textBaseline = 'middle';
   const top = BAR_MAX + NAME_GAP;
-  // A column is the widest capital plus a little air.
-  const column = horizontal ? ctx.measureText('W').width + 3 : config.nameSize + 3;
 
   const candidates: Array<{ book: number; mid: number; room: number }> = [];
   for (let b = firstBook; b <= lastBook; b++) {
@@ -931,26 +934,30 @@ function drawRuler(
 
   const names: PlacedName[] = [];
   for (const n of candidates) {
+    const name = data.books[n.book].name.toUpperCase();
+    const size = nameFont(config, name.length);
+    ctx.font = `bold ${size}px ${FONT_FAMILY}`;
+    // A column is the widest capital plus a little air.
+    const column = horizontal ? ctx.measureText('W').width + 3 : size + 3;
     const from = n.mid - column / 2;
     const to = n.mid + column / 2;
     if (names.some((p) => p.to > from && p.from < to)) continue;
     names.push({ book: n.book, from, to });
 
-    const name = data.books[n.book].name.toUpperCase();
     // The dividers run through the name band, so a name sitting over one is
     // given its own ground first — otherwise a short book's name is struck
     // through by the lines either side of it.
     ctx.fillStyle = palette.bg;
     ctx.beginPath();
-    if (horizontal) rect(from, top, column, name.length * step);
-    else rect(n.mid - column / 2, top, column, ctx.measureText(name).width);
+    if (horizontal) rect(from, top, column, name.length * size);
+    else rect(from, top, column, ctx.measureText(name).width);
     ctx.fill();
     ctx.fillStyle = nameColor(BOOK_RGB[n.book] ?? [138, 143, 152], palette);
     if (horizontal) {
       ctx.textAlign = 'center';
       for (let i = 0; i < name.length; i++) {
         if (name[i] === ' ') continue;
-        ctx.fillText(name[i], n.mid, rule + top + i * step + step / 2);
+        ctx.fillText(name[i], n.mid, rule + top + i * size + size / 2);
       }
     } else {
       // A vertical axis runs down the screen already, so the name reads across
