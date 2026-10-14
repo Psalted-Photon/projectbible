@@ -16,13 +16,19 @@
  * would say nothing: everything leaving Genesis would be brown, and brown is
  * already what Genesis is.
  *
+ * Every arc is drawn the same: one width, one opacity. Votes decide only which
+ * links are drawn at all (the vote floor and the cap), never how loud one is,
+ * because a thick line covers the thin ones beneath it — weighting by votes
+ * let a few favorites hide thousands of others. With every arc alike, a bright
+ * band means many links, and nothing is hidden behind anything.
+ *
  * Two things are done for the sake of drawing this many arcs at 60fps:
  *
  *   - Arcs are batched by the pair of books they join. A canvas gradient costs
  *     far more to build than a line does to stroke, so one gradient is built
- *     per book pair (a few hundred at most) rather than per arc.
+ *     per book pair rather than per arc.
  *   - The strokes inside a batch are one path. Stroking 344,799 separate paths
- *     is most of the frame; stroking a few hundred is not.
+ *     is most of the frame; stroking a few thousand is not.
  *
  * Both are why `draw` takes the whole set and not an arc at a time.
  */
@@ -35,7 +41,6 @@ import {
   fractionOf,
   frameFor,
   pointAt,
-  strengthOf,
   type Axis,
   type ChapterWidth,
   type ConnectionsConfig,
@@ -43,67 +48,74 @@ import {
   type Viewport,
 } from './layout';
 import { BOOK_RGB, bookIndexAt, type ConnectionsPalette } from './palette';
-import {
-  LIGHT_STEPS,
-  inSpans,
-  lightAt,
-  rankOf,
-  type LightFrame,
-  type Span,
-} from './lights';
+import { inSpans, type FlightFrame, type Span } from './lights';
+
+/** Pan and zoom: the picture is scaled by `k` around the canvas centre and moved by x/y. */
+export interface Pan {
+  x: number;
+  y: number;
+  k: number;
+}
 
 /** What one draw needs beyond the data and the dials. */
 export interface DrawOptions {
   palette: ConnectionsPalette;
   /**
    * The lit set, as verse positions: only arcs with a foot inside one of these
-   * spans are drawn at full strength, the rest fall to `dimFloor`. Empty or
-   * absent means everything is lit, which is the resting state.
+   * spans are drawn, and the rest are hidden. Empty or absent means everything
+   * is lit, which is the resting state.
    */
   lit?: Span[];
   /**
-   * The travelling light, if one is running. Absent or settled means the arcs
-   * take their resting brightness and the draw follows the same path it did
-   * before any of the lighting existed.
+   * The volley in the air, if one is. Absent or settled means every arc has
+   * landed and the draw skips the flight arithmetic entirely.
    */
-  light?: LightFrame;
-  /** Draw the book names and the chapter ruler. */
+  flight?: FlightFrame;
+  /** Draw the book names and the chapter numbers. */
   labels?: boolean;
   /** Pan and zoom, applied around the canvas centre. */
-  view?: { x: number; y: number; k: number };
+  view?: Pan;
+}
+
+/** A book name as it was placed on screen, so a tap on it can find its book. */
+export interface PlacedName {
+  book: number;
+  /** Its extent along the axis, in screen pixels. */
+  from: number;
+  to: number;
 }
 
 /** What a draw reports back, for the lab's readout. */
 export interface DrawStats {
-  /** Arcs actually stroked, after the vote floor and the arc cap. */
+  /** Arcs actually stroked, whole or in flight. */
   drawn: number;
-  /** Arcs skipped by the vote floor or the cap. */
+  /** Arcs not drawn: below the vote floor, past the cap, unlit, or not yet launched. */
   skipped: number;
+  /** Of the drawn, how many are still in the air. */
+  flying: number;
   /** How many gradient batches it took. */
   batches: number;
   /** Milliseconds spent in this draw. */
   ms: number;
+  /** Where the book names landed, for tapping them. */
+  names: PlacedName[];
 }
 
 /**
  * The book-start positions, as the draw loop wants them: an Int32Array, so
- * finding an arc's book is a binary search over numbers.
+ * finding an arc's book is a binary search over numbers. Cached per data set:
+ * these never change while a pack is loaded.
  */
-function bookStartsOf(data: ConnectionsData): Int32Array {
-  const out = new Int32Array(data.books.length);
-  data.books.forEach((b, i) => {
-    out[i] = b.start;
-  });
-  return out;
-}
-
-/** Cached per data set: these never change while a pack is loaded. */
 const bookStartsCache = new WeakMap<ConnectionsData, Int32Array>();
 function bookStarts(data: ConnectionsData): Int32Array {
   let cached = bookStartsCache.get(data);
   if (!cached) {
-    cached = bookStartsOf(data);
-    bookStartsCache.set(data, cached);
+    const starts = new Int32Array(data.books.length);
+    data.books.forEach((b, i) => {
+      starts[i] = b.start;
+    });
+    bookStartsCache.set(data, starts);
+    cached = starts;
   }
   return cached;
 }
@@ -142,7 +154,7 @@ function orderFor(data: ConnectionsData, config: ConnectionsConfig): OrderCache 
   let skipped = 0;
 
   if (maxArcs > 0 && maxArcs < data.count) {
-    // The cap keeps the strongest links: a reader who asks for 20,000 arcs out
+    // The cap keeps the most-voted links: a reader who asks for 20,000 arcs out
     // of 344,799 wants the 20,000 that matter, not the first 20,000 in Genesis.
     const kept: number[] = [];
     for (let i = 0; i < data.count; i++) {
@@ -171,39 +183,12 @@ function orderFor(data: ConnectionsData, config: ConnectionsConfig): OrderCache 
   return entry;
 }
 
-/**
- * One batch of arcs: every link joining the same pair of books, at the same
- * rounded thickness and brightness, so they share one gradient and one path.
- *
- * The key mixes the two books with the quantised strength, because a gradient
- * carries the alpha and two arcs of different brightness cannot share one.
- */
+/** One batch of arcs: every link from one book to another, sharing one gradient and one path. */
 interface Batch {
   fromBook: number;
   toBook: number;
-  /** Quantised strength, 0..STRENGTH_STEPS. */
-  step: number;
-  dim: boolean;
-  /**
-   * Quantised travelling light, 0..LIGHT_STEPS, or -1 when no light is moving.
-   *
-   * -1 is the resting case and takes the `dim` flag's brightness, which is how
-   * a settled picture costs exactly what it did before the lighting existed.
-   */
-  lightStep: number;
   indexes: number[];
 }
-
-/**
- * How many brightness levels the batching collapses to.
- *
- * Every extra level is another gradient per book pair, and a gradient is the
- * expensive object in this draw. Measured over the real set: 4 steps costs
- * 6,045 batches, 8 costs 8,706, 16 costs 11,402 and 32 costs 17,020. Eight is
- * where the curve turns — past it the batch count climbs faster than the eye
- * can separate the levels on a thin translucent line.
- */
-const STRENGTH_STEPS = 8;
 
 /**
  * Every link's two feet as fractions along the axis, 0 to 1, kept between
@@ -241,81 +226,49 @@ function feetFor(data: ConnectionsData, axis: Axis, width: ChapterWidth): FeetCa
 /**
  * The batches, kept between frames.
  *
- * This is the one that matters for a smooth pan. Sorting 344,799 links into
- * batches walks the whole set, binary-searches two book indexes per link and
- * pushes into 8,700 arrays — tens of milliseconds, and it was running on every
- * frame of a drag even though a pan cannot change which arcs share a gradient.
- * The grouping depends only on the data, the vote dials and the lit set; the
- * viewport, the pan and the zoom are applied later, at stroke time.
+ * Sorting 344,799 links into batches walks the whole set and binary-searches
+ * two book indexes per link — tens of milliseconds, and a pan, a zoom or a
+ * volley in flight cannot change which arcs share a gradient. So the grouping
+ * depends only on the data, the vote dials and the lit set, and everything
+ * else is applied at stroke time.
+ *
+ * `lo`/`hi` are the first and last source verse in the set, which is what a
+ * volley's launch order is measured across.
  */
 interface BatchCache {
   floor: number;
   maxArcs: number;
-  dimFloorOff: boolean;
-  voteCurve: number;
   litKey: string;
   sorted: Batch[];
   skipped: number;
+  lo: number;
+  hi: number;
 }
 const batchCache = new WeakMap<ConnectionsData, BatchCache>();
 
 /** A lit set as a comparable string, so a cache hit is a string compare. */
-function litKeyOf(lit: Array<{ start: number; end: number }> | undefined): string {
+function litKeyOf(lit: Span[] | undefined): string {
   if (!lit?.length) return '';
   return lit.map((s) => `${s.start}-${s.end}`).join(',');
 }
 
-function batchesFor(
-  data: ConnectionsData,
-  config: ConnectionsConfig,
-  lit: Span[] | undefined,
-  light: LightFrame | undefined,
-): { sorted: Batch[]; skipped: number } {
-  // A travelling light changes every arc's brightness every frame, so its
-  // batches cannot be cached — but it also cannot be allowed to evict the
-  // resting ones, or every tap would cost a full rebuild when it settled. The
-  // moving case therefore builds into its own scratch batches and never
-  // touches the cache.
-  const moving = !!light?.shape && !light.settled;
-  // Keyed on the spans the batching actually uses, not on `lit`. The two agree
-  // on every frame that reaches the cache today — the opening sweep is the one
-  // state where they differ, and a sweep is always moving, so it never caches —
-  // but keying on the value that is used is what keeps that true if the sweep
-  // ever gains a settled frame.
-  const spans = light ? light.spans : lit;
+function batchesFor(data: ConnectionsData, config: ConnectionsConfig, spans: Span[] | undefined): BatchCache {
   const litKey = litKeyOf(spans);
-  // dimFloor only changes the batching when it crosses zero, where dimmed arcs
-  // stop being built at all; its exact value is a stroke-time alpha.
-  const dimFloorOff = config.dimFloor <= 0;
-
-  if (!moving) {
-    const cached = batchCache.get(data);
-    if (
-      cached &&
-      cached.floor === config.voteFloor &&
-      cached.maxArcs === config.maxArcs &&
-      cached.dimFloorOff === dimFloorOff &&
-      cached.voteCurve === config.voteCurve &&
-      cached.litKey === litKey
-    ) {
-      return cached;
-    }
+  const cached = batchCache.get(data);
+  if (
+    cached &&
+    cached.floor === config.voteFloor &&
+    cached.maxArcs === config.maxArcs &&
+    cached.litKey === litKey
+  ) {
+    return cached;
   }
 
   const starts = bookStarts(data);
   const { order, skipped: culled } = orderFor(data, config);
   let skipped = culled;
-
-  // Everything the per-arc light needs, hoisted out of the loop.
-  const shape = moving ? light!.shape! : null;
-  const elapsedMs = light?.elapsedMs ?? 0;
-  const lightOrder = light?.order ?? 'together';
-  const origin = light?.origin ?? 0;
-  const floor = light?.floor ?? 0;
-  const restingDim = light?.dimFloor ?? config.dimFloor;
-  const totalVerses = data.totalVerses;
-  const maxVotes = data.maxVotes;
-  const opening = light?.opening ?? false;
+  let lo = Infinity;
+  let hi = -Infinity;
 
   const batches = new Map<number, Batch>();
   const total = order.length;
@@ -323,67 +276,46 @@ function batchesFor(
     const i = order[n];
     const from = data.from[i];
     const to = data.toStart[i];
-    const fromBook = bookIndexAt(starts, from);
-    const toBook = bookIndexAt(starts, to);
-
-    const strength = strengthOf(config, data.votes[i], data.maxVotes);
-    const step = Math.round(strength * STRENGTH_STEPS);
     // An arc counts as lit if either foot is in the lit set, so a tapped book
-    // shows what it reaches and what reaches it. The opening sweep lights the
-    // whole Bible, so it has no dimmed set at all.
-    const dim = opening ? false : !(inSpans(spans, from) || inSpans(spans, to));
-
-    let lightStep = -1;
-    if (shape) {
-      // Where this arc sits in the order, and how far its own fade has got.
-      const rank = rankOf(lightOrder, from, to, data.votes[i], maxVotes, origin, totalVerses);
-      // An arc rises to full if it is lit and to the dim floor if it is not.
-      // The opening sweep starts everything from `floor` (0 means the picture
-      // assembles out of nothing); a tap starts from the dimmed level, so the
-      // lit arcs come up out of the dimmed field rather than off a black page.
-      const start = opening ? floor : restingDim;
-      const end = dim ? restingDim : 1;
-      const v = lightAt(shape, elapsedMs, rank, start, end, i);
-      lightStep = Math.round(Math.min(Math.max(v, 0), 1.5) * LIGHT_STEPS);
-    } else if (dim && dimFloorOff) {
+    // shows what it reaches and what reaches it. Unlit arcs are not drawn.
+    if (!(inSpans(spans, from) || inSpans(spans, to))) {
       skipped++;
       continue;
     }
+    if (from < lo) lo = from;
+    if (from > hi) hi = from;
 
-    // A moving light is part of the key, so arcs at the same brightness still
-    // share one gradient and one path.
-    const key =
-      ((fromBook * 66 + toBook) * (STRENGTH_STEPS + 1) + step) * 2 * (LIGHT_STEPS + 2) +
-      (dim ? 1 : 0) * (LIGHT_STEPS + 2) +
-      (lightStep + 1);
+    const fromBook = bookIndexAt(starts, from);
+    const toBook = bookIndexAt(starts, to);
+    const key = fromBook * 66 + toBook;
     let batch = batches.get(key);
     if (!batch) {
-      batch = { fromBook, toBook, step, dim, lightStep, indexes: [] };
+      batch = { fromBook, toBook, indexes: [] };
       batches.set(key, batch);
     }
     batch.indexes.push(i);
   }
 
-  // Dimmed arcs go down first, so the lit ones read on top of them rather than
-  // through them, and dimmer light goes under brighter for the same reason.
-  const sorted = [...batches.values()].sort(
-    (a, b) => Number(b.dim) - Number(a.dim) || a.lightStep - b.lightStep || a.step - b.step,
-  );
-
-  if (moving) return { sorted, skipped };
-
   const entry: BatchCache = {
     floor: config.voteFloor,
     maxArcs: config.maxArcs,
-    dimFloorOff,
-    voteCurve: config.voteCurve,
     litKey,
-    sorted,
+    sorted: [...batches.values()],
     skipped,
+    lo: Number.isFinite(lo) ? lo : 0,
+    hi: Number.isFinite(hi) ? hi : 0,
   };
   batchCache.set(data, entry);
   return entry;
 }
+
+/** The heads of arcs in flight, reused between frames: x, y pairs. */
+let heads = new Float32Array(4096);
+
+/** The arrowhead on an arc in flight, in screen pixels. */
+const HEAD_RADIUS = 1.8;
+/** The most arrowheads a volley shows, so the dots stay dots. */
+const HEAD_LIMIT = 4000;
 
 export function draw(
   ctx: CanvasRenderingContext2D,
@@ -394,6 +326,7 @@ export function draw(
 ): DrawStats {
   const t0 = performance.now();
   const { palette } = options;
+  const k = options.view?.k ?? 1;
 
   // Clear in device pixels, not CSS pixels. The caller has already scaled the
   // context by the device pixel ratio, so filling `view.width × view.height`
@@ -409,7 +342,7 @@ export function draw(
 
   ctx.save();
   if (options.view) {
-    const { x, y, k } = options.view;
+    const { x, y } = options.view;
     ctx.translate(view.width / 2, view.height / 2);
     ctx.scale(k, k);
     ctx.translate(-view.width / 2 + x, -view.height / 2 + y);
@@ -417,10 +350,9 @@ export function draw(
 
   const axis = axisFor(data, config.width);
   const frame = frameFor(view, config);
-  const { sorted, skipped: culled } = batchesFor(data, config, options.lit, options.light);
+  const lit = options.flight ? options.flight.spans : options.lit;
+  const { sorted, skipped: culled, lo, hi } = batchesFor(data, config, lit);
   const { fromAt, toAt } = feetFor(data, axis, config.width);
-  // Arcs the vote floor, the cap and a dimFloor of 0 took out — so the
-  // readout's count adds up to the whole set.
   let skipped = culled;
 
   // Everything the inner loop would otherwise recompute 344,799 times.
@@ -431,68 +363,135 @@ export function draw(
   const splitSide = config.side === 'split';
   const sideSign: 1 | -1 = config.side === 'bottom' ? -1 : 1;
 
+  // The volley, if one is in the air. Each arc launches at its source's place
+  // in the lit set — Genesis first — and then flies for `flightMs`.
+  const volley = options.flight && !options.flight.settled ? options.flight.volley : null;
+  const elapsed = options.flight?.elapsedMs ?? 0;
+  const staggerMs = volley ? Math.max(volley.staggerMs, 0) : 0;
+  const flightMs = volley ? Math.max(volley.flightMs, 1) : 1;
+  const launchSpan = hi - lo;
+  let headCount = 0;
+  // A head on every arc in the air is a white blanket once the whole Bible
+  // flies — 190,000 dots mid-opening. So only every `headEvery`th arc wears
+  // one, chosen so a volley never shows more than about HEAD_LIMIT at once.
+  let inSet = 0;
+  for (const batch of sorted) inSet += batch.indexes.length;
+  const headEvery = Math.max(1, Math.ceil(inSet / HEAD_LIMIT));
+
+  // One width for every arc, held in screen pixels: dividing by the zoom keeps
+  // a hairline a hairline at 30×, instead of swelling until it covers its
+  // neighbors.
+  ctx.lineWidth = config.thickness / k;
   ctx.lineCap = 'round';
+  const alpha = Math.min(Math.max(config.opacity, 0), 1);
 
   let drawn = 0;
-  for (const batch of sorted) {
-    const t = batch.step / STRENGTH_STEPS;
-    // A batch's brightness comes from the travelling light when one is moving,
-    // and from the dim flag when nothing is. The light already carries the
-    // dimmed level in it, so the two must not both be applied.
-    const level = batch.lightStep >= 0
-      ? batch.lightStep / LIGHT_STEPS
-      : batch.dim
-        ? config.dimFloor
-        : 1;
-    const alpha = (config.alphaMin + (config.alphaMax - config.alphaMin) * t) * level;
-    // Too faint to leave a mark: not worth a gradient and a path, and counted
-    // as skipped rather than silently vanishing from both totals.
-    if (alpha <= 0.002) {
-      skipped += batch.indexes.length;
-      continue;
-    }
-    const lineWidth = config.thicknessMin + (config.thicknessMax - config.thicknessMin) * t;
+  let flying = 0;
+  if (alpha > 0.002) {
+    for (const batch of sorted) {
+      ctx.strokeStyle = gradientFor(ctx, axis, frame, config, data, batch, alpha);
+      ctx.beginPath();
+      for (const i of batch.indexes) {
+        // How far this arc has flown, 0 to 1. Worked out first, because an arc
+        // still waiting to launch costs nothing else.
+        let p = 1;
+        if (volley) {
+          const rank = launchSpan > 0 ? (data.from[i] - lo) / launchSpan : 0;
+          p = (elapsed - staggerMs * rank) / flightMs;
+          if (p <= 0) {
+            skipped++;
+            continue;
+          }
+        }
 
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = gradientFor(ctx, axis, frame, config, data, batch, alpha);
+        // `arcShape` inlined, and the feet read from the cache: this body runs
+        // 344,799 times a frame, so an object per arc and two binary searches
+        // per foot are the difference between a pan that tracks the finger and
+        // one that does not. The math is `arcShape`'s, kept in step with it.
+        const fromAlong = fromAt[i] * frame.along;
+        const toAlong = toAt[i] * frame.along;
+        const span = Math.abs(toAlong - fromAlong) / frame.along;
+        const curved = Math.pow(span < 0 ? 0 : span > 1 ? 1 : span, config.heightCurve);
+        const height = frame.across * (heightMin + heightRange * curved);
+        const direction = splitSide ? (data.toStart[i] >= data.from[i] ? 1 : -1) : sideSign;
 
-    ctx.beginPath();
-    for (const i of batch.indexes) {
-      // `arcShape` inlined, and the feet read from the cache: this body runs
-      // 344,799 times a frame, so an object per arc and two binary searches per
-      // foot are the difference between a pan that tracks the finger and one
-      // that does not. The math is `arcShape`'s, kept in step with it.
-      const fromAlong = fromAt[i] * frame.along;
-      const toAlong = toAt[i] * frame.along;
-      const span = Math.abs(toAlong - fromAlong) / frame.along;
-      const curved = Math.pow(span < 0 ? 0 : span > 1 ? 1 : span, config.heightCurve);
-      const height = frame.across * (heightMin + heightRange * curved);
-      const direction = splitSide ? (data.toStart[i] >= data.from[i] ? 1 : -1) : sideSign;
+        const a0 = originAlong + fromAlong;
+        const b0 = originAlong + toAlong;
+        const m0 = originAlong + (fromAlong + toAlong) / 2;
+        // A quadratic reaches half its control height, so the control point
+        // goes to twice the height wanted.
+        const mc = originAcross - height * 2 * direction;
 
-      const a0 = originAlong + fromAlong;
-      const b0 = originAlong + toAlong;
-      const m0 = originAlong + (fromAlong + toAlong) / 2;
-      // A quadratic reaches half its control height, so the control point goes
-      // to twice the height wanted.
-      const mc = originAcross - height * 2 * direction;
-
-      if (horizontal) {
-        ctx.moveTo(a0, originAcross);
-        ctx.quadraticCurveTo(m0, mc, b0, originAcross);
-      } else {
-        ctx.moveTo(originAcross, a0);
-        ctx.quadraticCurveTo(mc, m0, originAcross, b0);
+        if (p < 1) {
+          // In flight: the front part of the same curve, cut at p. The first
+          // control point slides along the first leg and the end is the curve's
+          // own point at p — de Casteljau's split — so the drawn piece lies
+          // exactly on the arc it will become.
+          const u = 1 - p;
+          const qa = a0 + (m0 - a0) * p;
+          const qc = originAcross + (mc - originAcross) * p;
+          const ea = u * u * a0 + 2 * u * p * m0 + p * p * b0;
+          const ec = u * u * originAcross + 2 * u * p * mc + p * p * originAcross;
+          if (horizontal) {
+            ctx.moveTo(a0, originAcross);
+            ctx.quadraticCurveTo(qa, qc, ea, ec);
+          } else {
+            ctx.moveTo(originAcross, a0);
+            ctx.quadraticCurveTo(qc, qa, ec, ea);
+          }
+          if (i % headEvery === 0) {
+            if (headCount * 2 + 2 > heads.length) {
+              const grown = new Float32Array(heads.length * 2);
+              grown.set(heads);
+              heads = grown;
+            }
+            heads[headCount * 2] = horizontal ? ea : ec;
+            heads[headCount * 2 + 1] = horizontal ? ec : ea;
+            headCount++;
+          }
+          flying++;
+        } else if (horizontal) {
+          ctx.moveTo(a0, originAcross);
+          ctx.quadraticCurveTo(m0, mc, b0, originAcross);
+        } else {
+          ctx.moveTo(originAcross, a0);
+          ctx.quadraticCurveTo(mc, m0, originAcross, b0);
+        }
+        drawn++;
       }
-      drawn++;
+      ctx.stroke();
     }
-    ctx.stroke();
+  } else {
+    for (const batch of sorted) skipped += batch.indexes.length;
   }
 
-  // ── The axis and its labels ────────────────────────────────────────────
-  drawAxis(ctx, data, axis, frame, palette, options.labels !== false, options.view?.k ?? 1);
+  // The dots at the front of every arc still flying: the arrowheads. One path,
+  // drawn over the arcs so each reads as pulling its line behind it. Past a few
+  // thousand they are squares, which are far cheaper than circles and look the
+  // same at this size.
+  if (headCount > 0) {
+    const r = HEAD_RADIUS / k;
+    ctx.fillStyle = palette.text;
+    ctx.beginPath();
+    if (headCount <= HEAD_LIMIT) {
+      for (let n = 0; n < headCount; n++) {
+        const x = heads[n * 2];
+        const y = heads[n * 2 + 1];
+        ctx.moveTo(x + r, y);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+      }
+    } else {
+      for (let n = 0; n < headCount; n++) ctx.rect(heads[n * 2] - r, heads[n * 2 + 1] - r, r * 2, r * 2);
+    }
+    ctx.fill();
+  }
 
   ctx.restore();
-  return { drawn, skipped, batches: sorted.length, ms: performance.now() - t0 };
+
+  // The ruler is drawn in screen space, after the zoom is undone: see drawRuler.
+  const names = drawRuler(ctx, data, axis, frame, config, palette, view, options.view, options.labels !== false);
+
+  return { drawn, skipped, flying, batches: sorted.length, ms: performance.now() - t0, names };
 }
 
 /**
@@ -548,10 +547,12 @@ function gradientFor(
   return grad;
 }
 
-/** How long the longest chapter bar gets, in pixels off the axis. */
+// ── The ruler ────────────────────────────────────────────────────────────
+
+/** How long the longest chapter bar gets, in screen pixels off the rule. */
 const BAR_MAX = 58;
-/** How far a book divider reaches either side of the rule. */
-const BOOK_NOTCH = 4;
+/** How far a book divider reaches past the rule, on the arcs' side. */
+const BOOK_NOTCH = 5;
 /**
  * The curve verse counts are drawn through, as an exponent.
  *
@@ -566,241 +567,466 @@ const BAR_CURVE = 0.5;
 /** The shortest bar, so a one-verse chapter is still a mark and not a gap. */
 const BAR_MIN = 2;
 /**
- * How strongly a chapter bar wears its book's color.
- *
- * Below the names' 0.95 on purpose. The ruler is furniture: it should be
- * readable at a glance and never compete with the arcs, which are the picture.
+ * How strongly a chapter bar wears its book's color. The number tags at the
+ * tips are full strength, so they stand out as the thing to read.
  */
-const BAR_ALPHA = 0.55;
+const BAR_ALPHA = 0.7;
 /** The gap between the bars and the book names. */
-const NAME_GAP = 10;
+const NAME_GAP = 8;
+/** The most letters a book name stacks: "1 Thessalonians" and "Song of Solomon". */
+const NAME_LETTERS = 15;
 /**
- * Book-name letters: their size, and how far apart they stack.
- *
- * The step is tighter than the font size, which is what a stacked word wants —
- * letters are shorter than a line box, so full leading leaves them adrift from
- * each other and the name stops reading as one word.
+ * How many chapters' worth of room a number tag may take, by rank: a round
+ * number (1 and the tens) may be ten slots wide, a five five slots, and any
+ * other three — so the staircase of tags stays a few steps deep and the round
+ * numbers show first as you zoom in.
  */
-const NAME_FONT = 9;
-const NAME_STEP = 7.5;
+const TAG_SHARE = [10, 5, 3];
 /**
- * Room the stacked book names are given, in pixels across the axis.
- *
- * The longest name is "1 Thessalonians" — 14 letters once the space is
- * dropped — so this is that many steps plus a little air.
+ * The narrowest chapter that gets a number at all, in screen pixels. Below
+ * this the round-number rule alone sprinkled stray 1s and 20s along the
+ * resting ruler, where nothing can be read anyway; at rest only Psalm 119 is
+ * this wide.
  */
-const NAME_BAND = 14 * NAME_STEP + 4;
-/**
- * Chapter numbers inside the bars: tiny by design.
- *
- * Whether one is drawn depends on the room its own digits need — see the slot
- * test in `drawAxis`, which counts digits rather than assuming three, so "7"
- * appears at a zoom where "119" still cannot fit.
- */
-const CHAPTER_FONT = 7;
+const NUMBER_MIN_SLOT = 4;
+
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+/** One step down a stacked name: a capital's height plus air. */
+function nameStep(config: ConnectionsConfig): number {
+  return config.nameSize;
+}
+
+/** How much room the ruler takes across the axis, in screen pixels. */
+export function axisDepth(labels: boolean, config: ConnectionsConfig): number {
+  return labels ? BAR_MAX + NAME_GAP + NAME_LETTERS * nameStep(config) + 4 : BAR_MAX + 4;
+}
+
+/** Relative luminance, 0 for black to 1 for white. */
+function luminanceOf([r, g, b]: [number, number, number]): number {
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
 
 /**
- * The axis: a bar per chapter, a tick at each book, and all 66 book names.
- *
- * The chapters are a bar graph pointing away from the arcs, each bar as long as
- * its chapter has verses — so Psalm 119 is the longest bar in the Bible at 176
- * verses and the one-verse chapters are stubs. That gives the axis a texture
- * you can navigate by: the Psalms are a comb, the genealogies are a plateau.
- *
- * The names are drawn in the book's own color, which is the legend: a reader
- * who sees brown arriving has brown "Genesis" somewhere under the other end.
- * Written sideways when the axis is horizontal, because 66 names laid flat need
- * about 2,600 pixels and a phone has 400 — upright they need 66 × 11, which
- * fits anywhere, so every book gets named instead of the back third of the New
- * Testament silently dropping off.
+ * The luminance where black and white give equal contrast. Only the two
+ * darkest categories — the major prophets and Paul — fall under it.
  */
-function drawAxis(
+const DARK_COLOR = 0.179;
+
+/** The text color for a book color: black, unless the color is too dark to read black on. */
+function inkOn(color: [number, number, number]): string {
+  return luminanceOf(color) > DARK_COLOR ? '#000' : '#fff';
+}
+
+/**
+ * A book's color as name text. On a dark background the two darkest colors
+ * are lifted part way to white — the major prophets' deep purple is barely
+ * there as thin letters on near-black — while staying recognizably theirs.
+ */
+function nameColor(color: [number, number, number], palette: ConnectionsPalette): string {
+  if (palette.pale || luminanceOf(color) > DARK_COLOR) return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+  const lift = (c: number) => Math.round(c + (255 - c) * 0.4);
+  return `rgb(${lift(color[0])}, ${lift(color[1])}, ${lift(color[2])})`;
+}
+
+/**
+ * Where the ruler sits on screen.
+ *
+ * Under the rule while the rule is on screen, and pinned to the bottom edge
+ * once zooming or panning carries the rule off it — so the chapter bars and the
+ * book names are always in view to steer by. `rule` is the screen coordinate
+ * across the axis (y for a horizontal axis), and the ruler hangs `depth` past it.
+ */
+export function rulerAt(
+  view: Viewport,
+  config: ConnectionsConfig,
+  labels: boolean,
+  pan?: Pan,
+): { rule: number; depth: number; pinned: boolean } {
+  const frame = frameFor(view, config);
+  const horizontal = frame.orientation === 'horizontal';
+  const k = pan?.k ?? 1;
+  const size = horizontal ? view.height : view.width;
+  const shift = (horizontal ? pan?.y : pan?.x) ?? 0;
+  const natural = size / 2 + k * (frame.originAcross + shift - size / 2);
+  const depth = axisDepth(labels, config);
+  const rule = Math.max(0, Math.min(natural, size - depth - 2));
+  return { rule, depth, pinned: Math.abs(rule - natural) > 0.5 };
+}
+
+/** The chapter whose slot holds a fraction along the axis. */
+function chapterAtFraction(offsets: Float64Array, fraction: number): number {
+  let lo = 0;
+  let hi = offsets.length - 2;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (offsets[mid] <= fraction) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/**
+ * The ruler: a bar per chapter, a number tag at each bar's tip, a divider at
+ * every book, and the 66 book names.
+ *
+ * Drawn in screen pixels, not in the zoomed picture. Zooming widens the
+ * chapters — that is what the reader zooms for — but the bars keep their
+ * length, the numbers and names keep a readable size, and the whole ruler stays
+ * on screen. Drawn inside the zoom, a 30× view put the names 1,700 pixels below
+ * the bottom edge and shrank the text to nothing.
+ *
+ * Returns where the names landed, so a tap on a name can light its book.
+ */
+function drawRuler(
   ctx: CanvasRenderingContext2D,
   data: ConnectionsData,
   axis: Axis,
   frame: Frame,
+  config: ConnectionsConfig,
   palette: ConnectionsPalette,
+  view: Viewport,
+  pan: Pan | undefined,
   labels: boolean,
-  zoom: number,
-): void {
+): PlacedName[] {
   const horizontal = frame.orientation === 'horizontal';
+  const k = pan?.k ?? 1;
+  const alongSize = horizontal ? view.width : view.height;
+  const acrossSize = horizontal ? view.height : view.width;
+  const shiftAlong = (horizontal ? pan?.x : pan?.y) ?? 0;
+  const { rule, depth } = rulerAt(view, config, labels, pan);
 
-  // ── Chapter bars ───────────────────────────────────────────────────────
-  //
-  // Away from the arcs, so they never fight the picture. Each bar wears its own
-  // book's color, which makes the ruler the legend twice over: the name under a
-  // book and the bars above it say the same thing, so a color arriving in the
-  // arcs can be traced to a place on the line without reading a word.
-  //
-  // Batched by book rather than drawn per chapter — one path and one color per
-  // book is 66 strokes for 1,189 bars, since a stroke is the dear part.
+  // A fraction of the axis to a screen coordinate along it, and back.
+  const toScreen = (f: number) =>
+    alongSize / 2 + k * (frame.originAlong + f * frame.along + shiftAlong - alongSize / 2);
+  const toFraction = (s: number) =>
+    ((s - alongSize / 2) / k + alongSize / 2 - shiftAlong - frame.originAlong) / frame.along;
+
+  // An along/across rectangle as a canvas one. `c` counts away from the arcs.
+  const rect = (a: number, c: number, la: number, lc: number) => {
+    if (horizontal) ctx.rect(a, rule + c, la, lc);
+    else ctx.rect(rule + c, a, lc, la);
+  };
+  const line = (a: number, c0: number, c1: number) => {
+    if (horizontal) {
+      ctx.moveTo(a, rule + c0);
+      ctx.lineTo(a, rule + c1);
+    } else {
+      ctx.moveTo(rule + c0, a);
+      ctx.lineTo(rule + c1, a);
+    }
+  };
+
+  // The ruler's own ground, so arcs under a pinned ruler don't show through it.
+  ctx.fillStyle = palette.bg;
+  ctx.beginPath();
+  rect(0, 0, alongSize, Math.min(depth + 2, acrossSize - rule));
+  ctx.fill();
+
+  // Only the chapters on screen are drawn.
+  const offsets = axis.offsets;
+  const chapters = offsets.length - 1;
+  const startF = toFraction(0);
+  const endF = toFraction(alongSize);
+  if (endF < 0 || startF > 1) return [];
+  const firstVisible = chapterAtFraction(offsets, Math.max(startF, 0));
+  const lastVisible = Math.min(chapters - 1, chapterAtFraction(offsets, Math.min(endF, 1)));
+
   let longest = 1;
   for (let i = 0; i < axis.chapterVerses.length; i++) {
     if (axis.chapterVerses[i] > longest) longest = axis.chapterVerses[i];
   }
+  const barLength = (c: number) =>
+    BAR_MIN + (BAR_MAX - BAR_MIN) * Math.pow(axis.chapterVerses[c] / longest, BAR_CURVE);
+  const fill = Math.min(Math.max(config.barFill, 0.05), 1);
 
+  const bookOf = (c: number) => {
+    let lo = 0;
+    let hi = data.books.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (axis.bookFirstChapter[mid] <= c) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  const firstBook = bookOf(firstVisible);
+  const lastBook = bookOf(lastVisible);
+
+  // ── Chapter bars, one path per book in that book's color ───────────────
+  for (let b = firstBook; b <= lastBook; b++) {
+    const from = Math.max(axis.bookFirstChapter[b], firstVisible);
+    const to = Math.min(axis.bookFirstChapter[b + 1] - 1, lastVisible);
+    if (to < from) continue;
+    const [r, g, bl] = BOOK_RGB[b] ?? [138, 143, 152];
+    ctx.fillStyle = `rgba(${r}, ${g}, ${bl}, ${BAR_ALPHA})`;
+    ctx.beginPath();
+    for (let c = from; c <= to; c++) {
+      const s0 = toScreen(offsets[c]);
+      const s1 = toScreen(offsets[c + 1]);
+      // A gap between bars once there is room for one; never under a pixel.
+      const w = Math.max(1, (s1 - s0) * fill);
+      rect((s0 + s1) / 2 - w / 2, 1, w, barLength(c));
+    }
+    ctx.fill();
+  }
+
+  // ── The rule, and a divider at every book ──────────────────────────────
+  //
+  // The dividers run the full depth of the ruler, through the bars and down
+  // past the names, so which bars belong to which name is never a guess.
   ctx.lineWidth = 1;
   ctx.lineCap = 'butt';
-  data.books.forEach((_book, b) => {
-    const first = axis.bookFirstChapter[b];
-    const last = axis.bookFirstChapter[b + 1];
-    if (last <= first) return;
-
-    const [r, g, bl] = BOOK_RGB[b] ?? [138, 143, 152];
-    // Held back from the names' full strength so the ruler reads as the quiet
-    // furniture it is, and the arcs stay the brightest thing on the canvas.
-    ctx.strokeStyle = `rgba(${r}, ${g}, ${bl}, ${BAR_ALPHA})`;
-    ctx.beginPath();
-    for (let c = first; c < last; c++) {
-      const a0 = axis.offsets[c];
-      const a1 = axis.offsets[c + 1];
-      // The middle of the chapter's own slot, so a bar sits under its chapter
-      // rather than on the boundary between two.
-      const along = ((a0 + a1) / 2) * frame.along;
-      const share = Math.pow(axis.chapterVerses[c] / longest, BAR_CURVE);
-      const length = BAR_MIN + (BAR_MAX - BAR_MIN) * share;
-      const a = pointAt(frame, along, 0);
-      const bPt = pointAt(frame, along, -length);
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(bPt.x, bPt.y);
-    }
-    ctx.stroke();
-  });
-
-  // ── The rule ───────────────────────────────────────────────────────────
-  const start = pointAt(frame, 0, 0);
-  const end = pointAt(frame, frame.along, 0);
   ctx.strokeStyle = palette.rule;
   ctx.beginPath();
-  ctx.moveTo(start.x, start.y);
-  ctx.lineTo(end.x, end.y);
-  ctx.stroke();
-
-  // ── A notch at every book boundary ─────────────────────────────────────
-  //
-  // Short on purpose, and deliberately shorter than a bar. These ran past the
-  // longest bar before, which made 66 dividers the tallest thing on the ruler
-  // and the chapter lengths — the actual information — look like noise under
-  // them. A divider only has to say "a book ends here", so it sits across the
-  // rule and stops.
-  ctx.strokeStyle = palette.rule;
-  ctx.beginPath();
-  for (const book of data.books) {
-    const along = fractionOf(axis, book.start) * frame.along;
-    const a = pointAt(frame, along, BOOK_NOTCH);
-    const b = pointAt(frame, along, -BOOK_NOTCH);
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
+  const ruleFrom = Math.max(toScreen(0), 0);
+  const ruleTo = Math.min(toScreen(1), alongSize);
+  if (horizontal) {
+    ctx.moveTo(ruleFrom, rule + 0.5);
+    ctx.lineTo(ruleTo, rule + 0.5);
+  } else {
+    ctx.moveTo(rule + 0.5, ruleFrom);
+    ctx.lineTo(rule + 0.5, ruleTo);
   }
   ctx.stroke();
 
-  if (!labels) return;
+  ctx.strokeStyle = palette.muted;
+  ctx.beginPath();
+  for (let b = firstBook; b <= lastBook + 1 && b <= data.books.length; b++) {
+    const s = Math.round(toScreen(offsets[axis.bookFirstChapter[b]])) + 0.5;
+    if (s < -1 || s > alongSize + 1) continue;
+    line(s, -BOOK_NOTCH, labels ? depth : BAR_MAX + 2);
+  }
+  ctx.stroke();
 
-  // ── Chapter numbers, inside the bars ───────────────────────────────────
+  if (!labels) return [];
+
+  // ── Chapter numbers, on tags at the bars' tips ─────────────────────────
   //
-  // Tiny on purpose: 1,189 numbers on one line can be nothing else, and at this
-  // size they are a texture you can navigate by rather than something to read
-  // across. They sit inside the bar, near its far end, in the book's color over
-  // the bar's own line.
+  // Each number sits on a tag of its book's full color at the tip of its own
+  // bar, in black (white on the two darkest colors). Bars differ in length, so
+  // neighboring tips are already at different heights and most numbers clear
+  // each other without help. Where two would still touch, the later one climbs
+  // its own bar toward the rule until it is clear, and if the bar has no room
+  // left it goes unnumbered rather than floating loose.
   //
-  // Only drawn where the chapter's slot is wide enough to hold the digits, so
-  // the numbers thin out as you zoom out instead of smearing into a gray band —
-  // which is the one thing that would make the ruler worse, not better.
-  // All 1,189 chapters across a phone's width is under a pixel each, so at rest
-  // there is no room for a single digit and the numbers stay hidden. They
-  // appear as the reader zooms in, which is also the only time they could be
-  // read. Everything below is therefore measured in *screen* pixels: a slot is
-  // `zoom` times wider on screen than in canvas units, and the font is divided
-  // by `zoom` so a number stays the same size on screen however far in you go.
-  const screenFont = CHAPTER_FONT / zoom;
-  ctx.font = `${screenFont}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  // They grow a little as you zoom in, and stay in screen pixels so a deep
+  // zoom can't blow them up past the ruler.
+  const spread = Math.max(k * Math.max(config.stretch, 0.1), 1);
+  const numberFont = config.numberSize * Math.min(1.6, 1 + 0.15 * Math.log2(spread));
+  ctx.font = `bold ${numberFont}px ${FONT_FAMILY}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const digitWidth = [0, 1, 2, 3].map((d) => (d ? ctx.measureText('0'.repeat(d)).width : 0));
 
-  data.books.forEach((_book, b) => {
+  // Every visible chapter that has room for a number, with how much it matters.
+  // When there isn't room for all of them, the round ones go first — chapter
+  // 1, the tens, then the fives — so a sparse ruler reads 1, 10, 20, 30 like a
+  // ruler does, not as a scatter of whichever numbers happened to fit. Each
+  // rank needs less room per chapter than the next: a ten only has to share
+  // its stretch with nine neighbors, so it can show where the ones cannot.
+  const wanted: Array<{ c: number; book: number; rank: number; s0: number; s1: number; text: string; la: number; lc: number }> = [];
+  for (let b = firstBook; b <= lastBook; b++) {
     const first = axis.bookFirstChapter[b];
-    const last = axis.bookFirstChapter[b + 1];
-    if (last <= first) return;
-    const [r, g, bl] = BOOK_RGB[b] ?? [138, 143, 152];
-    ctx.fillStyle = `rgba(${r}, ${g}, ${bl}, 0.9)`;
-
-    for (let c = first; c < last; c++) {
-      const a0 = axis.offsets[c];
-      const a1 = axis.offsets[c + 1];
-      // How wide this chapter's slot is on screen, after the zoom.
-      const slot = (a1 - a0) * frame.along * zoom;
-      // A number needs room for its own digits, or it collides with its
-      // neighbours and the whole row turns to mud.
-      const digits = c - first + 1 >= 100 ? 3 : c - first + 1 >= 10 ? 2 : 1;
-      if (slot < CHAPTER_FONT * 0.72 * digits + 1.5) continue;
-
-      const along = ((a0 + a1) / 2) * frame.along;
-      const share = Math.pow(axis.chapterVerses[c] / longest, BAR_CURVE);
-      const length = BAR_MIN + (BAR_MAX - BAR_MIN) * share;
-      // Inside the bar where it fits, just past the tip where it does not, so
-      // a one-verse chapter is still numbered.
-      const across =
-        length >= screenFont + 4 ? length - screenFont * 0.8 : length + screenFont * 0.7;
-      const at = pointAt(frame, along, -across);
-      ctx.fillText(String(c - first + 1), at.x, at.y);
+    const from = Math.max(first, firstVisible);
+    const to = Math.min(axis.bookFirstChapter[b + 1] - 1, lastVisible);
+    for (let c = from; c <= to; c++) {
+      const s0 = toScreen(offsets[c]);
+      const s1 = toScreen(offsets[c + 1]);
+      const n = c - first + 1;
+      const text = String(n);
+      const textWidth = digitWidth[text.length] ?? ctx.measureText(text).width;
+      // The tag's size along and across the axis. On a vertical axis the
+      // number still reads left to right, so the two swap.
+      const la = horizontal ? textWidth + 5 : numberFont + 3;
+      const lc = horizontal ? numberFont + 3 : textWidth + 5;
+      const rank = n === 1 || n % 10 === 0 ? 0 : n % 5 === 0 ? 1 : 2;
+      if (s1 - s0 < NUMBER_MIN_SLOT || (s1 - s0) * TAG_SHARE[rank] < la) continue;
+      wanted.push({ c, book: b, rank, s0, s1, text, la, lc });
     }
-  });
+  }
+  wanted.sort((x, y) => x.rank - y.rank || x.c - y.c);
+
+  // Placed tags, filed by where they sit along the axis so a clash test only
+  // looks at its neighbors.
+  const BUCKET = 48;
+  const filed = new Map<number, Array<{ a0: number; a1: number; c0: number; c1: number }>>();
+  const clashes = (a0: number, a1: number, c0: number, c1: number) => {
+    for (let k = Math.floor((a0 - 1) / BUCKET); k <= Math.floor((a1 + 1) / BUCKET); k++) {
+      const list = filed.get(k);
+      if (list?.some((t) => t.a1 > a0 - 1 && t.a0 < a1 + 1 && t.c1 > c0 - 1 && t.c0 < c1 + 1)) return true;
+    }
+    return false;
+  };
+  const tags: Array<{ book: number; a: number; c: number; la: number; lc: number; text: string }> = [];
+
+  for (const w of wanted) {
+    const mid = (w.s0 + w.s1) / 2;
+    const a0 = mid - w.la / 2;
+    const a1 = mid + w.la / 2;
+    // Start with the tag's far edge on the bar's tip — or, for a bar shorter
+    // than its tag, as the bar's own continuation — and climb toward the rule.
+    let c0 = Math.max(barLength(w.c), w.lc + 1) - w.lc;
+    while (c0 >= 1 && clashes(a0, a1, c0, c0 + w.lc)) c0 -= w.lc + 1;
+    if (c0 < 1) continue;
+    const box = { a0, a1, c0, c1: c0 + w.lc };
+    for (let k = Math.floor(a0 / BUCKET); k <= Math.floor(a1 / BUCKET); k++) {
+      const list = filed.get(k);
+      if (list) list.push(box);
+      else filed.set(k, [box]);
+    }
+    tags.push({ book: w.book, a: a0, c: c0, la: w.la, lc: w.lc, text: w.text });
+  }
+
+  // Drawn a book at a time: one path of tags in its color, then its numbers.
+  tags.sort((x, y) => x.book - y.book);
+  for (let start = 0; start < tags.length; ) {
+    let end = start;
+    while (end < tags.length && tags[end].book === tags[start].book) end++;
+    const color = BOOK_RGB[tags[start].book] ?? [138, 143, 152];
+    ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+    ctx.beginPath();
+    for (let i = start; i < end; i++) rect(tags[i].a, tags[i].c, tags[i].la, tags[i].lc);
+    ctx.fill();
+    ctx.fillStyle = inkOn(color);
+    for (let i = start; i < end; i++) {
+      const t = tags[i];
+      const along = t.a + t.la / 2;
+      const across = rule + t.c + t.lc / 2 + 0.5;
+      if (horizontal) ctx.fillText(t.text, along, across);
+      else ctx.fillText(t.text, across, along);
+    }
+    start = end;
+  }
 
   // ── Book names ─────────────────────────────────────────────────────────
   //
-  // The letters stay upright and the word runs down the page, one letter under
-  // the next. A rotated word is the usual trick and it is the wrong one here:
-  // it makes the reader tilt their head, and on a horizontal axis every name
-  // would lie on its side while the chapter numbers beside it stood up. Stacked
-  // letters read straight on, and a name still only needs one letter's width of
-  // room along the axis, which is what lets all 66 be drawn.
-  // Divided by the zoom for the same reason as the chapter numbers: the ruler
-  // is furniture and should stay the size it was drawn at, whatever the zoom.
-  // The stacking step follows, so a name keeps its shape as it is scaled.
-  ctx.font = `${NAME_FONT / zoom}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-  ctx.textAlign = 'center';
+  // Bold capitals, one upright letter under the next, with a word's space kept
+  // as a gap. Each name sits in the middle of the part of its book that is on
+  // screen, so panning along a long book keeps its name in view rather than
+  // leaving it at a center that has scrolled away.
+  //
+  // Where two names would collide the wider book wins — at rest the twelve
+  // minor prophets share about forty pixels and can't all be named — and the
+  // rest appear as you zoom in and they get room.
+  const step = nameStep(config);
+  ctx.font = `bold ${config.nameSize}px ${FONT_FAMILY}`;
   ctx.textBaseline = 'middle';
-  const base = BAR_MAX + NAME_GAP;
-  const step = NAME_STEP / zoom;
+  const top = BAR_MAX + NAME_GAP;
+  // A column is the widest capital plus a little air.
+  const column = horizontal ? ctx.measureText('W').width + 3 : config.nameSize + 3;
 
-  data.books.forEach((book, i) => {
-    const mid = fractionOf(axis, (book.start + book.end) / 2) * frame.along;
-    ctx.fillStyle = `rgba(${BOOK_RGB[i][0]}, ${BOOK_RGB[i][1]}, ${BOOK_RGB[i][2]}, 0.95)`;
+  const candidates: Array<{ book: number; mid: number; room: number }> = [];
+  for (let b = firstBook; b <= lastBook; b++) {
+    const s0 = Math.max(toScreen(offsets[axis.bookFirstChapter[b]]), 0);
+    const s1 = Math.min(toScreen(offsets[axis.bookFirstChapter[b + 1]]), alongSize);
+    if (s1 <= s0) continue;
+    candidates.push({ book: b, mid: (s0 + s1) / 2, room: s1 - s0 });
+  }
+  candidates.sort((x, y) => y.room - x.room);
 
-    // Spaces are dropped from the stack and the digit of a numbered book is
-    // kept, so "1 Thessalonians" stacks as 1-T-h-e-s-… with no gap.
-    const letters = [...book.name].filter((ch) => ch !== ' ');
+  const names: PlacedName[] = [];
+  for (const n of candidates) {
+    const from = n.mid - column / 2;
+    const to = n.mid + column / 2;
+    if (names.some((p) => p.to > from && p.from < to)) continue;
+    names.push({ book: n.book, from, to });
 
+    const name = data.books[n.book].name.toUpperCase();
+    // The dividers run through the name band, so a name sitting over one is
+    // given its own ground first — otherwise a short book's name is struck
+    // through by the lines either side of it.
+    ctx.fillStyle = palette.bg;
+    ctx.beginPath();
+    if (horizontal) rect(from, top, column, name.length * step);
+    else rect(n.mid - column / 2, top, column, ctx.measureText(name).width);
+    ctx.fill();
+    ctx.fillStyle = nameColor(BOOK_RGB[n.book] ?? [138, 143, 152], palette);
     if (horizontal) {
-      // Down the page from the ruler: letter 0 nearest the axis.
-      for (let n = 0; n < letters.length; n++) {
-        const at = pointAt(frame, mid, -(base + n * step));
-        ctx.fillText(letters[n], at.x, at.y);
+      ctx.textAlign = 'center';
+      for (let i = 0; i < name.length; i++) {
+        if (name[i] === ' ') continue;
+        ctx.fillText(name[i], n.mid, rule + top + i * step + step / 2);
       }
     } else {
-      // A vertical axis runs down the screen already, so the name reads
-      // across it as ordinary left-to-right text.
-      const at = pointAt(frame, mid, -base);
-      ctx.save();
-      ctx.textAlign = 'right';
-      ctx.fillText(book.name, at.x, at.y);
-      ctx.restore();
+      // A vertical axis runs down the screen already, so the name reads across
+      // it as an ordinary word.
+      ctx.textAlign = 'left';
+      ctx.fillText(name, rule + top, n.mid);
     }
-  });
-}
-
-/** How much room the axis furniture takes across the axis, in pixels. */
-export function axisDepth(labels: boolean): number {
-  return labels ? BAR_MAX + NAME_GAP + NAME_BAND : BAR_MAX + 4;
+  }
+  return names;
 }
 
 /**
- * Which arc is under a tap, or null.
+ * What a tap on the ruler landed on: a book name, a chapter, or nothing.
  *
- * Walked rather than indexed: a tap happens once, and the alternative is
- * keeping a spatial index of 344,799 curves up to date through every pan, zoom
- * and dial change. Arcs are tested strongest-last so the brightest one under
- * the finger wins, which is the one the reader was aiming at.
+ * `at` is in screen pixels. A tap a little above the rule still counts as the
+ * ruler (`grab` pixels of it): every arc has a foot on the rule, so right
+ * above it they are packed shoulder to shoulder — measured over the real set,
+ * a tap within 40px of the rule hits some arc every time — and a tap there is
+ * aimed at the chapter, never at one hairline among thousands.
+ */
+export function rulerHit(
+  data: ConnectionsData,
+  config: ConnectionsConfig,
+  view: Viewport,
+  pan: Pan | undefined,
+  labels: boolean,
+  names: PlacedName[],
+  at: { x: number; y: number },
+  grab: number,
+): { kind: 'chapter'; chapter: number } | { kind: 'book'; book: number } | null {
+  const frame = frameFor(view, config);
+  const horizontal = frame.orientation === 'horizontal';
+  const { rule, depth } = rulerAt(view, config, labels, pan);
+  const across = (horizontal ? at.y : at.x) - rule;
+  const along = horizontal ? at.x : at.y;
+  if (across < -grab || across > depth) return null;
+
+  if (labels && across >= BAR_MAX + NAME_GAP / 2) {
+    const name = names.find((n) => along >= n.from - 4 && along <= n.to + 4);
+    if (name) return { kind: 'book', book: name.book };
+  }
+
+  const chapter = chapterAtScreen(data, config, view, pan, at);
+  return chapter === null ? null : { kind: 'chapter', chapter };
+}
+
+/**
+ * The chapter under a screen point, going by its place along the axis alone —
+ * for a range drag, which picks chapters wherever the finger is.
+ */
+export function chapterAtScreen(
+  data: ConnectionsData,
+  config: ConnectionsConfig,
+  view: Viewport,
+  pan: Pan | undefined,
+  at: { x: number; y: number },
+): number | null {
+  const frame = frameFor(view, config);
+  const horizontal = frame.orientation === 'horizontal';
+  const k = pan?.k ?? 1;
+  const alongSize = horizontal ? view.width : view.height;
+  const shift = (horizontal ? pan?.x : pan?.y) ?? 0;
+  const along = horizontal ? at.x : at.y;
+  const fraction = ((along - alongSize / 2) / k + alongSize / 2 - shift - frame.originAlong) / frame.along;
+  if (fraction < 0 || fraction > 1) return null;
+  return chapterAtFraction(axisFor(data, config.width).offsets, fraction);
+}
+
+/**
+ * Which arc is under a tap, or null. `at` is in the picture's own coordinates.
+ *
+ * Only arcs that are actually drawn can be picked — the vote floor, the cap and
+ * the lit set all apply — so a tap never finds a hidden arc. Walked rather than
+ * indexed: a tap happens once, and the alternative is keeping a spatial index
+ * of 344,799 curves up to date through every pan, zoom and dial change. Of
+ * several arcs under the finger the most-voted wins.
  */
 export function pick(
   data: ConnectionsData,
@@ -808,22 +1034,25 @@ export function pick(
   view: Viewport,
   at: { x: number; y: number },
   tolerance = 6,
+  lit?: Span[],
 ): number | null {
   const axis = axisFor(data, config.width);
   const frame = frameFor(view, config);
+  const { sorted } = batchesFor(data, config, lit);
   let best: number | null = null;
   let bestVotes = -Infinity;
 
-  for (let i = 0; i < data.count; i++) {
-    if (data.votes[i] < config.voteFloor) continue;
-    if (data.votes[i] <= bestVotes) continue;
-    const shape = arcShape(axis, frame, config, data.from[i], data.toStart[i]);
-    const a = pointAt(frame, shape.fromAlong, 0);
-    const b = pointAt(frame, shape.toAlong, 0);
-    const c = pointAt(frame, (shape.fromAlong + shape.toAlong) / 2, shape.height * 2 * shape.direction);
-    if (nearQuadratic(at, a, c, b, tolerance)) {
-      best = i;
-      bestVotes = data.votes[i];
+  for (const batch of sorted) {
+    for (const i of batch.indexes) {
+      if (data.votes[i] <= bestVotes) continue;
+      const shape = arcShape(axis, frame, config, data.from[i], data.toStart[i]);
+      const a = pointAt(frame, shape.fromAlong, 0);
+      const b = pointAt(frame, shape.toAlong, 0);
+      const c = pointAt(frame, (shape.fromAlong + shape.toAlong) / 2, shape.height * 2 * shape.direction);
+      if (nearQuadratic(at, a, c, b, tolerance)) {
+        best = i;
+        bestVotes = data.votes[i];
+      }
     }
   }
   return best;
@@ -876,31 +1105,6 @@ function distanceToSegment(
   const ox = p.x - (x1 + dx * t);
   const oy = p.y - (y1 + dy * t);
   return ox * ox + oy * oy;
-}
-
-/** Which chapter is under a position along the axis, for the tap-to-light. */
-export function chapterAt(
-  data: ConnectionsData,
-  config: ConnectionsConfig,
-  view: Viewport,
-  at: { x: number; y: number },
-): number | null {
-  const axis = axisFor(data, config.width);
-  const frame = frameFor(view, config);
-  const along = (frame.orientation === 'horizontal' ? at.x : at.y) - frame.originAlong;
-  const fraction = along / frame.along;
-  if (fraction < 0 || fraction > 1) return null;
-
-  // Walk the offsets for the chapter whose slot contains this fraction.
-  const offsets = axis.offsets;
-  let lo = 0;
-  let hi = offsets.length - 2;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (offsets[mid] <= fraction) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo;
 }
 
 export { chapterIndexAt };

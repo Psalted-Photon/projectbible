@@ -27,6 +27,13 @@ export interface ConnectionsConfig {
   side: ArcSide;
   width: ChapterWidth;
   /**
+   * How long the line of the Bible is, as a multiple of the screen. 1 fits the
+   * whole Bible across; 4 makes every chapter four times wider and the reader
+   * drags sideways to travel along it. Only the line stretches — arcs keep
+   * their height — which is what makes it different from zooming.
+   */
+  stretch: number;
+  /**
    * How arc height grows with the distance it spans, as an exponent.
    *
    * 1 is straight-line: a link twice as long is twice as tall. Below 1 the
@@ -42,26 +49,32 @@ export interface ConnectionsConfig {
   crossfadeAt: number;
   /** How much of the arc the changeover takes. 0 is a hard edge, 1 a long blend. */
   crossfadeWidth: number;
-  /** Line width at no votes, and at the most-voted link. */
-  thicknessMin: number;
-  thicknessMax: number;
-  /** Opacity at no votes, and at the most-voted link. */
-  alphaMin: number;
-  alphaMax: number;
-  /** How votes map onto thickness and brightness: an exponent, as heightCurve. */
-  voteCurve: number;
+  /**
+   * Every arc's line width, in screen pixels.
+   *
+   * One width for all of them, and it holds under zoom. Votes used to make the
+   * popular links thicker, and a thick line covers the thin ones under it — so
+   * a few hundred favorites hid thousands of others. With every arc the same,
+   * a bright band means many links, never one fat one.
+   */
+  thickness: number;
+  /** Every arc's opacity. Where many cross, they build up into brightness. */
+  opacity: number;
   /** Links with fewer votes than this are not drawn at all. */
   voteFloor: number;
   /**
-   * Stop after this many arcs, strongest first. 0 means draw them all.
+   * Stop after this many arcs, most-voted first. 0 means draw them all.
    *
-   * Drawing all 344,799 costs about 100ms a frame before rasterizing, so the
-   * full set is a thing to look at rather than to pan around in. A cap of
-   * 20,000 or a vote floor of 25 both come in near 20ms.
+   * Drawing all 344,799 costs tens of milliseconds a frame, so the full set is
+   * a thing to look at rather than to pan around in.
    */
   maxArcs: number;
-  /** What a dimmed arc keeps when something else is lit. 0 hides it entirely. */
-  dimFloor: number;
+  /** How much of its slot each chapter bar fills. Below 1 leaves a gap between bars. */
+  barFill: number;
+  /** Chapter-number size, in screen pixels at rest. They grow a little as you zoom in. */
+  numberSize: number;
+  /** Book-name letter size, in screen pixels. */
+  nameSize: number;
   /** The margin around the picture, in pixels before zoom. */
   padding: number;
   /** How much of the short side the axis sits in from the edge, 0.5 centred. */
@@ -69,10 +82,8 @@ export interface ConnectionsConfig {
   /**
    * Room kept past the rule for the chapter bars and the book names, in pixels.
    *
-   * The bars are a bar graph of verse counts with the chapter number inside
-   * each, and under them the book names stack one upright letter at a time. So
-   * this is the longest bar plus the longest name's 14 letters — about 177 with
-   * names and 62 without. render.ts's `axisDepth` gives the right number.
+   * Not a dial: it follows from the bar length and the name size, and
+   * render.ts's `axisDepth` gives the right number for the current config.
    */
   axisDepth: number;
 }
@@ -82,22 +93,22 @@ export const CONFIG: ConnectionsConfig = {
   orientation: 'horizontal',
   side: 'top',
   width: 'verses',
+  stretch: 1,
   heightCurve: 0.62,
   heightMax: 0.92,
   heightMin: 0.02,
   crossfadeAt: 0.5,
   crossfadeWidth: 0.55,
-  thicknessMin: 0.4,
-  thicknessMax: 2.4,
-  alphaMin: 0.07,
-  alphaMax: 0.72,
-  voteCurve: 0.5,
+  thickness: 0.6,
+  opacity: 0.08,
   voteFloor: 0,
   maxArcs: 0,
-  dimFloor: 0.06,
+  barFill: 0.8,
+  numberSize: 10,
+  nameSize: 11,
   padding: 18,
   axisAt: 1,
-  axisDepth: 177,
+  axisDepth: 235,
 };
 
 /** The box the picture is drawn into, in CSS pixels. */
@@ -202,7 +213,8 @@ export interface Frame {
 export function frameFor(view: Viewport, config: ConnectionsConfig): Frame {
   const pad = config.padding;
   const horizontal = config.orientation === 'horizontal';
-  const along = Math.max(1, (horizontal ? view.width : view.height) - pad * 2);
+  // Stretch lengthens the line past the screen; the reader drags to travel it.
+  const along = Math.max(1, ((horizontal ? view.width : view.height) - pad * 2) * Math.max(config.stretch, 0.1));
   // The chapter bars and the book names hang off the far side of the rule, so
   // the arcs have the short side less that much to rise into. Without this the
   // rule sits on the canvas edge at axisAt 1 and the names fall off it.
@@ -275,18 +287,4 @@ export function arcShape(
   else if (config.side === 'split') direction = to >= from ? 1 : -1;
 
   return { fromAlong, toAlong, height, direction };
-}
-
-/**
- * How strongly a link is drawn, from its votes: 0 at the floor, 1 at the
- * most-voted link in the set.
- *
- * Downvoted links (negative votes) land at 0 rather than off the scale.
- */
-export function strengthOf(config: ConnectionsConfig, votes: number, maxVotes: number): number {
-  if (maxVotes <= 0) return 0;
-  const floor = Math.max(config.voteFloor, 0);
-  const range = Math.max(maxVotes - floor, 1);
-  const t = Math.min(Math.max((votes - floor) / range, 0), 1);
-  return Math.pow(t, config.voteCurve);
 }

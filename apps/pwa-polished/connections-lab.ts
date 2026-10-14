@@ -1,30 +1,24 @@
 /**
- * Connections lab v2.0 — tunes the look of the cross-reference arcs, and the
- * light that travels over them: all 344,799 links over one line of the whole
- * Bible.
+ * Connections lab v3.0 — tunes the look of the cross-reference arcs and the
+ * way they fly in: all 344,799 links over one line of the whole Bible.
  *
  * Runs the real code: lib/connections/data.ts for the pack, layout.ts for the
- * shapes, lights.ts for the travelling light and render.ts for the frame. Every
- * slider writes straight into CONFIG or LIGHTS, so what is drawn here is what
- * the app will draw. Copy values prints both blocks, ready to paste back into
+ * shapes, lights.ts for the flights and render.ts for the frame. Every slider
+ * writes straight into CONFIG or LIGHTS, so what is drawn here is what the app
+ * will draw. Copy values prints both blocks, ready to paste back into
  * src/lib/connections/layout.ts and lights.ts.
  *
- * The light is the v2.0 addition. Tapping a chapter, picking a book or dragging
- * a range lights what it touches and dims the rest, and the light arrives
- * rather than appearing — it spreads from the tap using the family tree's own
- * easing and wave dials, so the two pictures move like one app. An opening
- * sweep runs Genesis to Revelation when the picture first appears. All of it
- * follows the Motion setting; the Motion section forces a level so 'full',
- * 'reduced' and 'off' can each be checked without leaving the page.
+ * v3.0 follows the first real tuning pass. Every arc is now one width and one
+ * opacity (votes only decide which are drawn); a tap hides everything else and
+ * the arcs it touches fly in like arrows, a dot pulling each line behind it;
+ * the chapter ruler stays on screen at any zoom, with numbered tags at the bar
+ * tips and bold book names that can be tapped; and the line can be stretched
+ * wider than the screen. Every control says what it does under it.
  *
  * The pack comes from whatever this origin already installed — the lab is on
  * the same site as the app, so it shares its IndexedDB. If it is not installed
  * the lab downloads it, imports it and carries on, so a phone that has never
  * opened the Connections window can still tune it.
- *
- * The frame-rate readout is the point of the exercise as much as the dials are:
- * it says whether the full set can be drawn live or has to be cached to an
- * image layer. Both the draw time and the arc count are printed with it.
  *
  * The values are kept in this browser between visits (localStorage), so a
  * reload on the phone doesn't lose a half-tuned set. Reset puts back what the
@@ -40,21 +34,19 @@ import {
   type ConnectionsData,
 } from './src/lib/connections/data';
 import { CONFIG, frameFor, type ArcSide, type ChapterWidth, type ConnectionsConfig, type Orientation } from './src/lib/connections/layout';
-import { chapterAt, draw, pick, type DrawStats } from './src/lib/connections/render';
+import { axisDepth, chapterAtScreen, draw, pick, rulerAt, rulerHit, type DrawStats } from './src/lib/connections/render';
 import { palette, type ConnectionsPalette } from './src/lib/connections/palette';
 import {
   LIGHTS,
-  LIGHT_ORDER_NAMES,
   countReach,
-  lightFrame,
+  flightFrame,
   litSetFor,
-  waveDurationMs,
+  volleyMs,
   type ConnectionsLights,
-  type LightOrder,
   type LitSet,
   type Span,
+  type Volley,
 } from './src/lib/connections/lights';
-import { CURVE_NAMES, type Curve } from './src/lib/familyTree/motion';
 import { motionLevel } from './src/lib/motion';
 import { BIBLE_BOOKS } from './src/lib/bibleData';
 import { BOOK_COLORS } from './src/lib/connections/palette';
@@ -81,12 +73,9 @@ let colors: ConnectionsPalette = palette();
 /** Pan and zoom, as the family tree does it. */
 let view = { x: 0, y: 0, k: 1 };
 
-/**
- * What is lit, and when its light began. Null means everything is lit, which
- * is the resting state.
- */
+/** What is lit, and when its arcs were loosed. Null means everything is shown. */
 let lit: LitSet | null = null;
-/** The opening sweep, while it is running. */
+/** The opening volley, while it is in the air. */
 let opening: { startedAt: number } | null = null;
 /** What the last tap landed on, printed in the drawer. */
 let picked: string = '';
@@ -124,22 +113,30 @@ function save() {
   }
 }
 
+/**
+ * Copy saved values over the shipped ones, but only keys that still exist and
+ * still hold the same kind of value. A set saved by an older lab carries dials
+ * that are gone (the vote thickness, the wave's flicker) and they must not
+ * creep back into Copy values.
+ */
+function adopt(target: object, saved: unknown) {
+  if (!saved || typeof saved !== 'object') return;
+  const t = target as Record<string, unknown>;
+  const s = saved as Record<string, unknown>;
+  for (const key of Object.keys(t)) {
+    if (key in s && typeof s[key] === typeof t[key]) t[key] = s[key];
+  }
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return;
     const v = JSON.parse(raw);
-    if (v?.config) Object.assign(CONFIG, v.config);
-    // The light specs are nested, so each is merged rather than replaced: a set
-    // saved before a dial existed still loads, with the new dial at its
-    // shipped value instead of undefined.
-    if (v?.lights) {
-      const l = v.lights;
-      if (l.open) Object.assign(LIGHTS.open, l.open);
-      if (l.tap) Object.assign(LIGHTS.tap, l.tap);
-      if (typeof l.order === 'string') LIGHTS.order = l.order;
-      if (typeof l.openOnLoad === 'boolean') LIGHTS.openOnLoad = l.openOnLoad;
-    }
+    adopt(CONFIG, v?.config);
+    adopt(LIGHTS.open, v?.lights?.open);
+    adopt(LIGHTS.tap, v?.lights?.tap);
+    if (typeof v?.lights?.openOnLoad === 'boolean') LIGHTS.openOnLoad = v.lights.openOnLoad;
     if (typeof v?.prefs?.showLabels === 'boolean') showLabels = v.prefs.showLabels;
     if (typeof v?.prefs?.themeName === 'string') themeName = v.prefs.themeName;
     if (typeof v?.prefs?.motionMode === 'string') motionMode = v.prefs.motionMode;
@@ -209,22 +206,24 @@ function measure() {
   dirty = true;
 }
 
-/** True while a light is still travelling, so the loop keeps asking for frames. */
+/** True while arcs are in the air, so the loop keeps asking for frames. */
 let animating = false;
 
 function render(now = performance.now()) {
   if (!data) return;
-  const light = lightFrame(LIGHTS, lit, opening, now, CONFIG.dimFloor, motionNow());
-  // Once the opening sweep has settled it is spent; clearing it here means the
-  // picture does not re-light on the next unrelated redraw.
-  if (opening && !light.opening && light.settled) opening = null;
-  animating = !light.settled;
+  // The room under the rule follows from the name size; it is not a dial.
+  CONFIG.axisDepth = axisDepth(showLabels, CONFIG);
+  const flight = flightFrame(LIGHTS, lit, opening, now, motionNow());
+  // Once the opening volley has landed it is spent; clearing it here means the
+  // picture does not fly in again on the next unrelated redraw.
+  if (opening && !flight.opening) opening = null;
+  animating = !flight.settled;
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   lastStats = draw(ctx, data, CONFIG, { width: W, height: H }, {
     palette: colors,
     lit: lit?.spans,
-    light,
+    flight,
     labels: showLabels,
     view,
   });
@@ -237,7 +236,7 @@ let flashUntil = 0;
 function frame() {
   const now = performance.now();
 
-  // A travelling light needs a frame a frame; everything else redraws once.
+  // Arcs in flight need a frame a frame; everything else redraws once.
   if (dirty || animating) {
     dirty = false;
     render(now);
@@ -248,14 +247,11 @@ function frame() {
     if (now > flashUntil) {
       const fps = Math.round((fpsFrames * 1000) / (now - fpsT0));
       const s = lastStats;
-      // While a light travels, say so and say how long it runs: the frame rate
-      // during a wave is the number that decides whether the light is
-      // affordable, and it is not the same as the resting one.
-      const wave = animating
-        ? ` · lighting ${(waveDurationMs(opening ? LIGHTS.open : LIGHTS.tap) / 1000).toFixed(1)}s`
-        : '';
+      // The frame rate while arcs fly is the number that decides whether the
+      // flight is affordable, and it is not the same as the resting one.
+      const air = s?.flying ? ` · ${s.flying.toLocaleString()} in the air` : '';
       fpsEl.textContent = s
-        ? `${fps} fps · ${s.ms.toFixed(1)} ms/draw${wave}\n${s.drawn.toLocaleString()} arcs · ${s.batches} batches${s.skipped ? ` · ${s.skipped.toLocaleString()} skipped` : ''}`
+        ? `${fps} fps · ${s.ms.toFixed(1)} ms/draw${air}\n${s.drawn.toLocaleString()} arcs shown · ${s.batches} batches`
         : `${fps} fps`;
       fpsEl.style.whiteSpace = 'pre';
     }
@@ -307,19 +303,19 @@ rangeBtn.addEventListener('click', () => {
   rangeFrom = null;
 });
 
-/** The verse position under a point, or null if it missed the axis. */
+/** The first verse of the chapter under a screen point, or null off the line. */
 function positionAt(at: { x: number; y: number }): number | null {
   if (!data) return null;
-  const chapter = chapterAt(data, CONFIG, { width: W, height: H }, at);
+  const chapter = chapterAtScreen(data, CONFIG, { width: W, height: H }, view, at);
   return chapter === null ? null : data.chapterStarts[chapter];
 }
 
 /**
  * Light everything between two verse positions.
  *
- * `restart` is false while a drag is still in progress: re-stamping the light's
- * start time on every pointermove would hold the wave at its first frame
- * forever, so the span updates live and the wave only runs when the drag ends.
+ * `restart` is false while a drag is still in progress: re-launching on every
+ * pointermove would hold the arcs on the ground forever, so mid-drag the range
+ * is simply shown and the volley only flies when the drag ends.
  */
 function lightRange(a: number, b: number, restart = true) {
   if (!data) return;
@@ -330,10 +326,8 @@ function lightRange(a: number, b: number, restart = true) {
   const spans = [{ start: lo, end }];
   if (restart) light(spans);
   else {
-    // Mid-drag the light is simply there: a start time far enough back that the
-    // wave has already finished, so the reader sees the range they are choosing
-    // rather than a wave restarting under their finger.
-    lit = { spans, origin: (lo + end) / 2, startedAt: -1e9 };
+    // Launched long enough ago that every arc has already landed.
+    lit = { spans, startedAt: -1e9 };
     dirty = true;
   }
   const from = refAt(lo);
@@ -369,7 +363,7 @@ canvas.addEventListener('pointerdown', (e) => {
   lastX = e.clientX;
   lastY = e.clientY;
   if (rangeMode && pointers.size === 1) {
-    rangeFrom = positionAt(toCanvas(e));
+    rangeFrom = positionAt(onScreen(e));
   }
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
@@ -384,9 +378,10 @@ canvas.addEventListener('pointermove', (e) => {
   if (pointers.size === 2 && pinchStart) {
     const [a, b] = [...pointers.values()];
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
-    view.k = clamp(pinchStart.k * (dist / pinchStart.dist), MIN_K, MAX_K);
+    // Zoom about the point between the fingers, so what is under them stays put.
+    const mid = onScreen({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 });
+    zoomAt(mid.x, mid.y, pinchStart.k * (dist / pinchStart.dist));
     moved = true;
-    dirty = true;
     return;
   }
 
@@ -399,7 +394,7 @@ canvas.addEventListener('pointermove', (e) => {
 
   // In range mode the drag picks a passage instead of moving the picture.
   if (rangeMode && rangeFrom !== null) {
-    const to = positionAt(toCanvas(e));
+    const to = positionAt(onScreen(e));
     if (to !== null) lightRange(rangeFrom, to, false);
     return;
   }
@@ -414,9 +409,9 @@ function endPointer(e: PointerEvent) {
   if (pointers.size < 2) pinchStart = null;
   if (pointers.size === 0) {
     dragging = false;
-    // A finished range drag runs its wave now, over the span the reader chose.
+    // A finished range drag flies its arcs now, over the span the reader chose.
     if (rangeMode && rangeFrom !== null && moved) {
-      const to = positionAt(toCanvas(e));
+      const to = positionAt(onScreen(e));
       if (to !== null) lightRange(rangeFrom, to);
       rangeFrom = null;
       return;
@@ -432,19 +427,53 @@ canvas.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault();
-    view.k = clamp(view.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12), MIN_K, MAX_K);
-    dirty = true;
+    const at = onScreen(e);
+    zoomAt(at.x, at.y, view.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
   },
   { passive: false },
 );
 
+/**
+ * Zoom to `k`, keeping the point under (sx, sy) where it is — so the chapter
+ * under the mouse or between the fingers is the one you zoom into, rather than
+ * whatever happens to be at the center.
+ *
+ * Over the ruler the anchor across the axis is the rule itself, not the
+ * pointer. The ruler is drawn on top of empty space below the line, and
+ * zooming about a point down there flung the line — and every arc with it —
+ * off the top of the screen. Anchored on the rule, zooming over a chapter
+ * widens it in place with its arcs still rising from it.
+ */
+function zoomAt(sx: number, sy: number, k: number) {
+  const next = clamp(k, MIN_K, MAX_K);
+  const horizontal = CONFIG.orientation === 'horizontal';
+  const { rule } = rulerAt({ width: W, height: H }, CONFIG, showLabels, view);
+  if ((horizontal ? sy : sx) >= rule - AXIS_GRAB_PX) {
+    const size = horizontal ? H : W;
+    const frame = frameFor({ width: W, height: H }, CONFIG);
+    const natural = size / 2 + view.k * (frame.originAcross + (horizontal ? view.y : view.x) - size / 2);
+    if (horizontal) sy = natural;
+    else sx = natural;
+  }
+  const wx = (sx - W / 2) / view.k + W / 2 - view.x;
+  const wy = (sy - H / 2) / view.k + H / 2 - view.y;
+  view.k = next;
+  view.x = (sx - W / 2) / next + W / 2 - wx;
+  view.y = (sy - H / 2) / next + H / 2 - wy;
+  dirty = true;
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
-/** The tap point in the canvas's own coordinates, undoing pan and zoom. */
-function toCanvas(e: PointerEvent): { x: number; y: number } {
+/** A pointer's position on the canvas, in CSS pixels. */
+function onScreen(e: { clientX: number; clientY: number }): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
-  const sx = e.clientX - rect.left;
-  const sy = e.clientY - rect.top;
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+/** The same point in the picture's own coordinates, undoing pan and zoom. */
+function toCanvas(e: PointerEvent): { x: number; y: number } {
+  const { x: sx, y: sy } = onScreen(e);
   return {
     x: (sx - W / 2) / view.k + W / 2 - view.x,
     y: (sy - H / 2) / view.k + H / 2 - view.y,
@@ -452,60 +481,72 @@ function toCanvas(e: PointerEvent): { x: number; y: number } {
 }
 
 /**
- * A tap picks an arc if one is under it, and otherwise lights the chapter it
- * landed on. Phase 2 takes this further; here it is enough to check that the
- * shapes and the lighting line up with what is drawn.
- */
-/**
- * How near the axis a tap counts as aiming at a chapter rather than an arc.
+ * How far above the rule a tap still counts as aimed at the ruler.
  *
- * This matters more than it looks. Every arc has a foot on the axis, so near
- * the rule the arcs are packed shoulder to shoulder: measured over the real
- * set, a tap within 40px of the axis hits an arc **100% of the time**, at every
- * point along the whole Bible. Trying `pick` first therefore made tapping a
- * chapter impossible — the tap always found some arc and lit its two verses
- * instead of the 176 in Psalm 119, which read as the selection being lost.
- *
- * So the axis wins near the axis: a tap in this band means the chapter under
- * it, and only a tap out in the field where arcs are separable means the arc.
+ * Every arc has a foot on the rule, so near it the arcs are packed shoulder to
+ * shoulder: measured over the real set, a tap within 40px of the rule hits an
+ * arc **100% of the time**. So the ruler wins near the rule, and only a tap out
+ * in the field where arcs are separable means an arc.
  */
 const AXIS_GRAB_PX = 44;
 
+/**
+ * A tap on a book name lights the book, a tap on the bars lights the chapter,
+ * and a tap out among the arcs picks the arc under it.
+ */
 function tap(e: PointerEvent) {
   if (!data) return;
-  const at = toCanvas(e);
-
-  // How far the tap is from the rule, across the axis.
-  const frame = frameFor({ width: W, height: H }, CONFIG);
-  const across = Math.abs(
-    (CONFIG.orientation === 'horizontal' ? at.y : at.x) - frame.originAcross,
+  const hit = rulerHit(
+    data,
+    CONFIG,
+    { width: W, height: H },
+    view,
+    showLabels,
+    lastStats?.names ?? [],
+    onScreen(e),
+    AXIS_GRAB_PX,
   );
 
-  if (across > AXIS_GRAB_PX) {
-    const hit = pick(data, CONFIG, { width: W, height: H }, at, 7 / view.k);
-    if (hit !== null) {
-      showLink(hit);
-      return;
-    }
+  if (hit?.kind === 'book') {
+    lightBook(data.books[hit.book].name);
+    return;
   }
 
-  const chapter = chapterAt(data, CONFIG, { width: W, height: H }, at);
-  if (chapter === null) return;
-  const start = data.chapterStarts[chapter];
-  const ref = refAt(start);
-  const span = ref ? chapterSpan(ref.book, ref.chapter) : null;
-  if (span && ref) {
-    light([span]);
-    const reach = countReach(data, span);
-    picked = `<b>${ref.book} ${ref.chapter}</b><br>${reach.out.toLocaleString()} out, ${reach.in.toLocaleString()} in`;
-    refreshPicked();
+  if (hit?.kind === 'chapter') {
+    const ref = refAt(data.chapterStarts[hit.chapter]);
+    const span = ref ? chapterSpan(ref.book, ref.chapter) : null;
+    if (span && ref) {
+      light([span]);
+      const reach = countReach(data, span);
+      picked = `<b>${ref.book} ${ref.chapter}</b><br>${reach.out.toLocaleString()} out, ${reach.in.toLocaleString()} in`;
+      refreshPicked();
+    }
+    return;
   }
+
+  // Out among the arcs: only the ones on show can be picked.
+  const arc = pick(data, CONFIG, { width: W, height: H }, toCanvas(e), 7 / view.k, lit?.spans);
+  if (arc !== null) showLink(arc);
 }
 
-/** Light a set of spans, starting the wave from now. */
+/** Light a set of spans, launching their arcs now. */
 function light(spans: Span[]) {
   lit = spans.length ? litSetFor(spans, performance.now()) : null;
   dirty = true;
+}
+
+/** Light one book, from the picker or a tapped name. An empty name shows everything. */
+function lightBook(name: string) {
+  const span = name ? bookSpan(name) : null;
+  bookSel.value = span ? name : '';
+  light(span ? [span] : []);
+  if (span && data) {
+    const reach = countReach(data, span);
+    picked = `<b>${name}</b><br>${reach.out.toLocaleString()} out, ${reach.in.toLocaleString()} in`;
+  } else {
+    picked = '';
+  }
+  refreshPicked();
 }
 
 /**
@@ -515,8 +556,7 @@ function light(spans: Span[]) {
  * color over the opening words, with a bar of that color down the left. The lab
  * builds them in plain DOM because this page carries no Svelte; the real window
  * in Phase 3 uses `components/VerseRefRow.svelte` itself, which is also where
- * the verse text comes from. Here the shape is what matters: the two ends of a
- * cross-reference read as references, not as coordinates.
+ * the verse text comes from.
  */
 function showLink(hit: number) {
   if (!data) return;
@@ -538,8 +578,7 @@ function showLink(hit: number) {
 
   // Light both ends by their chapters, not by the two bare verses: two verses
   // out of 31,102 light almost nothing, which reads as the selection having
-  // been lost rather than as an arc having been chosen. The chapters either end
-  // sits in are what a reader is actually asking about.
+  // been lost rather than as an arc having been chosen.
   const spans: Span[] = [];
   const fromSpan = fromRef ? chapterSpan(fromRef.book, fromRef.chapter) : null;
   if (fromSpan) spans.push(fromSpan);
@@ -568,33 +607,15 @@ document.getElementById('whole')!.addEventListener('click', () => {
   dirty = true;
 });
 document.getElementById('clear')!.addEventListener('click', () => {
-  light([]);
-  picked = '';
-  bookSel.value = '';
-  refreshPicked();
+  lightBook('');
 });
 document.getElementById('replay')!.addEventListener('click', () => {
-  // The opening sweep, from scratch: clear whatever is lit so it runs over the
-  // whole Bible the way it does when the window first opens.
-  light([]);
-  picked = '';
-  bookSel.value = '';
-  refreshPicked();
-  opening = { startedAt: performance.now() };
-  dirty = true;
+  // The opening, from scratch: clear whatever is lit so it flies the whole
+  // Bible the way it does when the window first opens.
+  lightBook('');
+  replayOpen();
 });
-bookSel.addEventListener('change', () => {
-  const span = bookSel.value ? bookSpan(bookSel.value) : null;
-  light(span ? [span] : []);
-  if (span && data) {
-    const reach = countReach(data, span);
-    picked = `<b>${bookSel.value}</b><br>${reach.out.toLocaleString()} out, ${reach.in.toLocaleString()} in`;
-  } else {
-    picked = '';
-  }
-  refreshPicked();
-  dirty = true;
-});
+bookSel.addEventListener('change', () => lightBook(bookSel.value));
 
 // ── The drawer ───────────────────────────────────────────────────────────
 
@@ -614,35 +635,31 @@ function note(text: string) {
   el('p', { className: 'note', textContent: text }, drawer);
 }
 
-/**
- * The dials every wave shares, so the tap light and the opening sweep are tuned
- * by the same controls and read the same way.
- *
- * Each change replays its own wave, because a spread or a curve cannot be
- * judged from a still picture.
- */
-function waveDials(spec: { spreadMs: number; fadeMs: number; orderCurve: Curve; jitter: number; flash: number; flicker: number; flickerHz: number }, replay: () => void) {
-  slider('spread ms', () => spec.spreadMs, (v) => { spec.spreadMs = v; replay(); }, 0, 4000, 25);
-  slider('fade ms', () => spec.fadeMs, (v) => { spec.fadeMs = v; replay(); }, 0, 1200, 10);
-  choice(
-    'order curve',
-    CURVE_NAMES,
-    () => (Array.isArray(spec.orderCurve) ? 'cubic' : spec.orderCurve),
-    (v) => { spec.orderCurve = v; replay(); },
+/** The two dials every volley has, so the tap and the opening read the same way. */
+function volleyDials(spec: Volley, replay: () => void) {
+  slider(
+    'flight time',
+    () => spec.flightMs,
+    (v) => { spec.flightMs = v; replay(); },
+    100, 3000, 25,
+    'How long one arc takes from leaving its verse to landing, in milliseconds.',
   );
-  slider('jitter', () => spec.jitter, (v) => { spec.jitter = v; replay(); }, 0, 1, 0.01);
-  slider('flash', () => spec.flash, (v) => { spec.flash = v; replay(); }, 0, 1, 0.01);
-  slider('flicker', () => spec.flicker, (v) => { spec.flicker = v; replay(); }, 0, 1, 0.01);
-  slider('flicker hz', () => spec.flickerHz, (v) => { spec.flickerHz = v; replay(); }, 1, 30, 1);
+  slider(
+    'stagger',
+    () => spec.staggerMs,
+    (v) => { spec.staggerMs = v; replay(); },
+    0, 4000, 25,
+    'Spread the launches over this long, earliest verse first, so the volley rolls along the line. 0 fires them all at once.',
+  );
 }
 
-/** Run the tap light again over whatever is lit, so a dial can be judged. */
+/** Fly the tapped arcs in again, so a dial can be judged. */
 function replayTap() {
   if (lit) light(lit.spans);
   else replayOpen();
 }
 
-/** Run the opening sweep again. */
+/** Fly the whole Bible in again. */
 function replayOpen() {
   opening = { startedAt: performance.now() };
   dirty = true;
@@ -663,6 +680,7 @@ function slider(
   min: number,
   max: number,
   step: number,
+  hint?: string,
 ) {
   const row = el('div', { className: 'row' }, drawer);
   el('label', { textContent: label }, row);
@@ -675,6 +693,7 @@ function slider(
     save();
     dirty = true;
   });
+  if (hint) el('p', { className: 'hint', textContent: hint }, drawer);
 }
 
 function choice<T extends string>(
@@ -682,11 +701,12 @@ function choice<T extends string>(
   options: readonly T[],
   get: () => T,
   set: (v: T) => void,
+  names?: Partial<Record<T, string>>,
 ) {
   const row = el('div', { className: 'row' }, drawer);
   el('label', { textContent: label }, row);
   const sel = el('select', {}, row);
-  for (const o of options) el('option', { value: o, textContent: o }, sel);
+  for (const o of options) el('option', { value: o, textContent: names?.[o] ?? o }, sel);
   sel.value = get();
   sel.addEventListener('change', () => {
     set(sel.value as T);
@@ -711,7 +731,7 @@ function checks(items: [string, () => boolean, (v: boolean) => void][]) {
 
 function refreshPicked() {
   const box = document.getElementById('picked');
-  if (box) box.innerHTML = picked || '<span style="color:#6b6153">Tap an arc, a chapter or a book.</span>';
+  if (box) box.innerHTML = picked || '<span style="color:#6b6153">Tap a chapter bar, a book name, or an arc.</span>';
 }
 
 function buildDrawer() {
@@ -725,80 +745,147 @@ function buildDrawer() {
   choice<Orientation>('direction', ['horizontal', 'vertical'], () => CONFIG.orientation, (v) => {
     CONFIG.orientation = v;
   });
-  choice<ArcSide>('arcs', ['top', 'bottom', 'split'], () => CONFIG.side, (v) => {
-    CONFIG.side = v;
-  });
-  choice<ChapterWidth>('chapter width', ['verses', 'equal'], () => CONFIG.width, (v) => {
-    CONFIG.width = v;
-  });
-  slider('axis at', () => CONFIG.axisAt, (v) => { CONFIG.axisAt = v; }, 0, 1, 0.01);
-  slider('padding', () => CONFIG.padding, (v) => { CONFIG.padding = v; }, 0, 60, 1);
-  // Room past the rule for the chapter bars and the sideways book names.
-  slider('ruler room', () => CONFIG.axisDepth, (v) => { CONFIG.axisDepth = v; }, 0, 160, 2);
+  choice<ArcSide>(
+    'arcs',
+    ['top', 'split'],
+    () => (CONFIG.side === 'bottom' ? 'top' : CONFIG.side),
+    (v) => { CONFIG.side = v; },
+    { top: 'all above the line', split: 'forward above, backward below' },
+  );
+  choice<ChapterWidth>(
+    'chapter widths',
+    ['verses', 'equal'],
+    () => CONFIG.width,
+    (v) => { CONFIG.width = v; },
+    { verses: 'by verse count', equal: 'all the same' },
+  );
+  slider(
+    'Bible length',
+    () => CONFIG.stretch,
+    (v) => { CONFIG.stretch = v; },
+    1, 12, 0.25,
+    'Stretches the line wider than the screen so every chapter gets wider. Drag sideways to travel along it. Unlike zooming, the arcs keep their height.',
+  );
 
-  heading('Height');
-  slider('curve', () => CONFIG.heightCurve, (v) => { CONFIG.heightCurve = v; }, 0.1, 2, 0.01);
-  slider('tallest', () => CONFIG.heightMax, (v) => { CONFIG.heightMax = v; }, 0.1, 1, 0.01);
-  slider('shortest', () => CONFIG.heightMin, (v) => { CONFIG.heightMin = v; }, 0, 0.3, 0.005);
+  heading('Chapter ruler');
+  slider(
+    'bar width',
+    () => CONFIG.barFill,
+    (v) => { CONFIG.barFill = v; },
+    0.1, 1, 0.05,
+    'How much of its own space each chapter bar fills. 1 is touching; lower leaves a gap between bars. Shows once chapters are a few pixels wide.',
+  );
+  slider(
+    'number size',
+    () => CONFIG.numberSize,
+    (v) => { CONFIG.numberSize = v; },
+    7, 20, 0.5,
+    'Chapter numbers sit on a tag at the tip of each bar, and climb their own bar where two would overlap. They show once a chapter is wide enough: zoom in, or lengthen the line.',
+  );
+  slider(
+    'name size',
+    () => CONFIG.nameSize,
+    (v) => { CONFIG.nameSize = v; },
+    8, 18, 0.5,
+    'Book-name letters. Tap a name to light the whole book. Where names would collide the bigger book is named and the rest appear as you zoom in.',
+  );
+  checks([['show numbers and names', () => showLabels, (v) => { showLabels = v; }]]);
 
-  heading('Crossfade');
-  slider('spot', () => CONFIG.crossfadeAt, (v) => { CONFIG.crossfadeAt = v; }, 0, 1, 0.01);
-  slider('width', () => CONFIG.crossfadeWidth, (v) => { CONFIG.crossfadeWidth = v; }, 0, 1, 0.01);
+  heading('Arcs');
+  slider(
+    'thickness',
+    () => CONFIG.thickness,
+    (v) => { CONFIG.thickness = v; },
+    0.2, 4, 0.05,
+    'Every arc is the same width, in screen pixels, and stays that width when you zoom.',
+  );
+  slider(
+    'opacity',
+    () => CONFIG.opacity,
+    (v) => { CONFIG.opacity = v; },
+    0.01, 1, 0.01,
+    'How solid each arc is. Where many cross they add up, so a bright band means many links.',
+  );
+  slider(
+    'tallest',
+    () => CONFIG.heightMax,
+    (v) => { CONFIG.heightMax = v; },
+    0.1, 1, 0.01,
+    'Height of the longest arc (Genesis to Revelation), as a share of the space above the line.',
+  );
+  slider(
+    'shortest',
+    () => CONFIG.heightMin,
+    (v) => { CONFIG.heightMin = v; },
+    0, 0.3, 0.005,
+    'Height of the shortest arc, so a link to the next verse is still a visible bump.',
+  );
+  slider(
+    'height curve',
+    () => CONFIG.heightCurve,
+    (v) => { CONFIG.heightCurve = v; },
+    0.1, 2, 0.01,
+    'How fast arcs get taller with distance. 1 is even. Lower lifts the short arcs up off the line; higher keeps them flat and saves the height for long ones.',
+  );
 
-  heading('Votes');
-  slider('curve', () => CONFIG.voteCurve, (v) => { CONFIG.voteCurve = v; }, 0.1, 2, 0.01);
-  slider('thin', () => CONFIG.thicknessMin, (v) => { CONFIG.thicknessMin = v; }, 0.1, 3, 0.05);
-  slider('thick', () => CONFIG.thicknessMax, (v) => { CONFIG.thicknessMax = v; }, 0.2, 8, 0.05);
-  slider('faintest', () => CONFIG.alphaMin, (v) => { CONFIG.alphaMin = v; }, 0, 0.5, 0.005);
-  slider('brightest', () => CONFIG.alphaMax, (v) => { CONFIG.alphaMax = v; }, 0.1, 1, 0.01);
+  heading('Colors along each arc');
+  note('An arc leaves wearing the color of where it is going and lands wearing the color of where it came from.');
+  slider(
+    'swap point',
+    () => CONFIG.crossfadeAt,
+    (v) => { CONFIG.crossfadeAt = v; },
+    0, 1, 0.01,
+    'Where along the arc the color changes over. 0.5 is the middle.',
+  );
+  slider(
+    'blend length',
+    () => CONFIG.crossfadeWidth,
+    (v) => { CONFIG.crossfadeWidth = v; },
+    0, 1, 0.01,
+    '0 switches color in one hard step; 1 blends slowly over the whole arc.',
+  );
 
-  heading('How many');
-  slider('vote floor', () => CONFIG.voteFloor, (v) => { CONFIG.voteFloor = v; }, 0, 200, 1);
-  slider('max arcs', () => CONFIG.maxArcs, (v) => { CONFIG.maxArcs = v; }, 0, 344799, 1000);
-  el('p', {
-    className: 'note',
-    textContent:
-      'Max arcs 0 draws them all. Above 0 it keeps the most-voted. All 344,799 cost about 100ms a frame on a PC, so watch the readout: a cap near 20,000, or a vote floor near 25, lands around 20ms.',
-  }, drawer);
+  heading('Which links');
+  slider(
+    'min votes',
+    () => CONFIG.voteFloor,
+    (v) => { CONFIG.voteFloor = v; },
+    0, 200, 1,
+    'Hide links fewer readers have voted for. 0 shows them all. Votes never change how an arc looks, only whether it is drawn.',
+  );
+  slider(
+    'only the top',
+    () => CONFIG.maxArcs,
+    (v) => { CONFIG.maxArcs = v; },
+    0, 344799, 1000,
+    'Keep only this many links, most-voted first. 0 keeps all 344,799. Fewer makes dragging and zooming smoother.',
+  );
 
-  heading('Light');
-  slider('dim floor', () => CONFIG.dimFloor, (v) => { CONFIG.dimFloor = v; }, 0, 0.5, 0.005);
-
-  heading('Tap light', { label: 'Replay', onClick: replayTap });
+  heading('Tap: arcs fly in', { label: 'Replay', onClick: replayTap });
   note(
-    'Tap a chapter, pick a book, or turn on Select range and drag along the axis. ' +
-      'The light travels out from where you tapped. A wave redraws every frame, so ' +
-      'the readout shows its real cost: near 3ms at a 20,000 cap, near 40ms uncapped.',
+    'Tap a chapter bar or a book name, pick a book, or turn on Select range and drag along the line. ' +
+      'Everything else hides and that passage’s arcs shoot out from their first verse and land on the other.',
   );
-  choice<LightOrder>(
-    'travels',
-    Object.keys(LIGHT_ORDER_NAMES) as LightOrder[],
-    () => LIGHTS.order,
-    (v) => { LIGHTS.order = v; replayTap(); },
-  );
-  waveDials(LIGHTS.tap, replayTap);
+  volleyDials(LIGHTS.tap, replayTap);
 
-  heading('Opening sweep', { label: 'Replay', onClick: replayOpen });
-  note('Runs Genesis to Revelation when the picture first appears.');
-  checks([['on when it opens', () => LIGHTS.openOnLoad, (v) => { LIGHTS.openOnLoad = v; }]]);
-  slider('starts at', () => LIGHTS.open.floor, (v) => { LIGHTS.open.floor = v; replayOpen(); }, 0, 0.5, 0.005);
-  waveDials(LIGHTS.open, replayOpen);
+  heading('Opening: whole Bible flies in', { label: 'Replay', onClick: replayOpen });
+  checks([['run when the page opens', () => LIGHTS.openOnLoad, (v) => { LIGHTS.openOnLoad = v; }]]);
+  volleyDials(LIGHTS.open, replayOpen);
 
   heading('Motion');
   note(
-    'The app follows the Motion setting: reduced keeps the fade but drops the travel, ' +
-      'off puts the light straight on. The other three force a level so all of them can be checked here.',
+    'The app follows the Motion setting. With motion reduced or off the arcs skip the flight and are simply there. ' +
+      'This forces a level so each can be checked here.',
   );
   choice('level', ['setting', 'full', 'reduced', 'off'] as const, () => motionMode, (v) => {
     motionMode = v;
-  });
+  }, { setting: 'follow the app setting' });
 
   heading('Look');
   choice('theme', ['reader', 'dark', 'light', 'sepia'] as const, () => themeName, (v) => {
     themeName = v;
     refreshPalette();
-  });
-  checks([['book names', () => showLabels, (v) => { showLabels = v; }]]);
+  }, { reader: 'the app’s theme' });
 
   heading('Copy values', { label: 'Copy', onClick: copyValues });
   el('textarea', { id: 'readout', readOnly: true, value: readout() }, drawer);
@@ -837,6 +924,7 @@ function fmt(v: unknown, indent: string): string {
 }
 
 function readout(): string {
+  CONFIG.axisDepth = axisDepth(showLabels, CONFIG);
   return (
     `// src/lib/connections/layout.ts\nexport const CONFIG: ConnectionsConfig = ${fmt(CONFIG, '')};\n` +
     `\n// src/lib/connections/lights.ts\nexport const LIGHTS: ConnectionsLights = ${fmt(LIGHTS, '')};\n`
@@ -908,11 +996,11 @@ ensurePack()
     buildBookPicker(loaded);
     measure();
     buildDrawer();
-    // The opening sweep, the first thing the picture does — the same light the
-    // window will run when it opens in the app.
-    if (LIGHTS.openOnLoad && motionNow() !== 'off') opening = { startedAt: performance.now() };
+    // The opening volley, the first thing the picture does — the same flight
+    // the window will run when it opens in the app.
+    if (LIGHTS.openOnLoad && motionNow() === 'full') opening = { startedAt: performance.now() };
     requestAnimationFrame(frame);
-    spin(2000);
+    spin(Math.max(2000, volleyMs(LIGHTS.open)));
   })
   .catch((error) => {
     status(`Couldn’t load the connections. ${error instanceof Error ? error.message : ''}`);
