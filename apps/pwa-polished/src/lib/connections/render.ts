@@ -49,6 +49,7 @@ import {
 } from './layout';
 import { BOOK_RGB, bookIndexAt, type ConnectionsPalette } from './palette';
 import { inSpans, type FlightFrame, type Span } from './lights';
+import type { SetLayer } from './sets';
 
 /** Pan and zoom: the picture is scaled by `k` around the canvas centre and moved by x/y. */
 export interface Pan {
@@ -75,6 +76,11 @@ export interface DrawOptions {
   labels?: boolean;
   /** Pan and zoom, applied around the canvas centre. */
   view?: Pan;
+  /**
+   * The shown sets. When present only arcs touching a set are drawn, each in
+   * its set's color instead of the book colors. Null or absent draws as usual.
+   */
+  sets?: SetLayer | null;
 }
 
 /** A book name as it was placed on screen, so a tap on it can find its book. */
@@ -183,10 +189,16 @@ function orderFor(data: ConnectionsData, config: ConnectionsConfig): OrderCache 
   return entry;
 }
 
-/** One batch of arcs: every link from one book to another, sharing one gradient and one path. */
+/**
+ * One batch of arcs: every link from one book to another, sharing one gradient
+ * and one path — or, with sets shown, every arc wearing one set's color.
+ */
 interface Batch {
+  /** The two books, or -1 for a set's batch. */
   fromBook: number;
   toBook: number;
+  /** The set this batch is colored by, or -1 for book colors. */
+  set: number;
   indexes: number[];
 }
 
@@ -240,6 +252,7 @@ interface BatchCache {
   floor: number;
   maxArcs: number;
   litKey: string;
+  sets: SetLayer | null;
   sorted: Batch[];
   skipped: number;
   lo: number;
@@ -253,14 +266,20 @@ function litKeyOf(lit: Span[] | undefined): string {
   return lit.map((s) => `${s.start}-${s.end}`).join(',');
 }
 
-function batchesFor(data: ConnectionsData, config: ConnectionsConfig, spans: Span[] | undefined): BatchCache {
+function batchesFor(
+  data: ConnectionsData,
+  config: ConnectionsConfig,
+  spans: Span[] | undefined,
+  sets: SetLayer | null = null,
+): BatchCache {
   const litKey = litKeyOf(spans);
   const cached = batchCache.get(data);
   if (
     cached &&
     cached.floor === config.voteFloor &&
     cached.maxArcs === config.maxArcs &&
-    cached.litKey === litKey
+    cached.litKey === litKey &&
+    cached.sets === sets
   ) {
     return cached;
   }
@@ -272,6 +291,7 @@ function batchesFor(data: ConnectionsData, config: ConnectionsConfig, spans: Spa
   let hi = -Infinity;
 
   const batches = new Map<number, Batch>();
+  const mask = sets?.mask ?? null;
   const total = order.length;
   for (let n = 0; n < total; n++) {
     const i = order[n];
@@ -283,6 +303,29 @@ function batchesFor(data: ConnectionsData, config: ConnectionsConfig, spans: Spa
       skipped++;
       continue;
     }
+
+    // With sets shown, an arc touching none is hidden, and one touching two
+    // wears the set higher in the list — the mask already holds the first set
+    // at each verse, so the arc's is the lower of its two feet's.
+    if (mask) {
+      const a = mask[from] ?? -1;
+      const b = mask[to] ?? -1;
+      const set = a < 0 ? b : b < 0 ? a : Math.min(a, b);
+      if (set < 0) {
+        skipped++;
+        continue;
+      }
+      if (from < lo) lo = from;
+      if (from > hi) hi = from;
+      let batch = batches.get(set);
+      if (!batch) {
+        batch = { fromBook: -1, toBook: -1, set, indexes: [] };
+        batches.set(set, batch);
+      }
+      batch.indexes.push(i);
+      continue;
+    }
+
     if (from < lo) lo = from;
     if (from > hi) hi = from;
 
@@ -291,7 +334,7 @@ function batchesFor(data: ConnectionsData, config: ConnectionsConfig, spans: Spa
     const key = fromBook * 66 + toBook;
     let batch = batches.get(key);
     if (!batch) {
-      batch = { fromBook, toBook, indexes: [] };
+      batch = { fromBook, toBook, set: -1, indexes: [] };
       batches.set(key, batch);
     }
     batch.indexes.push(i);
@@ -301,7 +344,9 @@ function batchesFor(data: ConnectionsData, config: ConnectionsConfig, spans: Spa
     floor: config.voteFloor,
     maxArcs: config.maxArcs,
     litKey,
-    sorted: [...batches.values()],
+    sets,
+    // Sets in reverse, so the first in the list is stroked last and lies on top.
+    sorted: mask ? [...batches.values()].sort((x, y) => y.set - x.set) : [...batches.values()],
     skipped,
     lo: Number.isFinite(lo) ? lo : 0,
     hi: Number.isFinite(hi) ? hi : 0,
@@ -310,11 +355,16 @@ function batchesFor(data: ConnectionsData, config: ConnectionsConfig, spans: Spa
   return entry;
 }
 
-/** The heads of arcs in flight, reused between frames: x, y pairs, and each one's source book. */
+/**
+ * The heads of arcs in flight, reused between frames: x, y pairs, and what
+ * each wears — its source book, or SET_HEAD plus its set.
+ */
 let heads = new Float32Array(4096);
 let headBooks = new Uint8Array(2048);
 /** The most arrowheads a volley shows, so the dots stay dots. */
 const HEAD_LIMIT = 4000;
+/** Where set colors start in `headBooks`, past the 66 books. */
+const SET_HEAD = 66;
 
 export function draw(
   ctx: CanvasRenderingContext2D,
@@ -350,7 +400,8 @@ export function draw(
   const axis = axisFor(data, config.width);
   const frame = frameFor(view, config);
   const lit = options.flight ? options.flight.spans : options.lit;
-  const { sorted, skipped: culled, lo, hi } = batchesFor(data, config, lit);
+  const sets = options.sets ?? null;
+  const { sorted, skipped: culled, lo, hi } = batchesFor(data, config, lit, sets);
   // Feet land on their chapter's bar, so they move with the bar width.
   const { fromAt, toAt } = feetFor(data, axis, config.width, Math.min(Math.max(config.barFill, 0.05), 1));
   let skipped = culled;
@@ -389,7 +440,7 @@ export function draw(
   let flying = 0;
   if (alpha > 0.002) {
     for (const batch of sorted) {
-      ctx.strokeStyle = gradientFor(ctx, axis, frame, config, data, batch, alpha);
+      ctx.strokeStyle = gradientFor(ctx, axis, frame, config, data, batch, alpha, sets);
       ctx.beginPath();
       for (const i of batch.indexes) {
         // How far this arc has flown, 0 to 1. Worked out first, because an arc
@@ -450,7 +501,7 @@ export function draw(
             }
             heads[headCount * 2] = horizontal ? ea : ec;
             heads[headCount * 2 + 1] = horizontal ? ec : ea;
-            headBooks[headCount] = batch.fromBook;
+            headBooks[headCount] = batch.set >= 0 ? SET_HEAD + batch.set : batch.fromBook;
             headCount++;
           }
           flying++;
@@ -474,9 +525,11 @@ export function draw(
   // of the book it was shot from and keeps it all the way down — the arc's own
   // colors cross over mid-flight, but the dot's movement already says where it
   // is going, so it only has to say where it came from. One path per book.
+  // A set's arcs are all one color, so its dots are that color too.
   if (headCount > 0) {
     const r = Math.max(options.flight?.dotSize ?? 1.8, 0.2) / k;
-    for (let b = 0; b < data.books.length; b++) {
+    const wearers = sets ? SET_HEAD + sets.colors.length : data.books.length;
+    for (let b = sets ? SET_HEAD : 0; b < wearers; b++) {
       let any = false;
       for (let n = 0; n < headCount; n++) {
         if (headBooks[n] !== b) continue;
@@ -490,7 +543,7 @@ export function draw(
         ctx.arc(x, y, r, 0, Math.PI * 2);
       }
       if (!any) continue;
-      const [cr, cg, cb] = BOOK_RGB[b] ?? [138, 143, 152];
+      const [cr, cg, cb] = (b >= SET_HEAD ? sets?.colors[b - SET_HEAD] : BOOK_RGB[b]) ?? [138, 143, 152];
       ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
       ctx.fill();
     }
@@ -526,7 +579,14 @@ function gradientFor(
   data: ConnectionsData,
   batch: Batch,
   alpha: number,
+  sets: SetLayer | null,
 ): CanvasGradient | string {
+  // A set's arcs wear its one color, end to end.
+  if (batch.set >= 0) {
+    const [r, g, b] = sets?.colors[batch.set] ?? [255, 255, 255];
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   // Crossed on purpose: r1 is the TARGET's color and sits at the SOURCE end.
   const [r1, g1, b1] = BOOK_RGB[batch.toBook] ?? [138, 143, 152];
   const [r2, g2, b2] = BOOK_RGB[batch.fromBook] ?? [138, 143, 152];
@@ -1032,8 +1092,8 @@ export function chapterAtScreen(
 /**
  * Which arc is under a tap, or null. `at` is in the picture's own coordinates.
  *
- * Only arcs that are actually drawn can be picked — the vote floor, the cap and
- * the lit set all apply — so a tap never finds a hidden arc. Walked rather than
+ * Only arcs that are actually drawn can be picked — the vote floor, the cap,
+ * the lit set and the shown sets all apply — so a tap never finds a hidden arc. Walked rather than
  * indexed: a tap happens once, and the alternative is keeping a spatial index
  * of 344,799 curves up to date through every pan, zoom and dial change. Of
  * several arcs under the finger the most-voted wins.
@@ -1045,10 +1105,11 @@ export function pick(
   at: { x: number; y: number },
   tolerance = 6,
   lit?: Span[],
+  sets?: SetLayer | null,
 ): number | null {
   const axis = axisFor(data, config.width);
   const frame = frameFor(view, config);
-  const { sorted } = batchesFor(data, config, lit);
+  const { sorted } = batchesFor(data, config, lit, sets ?? null);
   let best: number | null = null;
   let bestVotes = -Infinity;
 

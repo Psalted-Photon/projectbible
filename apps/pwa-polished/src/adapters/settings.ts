@@ -194,6 +194,10 @@ export interface UserSettings {
   journalTheme?: EditorThemeSettings; // Journal writing surface
   cardLooks?: SavedCardLook[]; // Share-card looks saved by name (synced)
   highlightNames?: Record<string, string>; // Names given to Highlights categories, by category key (synced)
+  // The Connections window's sets and saved views (synced). Kept loose here and
+  // checked by lib/connections/sets.ts on read, like cardLooks.
+  connectionSets?: Array<Record<string, unknown>>;
+  connectionViews?: Array<Record<string, unknown>>;
   highlightMeanings?: boolean; // Highlight popup shows what each color and line means (per-device, default false)
   // Whether each surface's formatting toolbar is slid up out of the way.
   // Per-device on purpose (not in SYNCED_KEYS) — an ergonomic choice like font

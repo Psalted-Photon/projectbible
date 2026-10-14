@@ -40,6 +40,10 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'cardLooks',
   // Names given to Highlights categories, like "Family" for green text.
   'highlightNames',
+  // The Connections window's sets and saved views: references and colors,
+  // never verse text, so they are small.
+  'connectionSets',
+  'connectionViews',
   'timezone',
   'dailyDriverEnglishOT', 'dailyDriverEnglishNT',
   'dailyDriverHebrewOT', 'dailyDriverHebrewNT',

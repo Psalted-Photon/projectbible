@@ -36,10 +36,36 @@
     type ConnectionsData,
     type ConnectionRef,
   } from '../lib/connections/data';
-  import { CONFIG, frameFor } from '../lib/connections/layout';
+  import { CONFIG, frameFor, type ConnectionsConfig } from '../lib/connections/layout';
   import { axisDepth, chapterAtScreen, draw, pick, rulerAt, rulerHit, type PlacedName } from '../lib/connections/render';
   import { palette, type ConnectionsPalette } from '../lib/connections/palette';
   import { LIGHTS, countReach, flightFrame, litSetFor, type LitSet, type Span } from '../lib/connections/lights';
+  import {
+    MAX_ITEMS,
+    MAX_SETS,
+    MAX_SHOWN_SETS,
+    MAX_VIEWS,
+    cleanLook,
+    itemFromSpan,
+    itemLabel,
+    layerFor,
+    newSetId,
+    nextSetColor,
+    parseItem,
+    readyOffers,
+    saveSets,
+    saveViews,
+    savedSets,
+    savedViews,
+    type ConnectionSet,
+    type ConnectionsLook,
+    type ConnectionsView,
+    type ReadyOffer,
+    type SetItem,
+    type SetLayer,
+  } from '../lib/connections/sets';
+  import { getHighlightNames } from '../adapters/settings';
+  import { askConfirm } from '../stores/confirmStore';
 
   export let windowId: string | undefined = undefined;
 
@@ -101,6 +127,13 @@
   /** Pan and zoom, as the lab and the family tree do it. */
   let view = { x: 0, y: 0, k: 1 };
 
+  /**
+   * This window's own copy of the look. The lab writes into the shared CONFIG;
+   * here a saved view or the View controls change one window, not every
+   * Connections window open.
+   */
+  let config: ConnectionsConfig = { ...CONFIG };
+
   /** What is lit, and when its arcs were loosed. Null shows everything. */
   let lit: LitSet | null = null;
   /** The opening volley, while it is in the air. */
@@ -132,18 +165,21 @@
     // can trail it, which would start a flight a moment in the past.
     const now = performance.now();
     // The room under the rule follows from the name size; the lab does the same.
-    CONFIG.axisDepth = axisDepth(true, CONFIG);
-    const flight = flightFrame(LIGHTS, lit, opening, now, motionLevel());
+    config.axisDepth = axisDepth(true, config);
+    // Showing or hiding a set flies its arcs in the way a tap does.
+    const flying = lit ?? (setsLaunch !== null ? { spans: [], startedAt: setsLaunch } : null);
+    const flight = flightFrame(LIGHTS, flying, opening, now, motionLevel());
     // A landed opening is spent, so an unrelated redraw does not fly it again.
     if (opening && !flight.opening) opening = null;
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    const stats = draw(ctx, data, CONFIG, { width: W, height: H }, {
+    const stats = draw(ctx, data, config, { width: W, height: H }, {
       palette: colors,
       lit: lit?.spans,
       flight,
       labels: true,
       view,
+      sets: layer,
     });
     names = stats.names;
     if (!flight.settled) schedule();
@@ -200,11 +236,11 @@
    */
   function zoomAt(sx: number, sy: number, k: number) {
     const next = clamp(k, MIN_K, MAX_K);
-    const horizontal = CONFIG.orientation === 'horizontal';
-    const { rule } = rulerAt({ width: W, height: H }, CONFIG, true, view);
+    const horizontal = config.orientation === 'horizontal';
+    const { rule } = rulerAt({ width: W, height: H }, config, true, view);
     if ((horizontal ? sy : sx) >= rule - AXIS_GRAB_PX) {
       const size = horizontal ? H : W;
-      const frame = frameFor({ width: W, height: H }, CONFIG);
+      const frame = frameFor({ width: W, height: H }, config);
       const natural = size / 2 + view.k * (frame.originAcross + (horizontal ? view.y : view.x) - size / 2);
       if (horizontal) sy = natural;
       else sx = natural;
@@ -306,9 +342,13 @@
   // ===== What a tap lights =====
 
   /** What the card at the foot shows. */
-  type Card =
+  type Card = (
     | { kind: 'link'; from: ConnectionRef; to: ConnectionRef; toLabel: string; votes: number }
-    | { kind: 'span'; title: string; open: ConnectionRef; out: number; in: number };
+    | { kind: 'span'; title: string; open: ConnectionRef; out: number; in: number }
+  ) & {
+    /** What Add to set adds: the passage, or an arc's two ends. */
+    items: SetItem[];
+  };
   let card: Card | null = null;
 
   /** The book picker's value, kept in step with a tapped name. */
@@ -337,13 +377,20 @@
     pickedBook = name;
     light([span]);
     const reach = countReach(data, span);
-    card = { kind: 'span', title: name, open: { book: name, chapter: 1, verse: 1 }, out: reach.out, in: reach.in };
+    card = {
+      kind: 'span',
+      title: name,
+      open: { book: name, chapter: 1, verse: 1 },
+      out: reach.out,
+      in: reach.in,
+      items: itemsOf([span]),
+    };
   }
 
   /** The first verse of the chapter under a screen point, or null off the line. */
   function positionAt(at: { x: number; y: number }): number | null {
     if (!data) return null;
-    const chapter = chapterAtScreen(data, CONFIG, { width: W, height: H }, view, at);
+    const chapter = chapterAtScreen(data, config, { width: W, height: H }, view, at);
     return chapter === null ? null : data.chapterStarts[chapter];
   }
 
@@ -389,13 +436,13 @@
         : from.book === to.book
           ? `${from.book} ${from.chapter}–${to.chapter}`
           : `${from.book} ${from.chapter} – ${to.book} ${to.chapter}`;
-    card = { kind: 'span', title, open: { ...from, verse: 1 }, out: reach.out, in: reach.in };
+    card = { kind: 'span', title, open: { ...from, verse: 1 }, out: reach.out, in: reach.in, items: itemsOf(spans) };
   }
 
   function tap(e: PointerEvent) {
     if (!data) return;
     const at = onScreen(e);
-    const hit = rulerHit(data, CONFIG, { width: W, height: H }, view, true, names, at, AXIS_GRAB_PX);
+    const hit = rulerHit(data, config, { width: W, height: H }, view, true, names, at, AXIS_GRAB_PX);
 
     if (hit?.kind === 'book') {
       lightBook(data.books[hit.book].name);
@@ -409,13 +456,20 @@
         pickedBook = '';
         light([span]);
         const reach = countReach(data, span);
-        card = { kind: 'span', title: `${ref.book} ${ref.chapter}`, open: ref, out: reach.out, in: reach.in };
+        card = {
+          kind: 'span',
+          title: `${ref.book} ${ref.chapter}`,
+          open: ref,
+          out: reach.out,
+          in: reach.in,
+          items: itemsOf([span]),
+        };
       }
       return;
     }
 
     // Out among the arcs: only the ones on show can be picked.
-    const arc = pick(data, CONFIG, { width: W, height: H }, toPicture(at), 7 / view.k, lit?.spans);
+    const arc = pick(data, config, { width: W, height: H }, toPicture(at), 7 / view.k, lit?.spans, layer);
     if (arc !== null) showLink(arc);
   }
 
@@ -430,7 +484,17 @@
     const toLabel = ranged
       ? `${a.book} ${a.chapter}:${a.verse}–${b.chapter === a.chapter ? b.verse : `${b.chapter}:${b.verse}`}`
       : `${a.book} ${a.chapter}:${a.verse}`;
-    card = { kind: 'link', from, to: a, toLabel, votes: data.votes[hit] };
+    card = {
+      kind: 'link',
+      from,
+      to: a,
+      toLabel,
+      votes: data.votes[hit],
+      items: itemsOf([
+        { start: data.from[hit], end: data.from[hit] + 1 },
+        { start: data.toStart[hit], end: Math.max(data.toEnd[hit], data.toStart[hit]) + 1 },
+      ]),
+    };
 
     // Both ends by their chapters, not the two bare verses: two verses out of
     // 31,102 light almost nothing, which reads as the selection being lost.
@@ -446,6 +510,281 @@
   function toggleRange() {
     rangeMode = !rangeMode;
     rangeFrom = null;
+  }
+
+  // ===== Sets and saved views =====
+  //
+  // The sets themselves and the saved views live in settings and follow the
+  // account, so every Connections window shares them. Which sets a window is
+  // showing, and its look, are that window's own and outlive a reload with it.
+
+  let library: ConnectionSet[] = savedSets();
+  let views: ConnectionsView[] = savedViews();
+  /** Which sets this window shows, by id. */
+  let shown: string[] = [];
+  /** The shown sets, ready for the draw. Null draws the book colors. */
+  let layer: SetLayer | null = null;
+  /** When the shown sets last changed, so their arcs fly in the way a tap's do. */
+  let setsLaunch: number | null = null;
+  let layerToken = 0;
+
+  let panelOpen = false;
+  /** The set whose passages are open for editing. */
+  let editing: string | null = null;
+  let passageText = '';
+  let passageError = '';
+  let viewName = '';
+  let offers: ReadyOffer[] = [];
+
+  /** The shown sets in the library's order, which is the order they win an arc in. */
+  function shownList(): ConnectionSet[] {
+    return library.filter((s) => shown.includes(s.id)).slice(0, MAX_SHOWN_SETS);
+  }
+  $: shownSets = library.filter((s) => shown.includes(s.id)).slice(0, MAX_SHOWN_SETS);
+  $: emptyShown = shownSets.find((s) => !s.ready && s.items.length === 0) ?? null;
+  $: ownSets = library.filter((s) => !s.ready);
+
+  function itemsOf(spans: Span[]): SetItem[] {
+    return spans.map(itemFromSpan).filter((i): i is SetItem => i !== null);
+  }
+
+  /** Work out the draw's layer again. `fly` sends the arcs in fresh. */
+  async function rebuildLayer(fly: boolean) {
+    const token = ++layerToken;
+    const sets = shownList();
+    const next = data && sets.length ? await layerFor(data, sets) : null;
+    // A quicker toggle since has already been drawn; this one is stale.
+    if (token !== layerToken) return;
+    layer = next;
+    if (fly) {
+      const now = performance.now();
+      if (lit) lit = { ...lit, startedAt: now };
+      else setsLaunch = now;
+    }
+    schedule();
+  }
+
+  function setShown(next: string[], fly = true) {
+    shown = next;
+    remember({ shown });
+    void rebuildLayer(fly);
+  }
+
+  function toggleSet(id: string) {
+    if (shown.includes(id)) setShown(shown.filter((x) => x !== id));
+    else if (shownList().length < MAX_SHOWN_SETS) setShown([...shown, id]);
+  }
+
+  /** Save the library. A change to what a shown set covers or wears redraws it. */
+  function commitSets(next: ConnectionSet[], redraw: boolean) {
+    library = next;
+    saveSets(next);
+    if (redraw) void rebuildLayer(false);
+  }
+
+  function createSet(items: SetItem[] = []): ConnectionSet | null {
+    if (library.length >= MAX_SETS) return null;
+    const set: ConnectionSet = {
+      id: newSetId(),
+      name: `Set ${ownSets.length + 1}`,
+      color: nextSetColor(library),
+      items: items.slice(0, MAX_ITEMS),
+    };
+    commitSets([...library, set], false);
+    return set;
+  }
+
+  function newSet() {
+    const set = createSet();
+    if (!set) return;
+    editing = set.id;
+    passageText = '';
+    passageError = '';
+    setShown([...shown, set.id]);
+  }
+
+  /** Add passages to a set, skipping any it already has, and show it. */
+  function addItems(id: string, items: SetItem[]) {
+    const set = library.find((s) => s.id === id);
+    if (!set || set.ready) return;
+    const have = new Set(set.items.map(itemLabel));
+    const fresh = items.filter((i) => !have.has(itemLabel(i)));
+    const merged = [...set.items, ...fresh].slice(0, MAX_ITEMS);
+    commitSets(library.map((s) => (s.id === id ? { ...s, items: merged } : s)), false);
+    if (!shown.includes(id) && shownList().length < MAX_SHOWN_SETS) setShown([...shown, id]);
+    else void rebuildLayer(true);
+  }
+
+  function removeItem(id: string, index: number) {
+    commitSets(
+      library.map((s) => (s.id === id ? { ...s, items: s.items.filter((_, i) => i !== index) } : s)),
+      shown.includes(id),
+    );
+  }
+
+  function renameSet(id: string, name: string) {
+    const trimmed = name.trim();
+    const set = library.find((s) => s.id === id);
+    if (!set || !trimmed || trimmed === set.name) return;
+    commitSets(library.map((s) => (s.id === id ? { ...s, name: trimmed } : s)), false);
+  }
+
+  function recolorSet(id: string, color: string) {
+    if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+    commitSets(library.map((s) => (s.id === id ? { ...s, color } : s)), shown.includes(id));
+  }
+
+  /** Move a set up the list, where it wins the arcs it shares with the sets below. */
+  function raiseSet(id: string) {
+    const at = library.findIndex((s) => s.id === id);
+    if (at <= 0) return;
+    const next = library.slice();
+    [next[at - 1], next[at]] = [next[at], next[at - 1]];
+    commitSets(next, shown.includes(id));
+  }
+
+  async function deleteSet(set: ConnectionSet) {
+    const ok = await askConfirm(`Delete the set “${set.name}”? Saved views that show it will stop showing it.`, {
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    if (editing === set.id) editing = null;
+    commitSets(library.filter((s) => s.id !== set.id), false);
+    if (views.some((v) => v.shown.includes(set.id))) {
+      views = views.map((v) => ({ ...v, shown: v.shown.filter((x) => x !== set.id) }));
+      saveViews(views);
+    }
+    setShown(shown.filter((x) => x !== set.id), false);
+  }
+
+  function toggleEditing(id: string) {
+    editing = editing === id ? null : id;
+    passageText = '';
+    passageError = '';
+  }
+
+  function addPassage(id: string) {
+    const item = parseItem(passageText);
+    if (!item) {
+      passageError = 'That passage couldn’t be read. Try “Isaiah 53”, “John 3:16” or “Matthew 5-7”.';
+      return;
+    }
+    passageError = '';
+    passageText = '';
+    addItems(id, [item]);
+  }
+
+  function addReady(offer: ReadyOffer) {
+    const have = library.find((s) => s.ready === offer.source);
+    if (have) {
+      if (!shown.includes(have.id)) toggleSet(have.id);
+      return;
+    }
+    if (library.length >= MAX_SETS) return;
+    const set: ConnectionSet = { id: newSetId(), name: offer.name, color: offer.color, items: [], ready: offer.source };
+    commitSets([...library, set], false);
+    if (shownList().length < MAX_SHOWN_SETS) setShown([...shown, set.id]);
+  }
+
+  /** The card's passage, or both ends of its arc, into a set — a new one on "new". */
+  function addCardTo(value: string) {
+    const items = card?.items ?? [];
+    if (!items.length || !value) return;
+    if (value === 'new') {
+      const set = createSet(items);
+      if (set) setShown([...shown, set.id]);
+    } else addItems(value, items);
+  }
+
+  async function togglePanel() {
+    panelOpen = !panelOpen;
+    if (panelOpen) offers = await readyOffers(getHighlightNames());
+  }
+
+  // ----- the look -----
+
+  function lookOf(): ConnectionsLook {
+    return { orientation: config.orientation, side: config.side, voteFloor: config.voteFloor, maxArcs: config.maxArcs };
+  }
+
+  function applyLook(look: ConnectionsLook) {
+    const turned = look.orientation !== config.orientation;
+    config = { ...config, orientation: look.orientation, side: look.side, voteFloor: look.voteFloor, maxArcs: look.maxArcs };
+    remember({ look: lookOf() });
+    // Turned on its side, the old pan points at nothing in particular.
+    if (turned) wholeBible();
+    schedule();
+  }
+
+  function setLook(patch: Partial<ConnectionsLook>) {
+    applyLook({ ...lookOf(), ...patch });
+  }
+
+  /** The vote-floor choices: everything, or only links readers voted for. */
+  const FLOORS = [
+    { value: -32768, label: 'Every link' },
+    { value: 1, label: '1 vote or more' },
+    { value: 5, label: '5 votes or more' },
+    { value: 10, label: '10 votes or more' },
+    { value: 25, label: '25 votes or more' },
+    { value: 50, label: '50 votes or more' },
+    { value: 100, label: '100 votes or more' },
+  ];
+  /** The cap choices. The whole set is slow to pan, so it says so. */
+  const CAPS = [
+    { value: 10000, label: '10,000' },
+    { value: 20000, label: '20,000' },
+    { value: 50000, label: '50,000' },
+    { value: 100000, label: '100,000' },
+    { value: 0, label: 'All (slow to move)' },
+  ];
+
+  // ----- saved views -----
+
+  function saveView() {
+    const name = viewName.trim() || `View ${views.length + 1}`;
+    const same = views.find((v) => v.name.toLowerCase() === name.toLowerCase());
+    if (!same && views.length >= MAX_VIEWS) return;
+    const saved: ConnectionsView = {
+      id: same?.id ?? `view-${Date.now().toString(36)}`,
+      name,
+      ...lookOf(),
+      shown: shownList().map((s) => s.id),
+    };
+    // The same name again saves over it, rather than making a twin.
+    views = same ? views.map((v) => (v.id === same.id ? saved : v)) : [...views, saved];
+    saveViews(views);
+    viewName = '';
+  }
+
+  function openView(v: ConnectionsView) {
+    applyLook(v);
+    setShown(v.shown.filter((id) => library.some((s) => s.id === id)));
+  }
+
+  async function deleteView(v: ConnectionsView) {
+    const ok = await askConfirm(`Delete the saved view “${v.name}”? Its sets are kept.`, {
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    views = views.filter((x) => x.id !== v.id);
+    saveViews(views);
+  }
+
+  /** What a saved view shows, for its row. */
+  function viewSummary(v: ConnectionsView): string {
+    const names = v.shown.map((id) => library.find((s) => s.id === id)?.name).filter(Boolean);
+    return names.length ? names.join(', ') : 'Every arc, book colors';
+  }
+
+  /** Sets or views changed on another device, or in another Connections window. */
+  function onSettingsUpdated() {
+    library = savedSets();
+    views = savedViews();
+    shown = shown.filter((id) => library.some((s) => s.id === id));
+    void rebuildLayer(false);
   }
 
   /**
@@ -515,6 +854,13 @@
       if (saved && [saved.x, saved.y, saved.k].every((n) => typeof n === 'number' && Number.isFinite(n))) {
         view = { x: saved.x, y: saved.y, k: clamp(saved.k, MIN_K, MAX_K) };
       }
+      const look = cleanLook(windowState?.contentState?.look);
+      if (look) config = { ...config, ...look };
+      const savedShown = windowState?.contentState?.shown;
+      if (Array.isArray(savedShown)) {
+        shown = savedShown.filter((id): id is string => typeof id === 'string' && library.some((s) => s.id === id));
+      }
+      await rebuildLayer(false);
       // The opening volley: the whole Bible flies in, Genesis first.
       if (LIGHTS.openOnLoad && motionLevel() === 'full') opening = { startedAt: performance.now() };
     } catch (e) {
@@ -543,7 +889,9 @@
     const onPacks = () => void load(false);
     window.addEventListener('packsUpdated', onPacks);
     window.addEventListener('keydown', onKeydownCapture, true);
+    window.addEventListener('settingsUpdated', onSettingsUpdated);
     return () => {
+      window.removeEventListener('settingsUpdated', onSettingsUpdated);
       window.removeEventListener('packsUpdated', onPacks);
       window.removeEventListener('keydown', onKeydownCapture, true);
     };
@@ -615,6 +963,16 @@
           <span class="btn-label">Show all</span>
         </button>
       {/if}
+      <button
+        class="btn"
+        class:on={panelOpen}
+        aria-pressed={panelOpen}
+        title="Sets and saved views"
+        on:click={togglePanel}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="4.5"/><circle cx="16" cy="9" r="4.5"/><circle cx="12" cy="15.5" r="4.5"/></svg>
+        <span class="btn-label">Sets</span>
+      </button>
       <button class="btn" title="Back to the whole Bible" on:click={wholeBible}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/></svg>
         <span class="btn-label">Whole Bible</span>
@@ -648,6 +1006,205 @@
         <div class="loading">Reading the connections…</div>
       {:else if rangeMode && !card}
         <div class="hint">Drag along the line to light a stretch of chapters.</div>
+      {:else if emptyShown && !card && !panelOpen}
+        <div class="hint">“{emptyShown.name}” is empty. Tap a book, a chapter or an arc, then Add to set.</div>
+      {/if}
+
+      {#if shownSets.length && !panelOpen}
+        <button class="legend" title="Sets and saved views" on:click={togglePanel}>
+          {#each shownSets as set (set.id)}
+            <span class="legend-item"><span class="dot" style="background:{set.color}"></span>{set.name}</span>
+          {/each}
+        </button>
+      {/if}
+
+      {#if panelOpen}
+        <div class="panel" role="dialog" aria-label="Sets and saved views">
+          <div class="panel-head">
+            <div class="panel-title">Sets</div>
+            <CloseX label="Close" on:click={() => (panelOpen = false)} />
+          </div>
+          <p class="panel-note">
+            Show a set and only the arcs touching it are drawn, in its color. A set higher in the list wins an arc it
+            shares with one below.
+          </p>
+
+          {#each library as set, i (set.id)}
+            {@const on = shown.includes(set.id)}
+            <div class="set" class:on>
+              <div class="set-row">
+                <input
+                  class="swatch"
+                  type="color"
+                  value={set.color}
+                  aria-label="Color for {set.name}"
+                  on:change={(e) => recolorSet(set.id, e.currentTarget.value)}
+                />
+                <input
+                  class="set-name"
+                  value={set.name}
+                  aria-label="Set name"
+                  maxlength="60"
+                  on:change={(e) => renameSet(set.id, e.currentTarget.value)}
+                  on:keydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                />
+                <button
+                  class="icon"
+                  class:lit={on}
+                  aria-pressed={on}
+                  title={on ? 'Hide this set' : 'Show this set'}
+                  aria-label={on ? `Hide ${set.name}` : `Show ${set.name}`}
+                  disabled={!on && shownSets.length >= MAX_SHOWN_SETS}
+                  on:click={() => toggleSet(set.id)}
+                >
+                  {#if on}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                  {:else}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.8 10.8 0 0112 5c6.4 0 10 7 10 7a17.6 17.6 0 01-3.2 4.1"/><path d="M6.6 6.6A17.4 17.4 0 002 12s3.6 7 10 7a10.4 10.4 0 005.4-1.6"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg>
+                  {/if}
+                </button>
+                <button
+                  class="icon"
+                  title="Move up the list"
+                  aria-label="Move {set.name} up"
+                  disabled={i === 0}
+                  on:click={() => raiseSet(set.id)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>
+                </button>
+                <button
+                  class="icon"
+                  class:lit={editing === set.id}
+                  aria-expanded={editing === set.id}
+                  title={set.ready ? 'About this set' : 'Passages in this set'}
+                  aria-label="Open {set.name}"
+                  on:click={() => toggleEditing(set.id)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate({editing === set.id ? 180 : 0}deg)"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+              </div>
+              <div class="set-meta">
+                {#if set.ready}
+                  {offers.find((o) => o.source === set.ready)?.blurb ?? 'Ready-made, kept up to date'}
+                {:else}
+                  {set.items.length} {set.items.length === 1 ? 'passage' : 'passages'}
+                {/if}
+              </div>
+
+              {#if editing === set.id}
+                <div class="set-body">
+                  {#if !set.ready}
+                    {#each set.items as item, n (itemLabel(item) + n)}
+                      <div class="item">
+                        <span class="item-label">{itemLabel(item)}</span>
+                        <button class="item-x" aria-label="Take {itemLabel(item)} out" on:click={() => removeItem(set.id, n)}>×</button>
+                      </div>
+                    {:else}
+                      <div class="set-meta">Nothing yet. Type a passage below, or tap a book, a chapter or an arc and use Add to set.</div>
+                    {/each}
+                    {#if set.items.length < MAX_ITEMS}
+                      <form class="add-row" on:submit|preventDefault={() => addPassage(set.id)}>
+                        <input
+                          class="text"
+                          bind:value={passageText}
+                          placeholder="Isaiah 53, John 3:16, Ruth…"
+                          aria-label="Passage to add"
+                        />
+                        <button class="btn" type="submit">Add</button>
+                      </form>
+                      {#if passageError}<div class="error">{passageError}</div>{/if}
+                    {/if}
+                  {/if}
+                  <button class="link-danger" on:click={() => deleteSet(set)}>Delete set</button>
+                </div>
+              {/if}
+            </div>
+          {/each}
+
+          <button class="btn wide" disabled={library.length >= MAX_SETS} on:click={newSet}>+ New set</button>
+
+          <div class="panel-sub">Ready-made</div>
+          {#each offers as offer (offer.source)}
+            {@const have = library.find((s) => s.ready === offer.source)}
+            <div class="offer">
+              <span class="dot" style="background:{offer.color}"></span>
+              <div class="offer-text">
+                <div>{offer.name}</div>
+                <div class="set-meta">{offer.blurb}</div>
+              </div>
+              <button
+                class="btn"
+                disabled={!!have && shown.includes(have.id)}
+                on:click={() => addReady(offer)}
+              >{have ? (shown.includes(have.id) ? 'Shown' : 'Show') : 'Add'}</button>
+            </div>
+          {/each}
+
+          <div class="panel-sub">View</div>
+          <div class="field">
+            <span>Line</span>
+            <div class="seg">
+              <button class:on={config.orientation === 'horizontal'} on:click={() => setLook({ orientation: 'horizontal' })}>Across</button>
+              <button class:on={config.orientation === 'vertical'} on:click={() => setLook({ orientation: 'vertical' })}>Down</button>
+            </div>
+          </div>
+          <div class="field">
+            <span>Arcs</span>
+            <div class="seg">
+              <button class:on={config.side === 'top'} on:click={() => setLook({ side: 'top' })}>One side</button>
+              <button class:on={config.side === 'bottom'} on:click={() => setLook({ side: 'bottom' })}>Other side</button>
+              <button class:on={config.side === 'split'} on:click={() => setLook({ side: 'split' })}>Split</button>
+            </div>
+          </div>
+          <p class="panel-note">Split puts links that point forward through the Bible on one side and links that point back on the other.</p>
+          <label class="field">
+            <span>Links shown</span>
+            <select
+              class="pick"
+              value={config.voteFloor}
+              on:change={(e) => setLook({ voteFloor: Number(e.currentTarget.value) })}
+            >
+              {#each FLOORS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
+              {#if !FLOORS.some((f) => f.value === config.voteFloor)}
+                <option value={config.voteFloor}>{config.voteFloor} votes or more</option>
+              {/if}
+            </select>
+          </label>
+          <label class="field">
+            <span>Most arcs</span>
+            <select
+              class="pick"
+              value={config.maxArcs}
+              on:change={(e) => setLook({ maxArcs: Number(e.currentTarget.value) })}
+            >
+              {#each CAPS as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+              {#if !CAPS.some((c) => c.value === config.maxArcs)}
+                <option value={config.maxArcs}>{config.maxArcs.toLocaleString()}</option>
+              {/if}
+            </select>
+          </label>
+          <p class="panel-note">Readers vote on each link at OpenBible.info. With a cap, the most-voted links are kept.</p>
+
+          <div class="panel-sub">Saved views</div>
+          {#each views as v (v.id)}
+            <div class="offer">
+              <div class="offer-text">
+                <div>{v.name}</div>
+                <div class="set-meta">{viewSummary(v)}</div>
+              </div>
+              <button class="btn" on:click={() => openView(v)}>Open</button>
+              <button class="icon" aria-label="Delete {v.name}" title="Delete this view" on:click={() => deleteView(v)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg>
+              </button>
+            </div>
+          {:else}
+            <div class="set-meta">None yet. A saved view keeps the line, the arcs, the links shown and which sets are on.</div>
+          {/each}
+          <form class="add-row" on:submit|preventDefault={saveView}>
+            <input class="text" bind:value={viewName} maxlength="60" placeholder="Name this view" aria-label="View name" />
+            <button class="btn" type="submit" disabled={views.length >= MAX_VIEWS && !views.some((v) => v.name.toLowerCase() === viewName.trim().toLowerCase())}>Save</button>
+          </form>
+        </div>
       {/if}
     </div>
 
@@ -660,6 +1217,23 @@
           {:else}
             <div class="card-title">{card.title}</div>
             <div class="card-meta">{card.out.toLocaleString()} out · {card.in.toLocaleString()} in</div>
+          {/if}
+          {#if card.items.length}
+            <select
+              class="pick add-pick"
+              aria-label="Add to a set"
+              value=""
+              on:change={(e) => {
+                addCardTo(e.currentTarget.value);
+                e.currentTarget.value = '';
+              }}
+            >
+              <option value="">{card.kind === 'link' ? 'Add both to set…' : 'Add to set…'}</option>
+              {#each ownSets as set (set.id)}
+                <option value={set.id} disabled={set.items.length >= MAX_ITEMS}>{set.name}</option>
+              {/each}
+              {#if library.length < MAX_SETS}<option value="new">New set</option>{/if}
+            </select>
           {/if}
           <CloseX label="Close" on:click={() => (card = null)} />
         </div>
@@ -809,6 +1383,102 @@
     color: var(--muted); font-size: 12px; white-space: nowrap;
     pointer-events: none;
   }
+
+  /* ---------------- sets ---------------- */
+  .legend {
+    position: absolute; top: 8px; left: calc(8px + var(--grip-l)); max-width: calc(100% - 16px - var(--grip-l) - var(--grip-r));
+    display: flex; flex-wrap: wrap; gap: 4px 10px;
+    padding: 4px 9px; border-radius: 6px; cursor: pointer;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    border: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
+    color: var(--text); font: inherit; font-size: 12px; text-align: left;
+  }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+  .panel {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: min(360px, 100%); box-sizing: border-box;
+    overflow-y: auto; overscroll-behavior: contain;
+    padding: 8px calc(12px + var(--grip-r)) 16px 12px;
+    background: color-mix(in srgb, var(--text) 4%, var(--bg));
+    border-left: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
+    z-index: 10;
+  }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-family: var(--display); font-size: 16px; }
+  .panel-sub { font-family: var(--display); font-size: 14px; margin: 16px 0 6px; }
+  .panel-note { color: var(--muted); font-size: 11.5px; line-height: 1.4; margin: 2px 0 8px; }
+
+  .set {
+    border: 1px solid color-mix(in srgb, var(--rule) 50%, transparent);
+    border-radius: 8px; padding: 6px 8px; margin-bottom: 6px;
+  }
+  .set.on { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+  .set-row { display: flex; align-items: center; gap: 6px; }
+  .set-meta { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+  .set-row + .set-meta { padding-left: 32px; }
+  .swatch {
+    width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%;
+    background: none; cursor: pointer; flex: none;
+  }
+  .swatch::-webkit-color-swatch-wrapper { padding: 0; }
+  .swatch::-webkit-color-swatch { border: 2px solid color-mix(in srgb, var(--text) 25%, transparent); border-radius: 50%; }
+  .swatch::-moz-color-swatch { border: 2px solid color-mix(in srgb, var(--text) 25%, transparent); border-radius: 50%; }
+  .set-name, .text {
+    flex: 1; min-width: 0; height: 28px; padding: 0 7px; border-radius: 6px;
+    background: color-mix(in srgb, var(--text) 6%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
+    color: var(--text); font: inherit; font-size: 13px;
+  }
+  .set-name { background: transparent; border-color: transparent; }
+  .set-name:hover, .set-name:focus { border-color: color-mix(in srgb, var(--rule) 70%, transparent); }
+  .set-name:focus-visible, .text:focus-visible, .swatch:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .icon {
+    width: 28px; height: 28px; flex: none; padding: 0; border-radius: 6px; cursor: pointer;
+    display: inline-grid; place-items: center;
+    background: none; border: 1px solid transparent; color: var(--muted);
+  }
+  .icon:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .icon.lit { color: var(--text); }
+  .icon:disabled { opacity: .35; cursor: default; }
+  .icon:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .icon svg { width: 16px; height: 16px; transition: transform .15s; }
+  .set-body { margin-top: 6px; padding-left: 32px; }
+  .item { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 1px 0; }
+  .item-label { flex: 1; min-width: 0; }
+  .item-x {
+    width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer;
+    background: none; color: var(--muted); font-size: 16px; line-height: 1;
+  }
+  .item-x:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .add-row { display: flex; gap: 6px; margin-top: 6px; }
+  .error { color: #ff6b6b; font-size: 11.5px; margin-top: 4px; }
+  .link-danger {
+    margin-top: 8px; padding: 0; border: none; background: none; cursor: pointer;
+    color: #ff6b6b; font: inherit; font-size: 12px;
+  }
+  .btn.wide { width: 100%; justify-content: center; margin-top: 2px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .offer { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+  .offer-text { flex: 1; min-width: 0; }
+  .field { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; font-size: 13px; }
+  .seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    height: 28px; padding: 0 9px; border: none; cursor: pointer;
+    background: color-mix(in srgb, var(--text) 4%, var(--bg)); color: var(--text); font: inherit; font-size: 12px;
+  }
+  .seg button + button { border-left: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); }
+  .seg button.on { background: color-mix(in srgb, var(--focus) 28%, var(--bg)); }
+  .seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .pick {
+    height: 28px; min-width: 0; max-width: 170px; padding: 0 6px; border-radius: 6px;
+    background: color-mix(in srgb, var(--text) 6%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent);
+    color: var(--text); font: inherit; font-size: 12.5px;
+  }
+  .pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .add-pick { max-width: 150px; }
 
   /* ---------------- the card ---------------- */
   .card {
