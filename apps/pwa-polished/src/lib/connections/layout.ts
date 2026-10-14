@@ -45,6 +45,18 @@ export interface ConnectionsConfig {
   heightMax: number;
   /** The shortest arc's height, so a one-chapter link is still a visible bump. */
   heightMin: number;
+  /**
+   * The least room the arcs get across the line, in pixels — both sides
+   * together when split.
+   *
+   * A phone turned sideways has a long line and almost no height, and squeezing
+   * the arcs into that flattened every one of them to a smear along the line.
+   * Below this the arcs keep this much room and run off the screen instead,
+   * the way they would on a taller screen zoomed in; zooming out shows them
+   * whole. Upright phones and desktop windows have more room than this, so
+   * they draw as they always did.
+   */
+  minRoom: number;
   /** Where along an arc the two book colors change over, 0.5 being the middle. */
   crossfadeAt: number;
   /** How much of the arc the changeover takes. 0 is a hard edge, 1 a long blend. */
@@ -102,6 +114,7 @@ export const CONFIG: ConnectionsConfig = {
   heightCurve: 0.65,
   heightMax: 0.63,
   heightMin: 0.03,
+  minRoom: 520,
   crossfadeAt: 0.5,
   crossfadeWidth: 0.18,
   thickness: 0.1,
@@ -231,10 +244,21 @@ export function frameFor(view: Viewport, config: ConnectionsConfig): Frame {
   // the arcs have the short side less that much to rise into. Without this the
   // rule sits on the canvas edge at axisAt 1 and the names fall off it.
   const furniture = config.axisDepth;
-  const shortSide = Math.max(1, (horizontal ? view.height : view.width) - pad * 2 - furniture);
+  const inside = Math.max(1, (horizontal ? view.height : view.width) - pad * 2);
+  const available = Math.max(1, inside - furniture);
+  // Never less than minRoom, so a short screen doesn't flatten the arcs.
+  const shortSide = Math.max(available, config.minRoom ?? 0);
   // Split draws to both sides, so each side gets half the room.
-  const across = config.side === 'split' ? shortSide / 2 : shortSide;
-  const axisOffset = config.side === 'split' ? shortSide / 2 : shortSide * config.axisAt;
+  const split = config.side === 'split';
+  const across = split ? shortSide / 2 : shortSide;
+  // Split keeps the rule in the middle of the room. With more room than the
+  // screen, the rule moves no lower than the screen's middle, so the arcs run
+  // off the top and bottom alike instead of all off one edge — and the
+  // tallest still nearly reaches the top. One side keeps its rule where it
+  // always was, and its arcs run off the top.
+  const axisOffset = split
+    ? Math.max(available / 2, Math.min(shortSide / 2, inside / 2))
+    : available * config.axisAt;
   return {
     orientation: config.orientation,
     originAlong: pad,

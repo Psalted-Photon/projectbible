@@ -831,6 +831,13 @@ function buildDrawer() {
     'Height of the shortest arc, so a link to the next verse is still a visible bump.',
   );
   slider(
+    'least room',
+    () => CONFIG.minRoom,
+    (v) => { CONFIG.minRoom = v; },
+    0, 1200, 10,
+    'The least height the arcs get, in pixels (both sides together when split). A phone on its side has less than this, so the arcs keep this much and run off the screen instead of flattening. Zoom out to see them whole.',
+  );
+  slider(
     'height curve',
     () => CONFIG.heightCurve,
     (v) => { CONFIG.heightCurve = v; },

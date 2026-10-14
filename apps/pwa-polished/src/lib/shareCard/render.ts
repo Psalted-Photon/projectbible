@@ -314,6 +314,18 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number): st
 }
 
 /**
+ * The mark for another picture that leaves the app — the Connections image
+ * wears the same one. Resolves with a function that draws it once the face
+ * and the iris have loaded (or given up), so the caller never waits per draw.
+ */
+export async function markDrawer(): Promise<
+  (ctx: CanvasRenderingContext2D, cx: number, baseline: number, size: number, colour: string) => void
+> {
+  const [icon] = await Promise.all([loadIcon(), withTimeout(loadMarkFont(), 3000)]);
+  return (ctx, cx, baseline, size, colour) => drawMark(ctx, icon, cx, baseline, size, colour);
+}
+
+/**
  * The plain irisBible wordmark, centered on cx: Milonga letters in the card's
  * text color with the iris standing in as the dot of the "i" in Bible, laid
  * out on the same numbers as the wordmark artboards (lib/wordmark.ts). The

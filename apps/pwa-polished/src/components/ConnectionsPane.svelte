@@ -65,12 +65,12 @@
     type SetLayer,
   } from '../lib/connections/sets';
   import { getHighlightNames } from '../adapters/settings';
+  import { CREDIT, renderConnectionsImage } from '../lib/connections/image';
+  import { download } from '../lib/backup/saveFile';
+  import { isIOS } from '../lib/device';
   import { askConfirm } from '../stores/confirmStore';
 
   export let windowId: string | undefined = undefined;
-
-  /** The credit OpenBible's licence asks for, word for word. */
-  const CREDIT = 'Cross references: OpenBible.info (CC BY)';
 
   let loading = true;
   let missing = false;
@@ -787,6 +787,104 @@
     void rebuildLayer(false);
   }
 
+  // ===== Save or share as an image =====
+  //
+  // Drawn first and offered after, rather than on the tap: a 4,000-pixel
+  // render and its PNG take a moment on a phone, and the share sheet only
+  // opens from a fresh tap. So the image is made, shown, and then shared or
+  // saved from buttons of its own — the share card's way.
+
+  /** What the picture is of, for the image's title. Follows what was lit last. */
+  let litTitle = '';
+  $: if (card) {
+    litTitle =
+      card.kind === 'span'
+        ? card.title
+        : `${card.from.book} ${card.from.chapter}:${card.from.verse} → ${card.toLabel}`;
+  }
+  $: if (!lit) litTitle = '';
+
+  let imageBusy = false;
+  let imageFile: File | null = null;
+  let imageUrl = '';
+  let imageError = '';
+  let imageSaved = false;
+
+  /** Can the OS share sheet take an image file? Probed once, as the share card does. */
+  const canShareFiles = (() => {
+    try {
+      const probe = new File([new Uint8Array(1)], 'probe.png', { type: 'image/png' });
+      return (
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [probe] })
+      );
+    } catch {
+      return false;
+    }
+  })();
+  // iOS's share sheet has Save Image in it, and a blob download there opens a
+  // bare preview page, so on iOS Share is the one way out.
+  const showSave = !(isIOS() && canShareFiles);
+
+  function closeImage() {
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    imageUrl = '';
+    imageFile = null;
+    imageError = '';
+    imageBusy = false;
+    imageSaved = false;
+  }
+
+  async function makeImage() {
+    if (!data || imageBusy || W === 0 || H === 0) return;
+    closeImage();
+    imageBusy = true;
+    try {
+      const title = litTitle || (shownSets.length ? 'Cross references in Scripture' : 'Every cross reference in Scripture');
+      const blob = await renderConnectionsImage({
+        data,
+        config,
+        viewport: { width: W, height: H },
+        view: { ...view },
+        palette: colors,
+        lit: lit?.spans,
+        sets: layer,
+        title,
+        legend: shownSets.map((s) => ({ name: s.name, color: s.color })),
+      });
+      if (!imageBusy) return; // closed while it was drawing
+      if (!blob) throw new Error('The browser couldn’t make the image.');
+      const base = title.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'connections';
+      imageFile = new File([blob], `connections-${base}.png`, { type: 'image/png' });
+      imageUrl = URL.createObjectURL(blob);
+    } catch (e) {
+      imageError = e instanceof Error ? e.message : String(e);
+    } finally {
+      imageBusy = false;
+    }
+  }
+
+  async function shareImage() {
+    if (!imageFile) return;
+    try {
+      await navigator.share({ files: [imageFile] });
+      closeImage();
+    } catch (err) {
+      // Dismissing the sheet leaves the image up so the choice can be made again.
+      if ((err as Error)?.name === 'AbortError') return;
+      download(imageFile);
+    }
+  }
+
+  function saveImage() {
+    if (!imageFile) return;
+    download(imageFile);
+    imageSaved = true;
+  }
+
+  $: imageOpen = imageBusy || !!imageUrl || !!imageError;
+
   /**
    * Take the reader to a verse. The Timeline's call: a crumb first, so the
    * back arrow returns with this window still open, then the jump. From full
@@ -833,6 +931,11 @@
 
   /** Escape leaves full screen, unless a lookup card over it wants the key. */
   function onKeydownCapture(e: KeyboardEvent) {
+    if (e.key === 'Escape' && imageOpen && !get(lookupStore)) {
+      e.stopPropagation();
+      closeImage();
+      return;
+    }
     if (!fullscreen || e.key !== 'Escape' || get(lookupStore)) return;
     void setFullscreen(false);
   }
@@ -900,6 +1003,7 @@
   onDestroy(() => {
     if (frameId) cancelAnimationFrame(frameId);
     if (saveTimer) clearTimeout(saveTimer);
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
     themeObserver?.disconnect();
     resizeObserver?.disconnect();
     pointers.clear();
@@ -972,6 +1076,10 @@
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="4.5"/><circle cx="16" cy="9" r="4.5"/><circle cx="12" cy="15.5" r="4.5"/></svg>
         <span class="btn-label">Sets</span>
+      </button>
+      <button class="btn" title="Save or share this picture as an image" disabled={!data || imageBusy} on:click={makeImage}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg>
+        <span class="btn-label">Image</span>
       </button>
       <button class="btn" title="Back to the whole Bible" on:click={wholeBible}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/></svg>
@@ -1249,6 +1357,33 @@
     {/if}
 
     <div class="credit">{CREDIT}</div>
+
+    {#if imageOpen}
+      <div class="image-scrim" role="presentation" on:click|self={closeImage}>
+        <div class="image-card" role="dialog" aria-label="Save or share the picture">
+          <div class="card-head">
+            <div class="card-title">Picture</div>
+            <div class="card-meta">{imageBusy ? 'Drawing it large…' : imageFile ? 'Ready' : ''}</div>
+            <CloseX label="Close" on:click={closeImage} />
+          </div>
+          {#if imageBusy}
+            <div class="image-wait">Drawing it large…</div>
+          {:else if imageError}
+            <p class="error">{imageError}</p>
+          {:else if imageUrl}
+            <img class="image-preview" src={imageUrl} alt="The Connections arcs as they will be saved" />
+            <div class="image-actions">
+              {#if canShareFiles}
+                <button class="btn" on:click={shareImage}>Share</button>
+              {/if}
+              {#if showSave}
+                <button class="btn" on:click={saveImage}>{imageSaved ? 'Saved' : 'Save'}</button>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
   {/if}
 </div>
 </div>
@@ -1479,6 +1614,26 @@
   }
   .pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .add-pick { max-width: 150px; }
+
+  /* ---------------- image ---------------- */
+  .image-scrim {
+    position: absolute; inset: 0; z-index: 30;
+    display: grid; place-items: center; padding: 16px;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+  }
+  .image-card {
+    width: min(520px, 100%); max-height: 100%; box-sizing: border-box;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 8px 12px 12px; border-radius: 10px;
+    background: color-mix(in srgb, var(--text) 5%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent);
+  }
+  .image-wait { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
+  .image-preview {
+    display: block; min-height: 0; max-width: 100%; max-height: 60vh; object-fit: contain;
+    border-radius: 6px; border: 1px solid color-mix(in srgb, var(--rule) 50%, transparent);
+  }
+  .image-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
   /* ---------------- the card ---------------- */
   .card {
