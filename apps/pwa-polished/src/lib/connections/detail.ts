@@ -19,9 +19,8 @@
 import { openDB, type DBSectionHeading } from '../../adapters/db';
 import type { ConnectionsData } from './data';
 import type { ConnectionsPalette } from './palette';
-import { BOOK_COLORS } from './palette';
+import { BOOK_COLORS, rgbOf } from './palette';
 import { shortBookName } from '../bibleData';
-import { rgbOf } from './grid';
 import type { Span } from './lights';
 
 export type DetailColorBy = 'books' | 'rainbow' | 'ink';

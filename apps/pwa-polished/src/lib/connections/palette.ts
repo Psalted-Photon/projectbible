@@ -106,3 +106,13 @@ export function bookRgba(bookIndex: number, alpha: number): string {
   const [r, g, b] = BOOK_RGB[bookIndex] ?? [138, 143, 152];
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+/** A color the canvas was given, as numbers. Takes #rgb, #rrggbb and rgb(). */
+export function rgbOf(color: string): [number, number, number] {
+  const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(color);
+  if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+  let h = color.replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  if (!/^[0-9a-f]{6}/i.test(h)) return [128, 128, 128];
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}

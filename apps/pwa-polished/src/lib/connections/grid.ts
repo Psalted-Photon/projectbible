@@ -1,19 +1,20 @@
 /**
  * The Connections grid: every book against every book.
  *
- * Rows are where a link starts, columns are where it lands. Each cell is a tiny
- * verse-by-verse picture of one book pair — the source book's verses running
- * top to bottom, the target's left to right — so a dot in Psalms × Proverbs is
- * one psalm verse pointing at one proverb. Seven group rows and columns (Law,
- * History, Poetry, Prophets, Gospels, Paul, Letters) sum their books up, and are
- * verse pictures too: a group is a run of whole books, so it squeezes into one
- * lane exactly as a book does.
+ * Rows are where a link starts, columns are where it lands. Each cell is the
+ * detail view of its book pair in miniature: the source book's axis down the
+ * cell's left edge, the target's down its right, and one line across for every
+ * link between them — the same curve and the same colors the detail draws
+ * (lib/connections/detail.ts), because a cell is the detail seen from further
+ * off. Seven group rows and columns (Law, History, Poetry, Prophets, Gospels,
+ * Paul, Letters) sum their books up the same way: a group is a run of whole
+ * books, so it squeezes onto one axis exactly as a book does.
  *
- * The whole grid is drawn once into an image and that image is what pans and
- * zooms. 344,799 links splatted into a count buffer is a few hundred
- * milliseconds; scaling a finished image is free. The splat and the coloring
- * are separate steps so the dials that only change color (brightness, curve,
- * tint) don't redo the counting.
+ * The whole grid is drawn once into an image, and that image is what pans and
+ * zooms. Zoomed in past the image's own pixels, the cells on screen are drawn
+ * again live at screen sharpness, as long as there are few enough lines on
+ * screen to do it at a good frame rate. So the grid stays a picture of lines at
+ * every zoom rather than turning into blurred squares.
  *
  * The labels are not in the image. They are drawn on top, pinned to the top and
  * left edges, so they stay sharp at any zoom and never scroll off — the same
@@ -21,13 +22,18 @@
  */
 
 import type { ConnectionsData } from './data';
-import { BOOK_RGB, BOOK_COLORS } from './palette';
+import { BOOK_RGB, BOOK_COLORS, rgbOf } from './palette';
 import type { ConnectionsPalette } from './palette';
+import type { DetailConfig } from './detail';
 import { CATEGORY_COLORS, shortBookName, type BookInfo } from '../bibleData';
 
 export type GroupPlacement = 'start' | 'each' | 'off';
-export type GridColorBy = 'source' | 'target' | 'ink';
 
+/**
+ * The grid's own dials. How a line looks — its curve, its colors, whether the
+ * axes are to scale — comes from the detail's dials, so a cell and the detail
+ * it opens into always match.
+ */
 export interface GridConfig {
   /** Hide links fewer readers voted for. 0 keeps every one. */
   voteFloor: number;
@@ -41,24 +47,26 @@ export interface GridConfig {
   gap: number;
   /** The extra gap where one group of books ends and the next begins. */
   groupGap: number;
-  /** The cached image's side, in pixels. Bigger is sharper zoomed in and slower to build. */
+  /** The cached image's side, in pixels. Bigger is sharper and slower to build. */
   imageSize: number;
-  /** Each link's dot in the image, in image pixels. */
-  dotSize: number;
-  /** How fast a pixel saturates as links pile onto it. */
-  brightness: number;
-  /** Below 1 lifts the faint dots; above 1 leaves only the dense ones bright. */
-  curve: number;
-  /** Which book's color a dot wears. */
-  colorBy: GridColorBy;
-  /** How strongly each cell is tinted in its color, so empty cells still show. */
-  cellTint: number;
-  /** Brightness on the diagonal, where a book links to itself, relative to the rest. */
+  /** Line width, in image pixels — and in screen pixels once zoomed in and drawn live. */
+  lineWidth: number;
+  /** How solid one line is. Where many cross they add up. */
+  opacity: number;
+  /** Lines on the diagonal, where a book links to itself, relative to the rest. */
   diagonal: number;
+  /** How far the two axes sit in from the cell's edges, as a share of its width. */
+  inset: number;
+  /** How strongly the two axes in every cell are drawn. 0 leaves them out. */
+  axisAlpha: number;
+  /** A wash of each cell in its column's color, so empty cells still show. */
+  cellTint: number;
   /** Book names along the top and left, in CSS pixels. */
   labelSize: number;
-  /** Smooth the image when zoomed in, rather than showing its pixels square. */
-  smooth: boolean;
+  /** Draw the cells on screen live once zoomed past the image, so lines stay sharp. */
+  sharpZoom: boolean;
+  /** The most lines drawn live; more than this on screen and the image is used. */
+  liveLimit: number;
 }
 
 /** What the app ships, and what the lab's Reset puts back. */
@@ -69,15 +77,16 @@ export const GRID: GridConfig = {
   groupSize: 2.5,
   gap: 0.12,
   groupGap: 0.5,
-  imageSize: 2048,
-  dotSize: 1,
-  brightness: 0.6,
-  curve: 0.7,
-  colorBy: 'target',
-  cellTint: 0.07,
+  imageSize: 3072,
+  lineWidth: 0.5,
+  opacity: 0.2,
   diagonal: 0.5,
+  inset: 0.04,
+  axisAlpha: 0.35,
+  cellTint: 0.05,
   labelSize: 11,
-  smooth: false,
+  sharpZoom: true,
+  liveLimit: 80000,
 };
 
 /* --------------------------------------------------------------------------- *
@@ -139,11 +148,6 @@ export interface GridLayout {
   groupOfBook: Int8Array;
 }
 
-function rgbOfHex(hex: string): [number, number, number] {
-  const h = hex.replace('#', '');
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-}
-
 /** Where every lane sits, from the dials. */
 export function buildGridLayout(data: ConnectionsData, config: GridConfig): GridLayout {
   const books = data.books;
@@ -175,7 +179,7 @@ export function buildGridLayout(data: ConnectionsData, config: GridConfig): Grid
       short: g.name,
       start: first.start,
       end: last.end,
-      rgb: rgbOfHex(color),
+      rgb: rgbOf(color),
       color,
       index: gi,
       w: groupWeight,
@@ -258,195 +262,258 @@ export function laneAt(layout: GridLayout, fraction: number): number {
 }
 
 /* --------------------------------------------------------------------------- *
- * The cached image
+ * Sorting the links into cells
  * ------------------------------------------------------------------------- */
 
-/** The counting pass: how many links landed on every pixel. */
-export interface GridCounts {
-  size: number;
-  counts: Float32Array;
+/** Every cell's links, so a cell can be drawn without a pass over all of them. */
+export interface GridCells {
   /** Links per cell, lanes × lanes, row-major (row = source lane). */
-  cells: Int32Array;
+  counts: Int32Array;
+  /** Where each cell's links begin in `links`, with one extra entry at the end. */
+  offsets: Int32Array;
+  /** Link indexes, grouped by cell. A link is in every cell it lands in — up to four. */
+  links: Int32Array;
   /** Links that passed the vote floor. */
-  links: number;
+  passed: number;
   ms: number;
 }
 
 /**
- * Splat every link into a count buffer.
+ * Sort every link into the cells it belongs to.
  *
- * Each link lands up to four times: its book cell, and when groups are on, the
- * group row, the group column and the group-by-group corner. A link to a range
- * of verses marks each column it covers, so a reference to a whole psalm reads
- * as a short dash rather than a single dot.
+ * A link lands in its book cell and, when groups are on, the group row, the
+ * group column and the group-by-group corner. Two passes: count, then fill, so
+ * the lists are one flat array rather than five thousand small ones.
  */
-export function countGrid(data: ConnectionsData, config: GridConfig, layout: GridLayout): GridCounts {
+export function sortIntoCells(data: ConnectionsData, config: GridConfig, layout: GridLayout): GridCells {
   const t0 = performance.now();
-  const S = Math.max(64, Math.round(config.imageSize));
-  const counts = new Float32Array(S * S);
   const L = layout.lanes.length;
-  const cells = new Int32Array(L * L);
   const total = data.totalVerses;
 
-  // Every verse's book, and its pixel within its book lane and its group lane.
   const verseBook = new Int8Array(total);
-  const bookPx = new Int32Array(total);
-  const groupPx = new Int32Array(total).fill(-1);
-  const pixelIn = (lane: GridLane, v: number) =>
-    Math.min(S - 1, Math.floor((lane.at + ((v - lane.start + 0.5) / (lane.end - lane.start)) * lane.size) * S));
+  data.books.forEach((book, b) => verseBook.fill(b, book.start, book.end));
+
+  const rowA = new Int16Array(data.books.length);
+  const rowB = new Int16Array(data.books.length);
   for (let b = 0; b < data.books.length; b++) {
-    const book = data.books[b];
-    const lane = layout.lanes[layout.bookLane[b]];
-    const gl = layout.groupLane[layout.groupOfBook[b]];
-    const group = gl >= 0 ? layout.lanes[gl] : null;
-    for (let v = book.start; v < book.end; v++) {
-      verseBook[v] = b;
-      bookPx[v] = pixelIn(lane, v);
-      if (group) groupPx[v] = pixelIn(group, v);
-    }
+    rowA[b] = layout.bookLane[b];
+    rowB[b] = layout.groupLane[layout.groupOfBook[b]];
   }
 
-  const d = Math.max(1, Math.round(config.dotSize));
-  const splat = (row: number, col: number) => {
-    for (let dy = 0; dy < d; dy++) {
-      const r = row + dy;
-      if (r >= S) break;
-      const base = r * S;
-      for (let dx = 0; dx < d; dx++) {
-        const c = col + dx;
-        if (c >= S) break;
-        counts[base + c] += 1;
-      }
-    }
+  const keep = (i: number) => {
+    if (data.votes[i] < config.voteFloor) return false;
+    const f = data.from[i];
+    const t = data.toStart[i];
+    return f >= 0 && f < total && t >= 0 && t < total;
   };
 
-  const rows = [0, 0];
-  let links = 0;
+  const counts = new Int32Array(L * L);
+  let passed = 0;
+  let entries = 0;
   for (let i = 0; i < data.count; i++) {
-    if (data.votes[i] < config.voteFloor) continue;
-    const from = data.from[i];
-    const t0v = data.toStart[i];
-    // A runaway range would smear a whole row; no real reference spans more.
-    const t1v = Math.min(data.toEnd[i], t0v + 200, total - 1);
-    if (from < 0 || from >= total || t0v < 0 || t0v >= total) continue;
-    links++;
-
-    const nRows = groupPx[from] >= 0 ? 2 : 1;
-    rows[0] = bookPx[from];
-    rows[1] = groupPx[from];
-
-    for (let r = 0; r < nRows; r++) {
-      let lastBook = -1;
-      let lastGroup = -1;
-      for (let t = t0v; t <= t1v; t++) {
-        const bp = bookPx[t];
-        if (bp !== lastBook) {
-          splat(rows[r], bp);
-          lastBook = bp;
-        }
-        const gp = groupPx[t];
-        if (gp >= 0 && gp !== lastGroup) {
-          splat(rows[r], gp);
-          lastGroup = gp;
-        }
+    if (!keep(i)) continue;
+    passed++;
+    const fb = verseBook[data.from[i]];
+    const tb = verseBook[data.toStart[i]];
+    for (const r of [rowA[fb], rowB[fb]]) {
+      if (r < 0) continue;
+      for (const c of [rowA[tb], rowB[tb]]) {
+        if (c < 0) continue;
+        counts[r * L + c]++;
+        entries++;
       }
-    }
-
-    // Cell totals go by the first target verse, once per cell.
-    const fb = verseBook[from];
-    const tb = verseBook[t0v];
-    const rowLanes = [layout.bookLane[fb], layout.groupLane[layout.groupOfBook[fb]]];
-    const colLanes = [layout.bookLane[tb], layout.groupLane[layout.groupOfBook[tb]]];
-    for (const rl of rowLanes) {
-      if (rl < 0) continue;
-      for (const cl of colLanes) if (cl >= 0) cells[rl * L + cl]++;
     }
   }
 
-  return { size: S, counts, cells, links, ms: performance.now() - t0 };
+  const offsets = new Int32Array(L * L + 1);
+  for (let k = 0; k < L * L; k++) offsets[k + 1] = offsets[k] + counts[k];
+  const cursor = offsets.slice(0, L * L);
+  const links = new Int32Array(entries);
+  for (let i = 0; i < data.count; i++) {
+    if (!keep(i)) continue;
+    const fb = verseBook[data.from[i]];
+    const tb = verseBook[data.toStart[i]];
+    for (const r of [rowA[fb], rowB[fb]]) {
+      if (r < 0) continue;
+      for (const c of [rowA[tb], rowB[tb]]) {
+        if (c < 0) continue;
+        links[cursor[r * L + c]++] = i;
+      }
+    }
+  }
+
+  return { counts, offsets, links, passed, ms: performance.now() - t0 };
 }
 
-/** A color the canvas was given, as numbers. Takes #rgb, #rrggbb and rgb(). */
-export function rgbOf(color: string): [number, number, number] {
-  const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(color);
-  if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
-  let h = color.replace('#', '').trim();
-  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
-  if (!/^[0-9a-f]{6}/i.test(h)) return [128, 128, 128];
-  return rgbOfHex(h);
+/* --------------------------------------------------------------------------- *
+ * Drawing cells
+ * ------------------------------------------------------------------------- */
+
+/** Where the grid's top-left corner is and how long its side is, in whatever space is being drawn. */
+interface Placement {
+  ox: number;
+  oy: number;
+  unit: number;
 }
+
+const RAINBOW = 12;
 
 /**
- * Turn the counts into a picture.
+ * Draw a block of cells: the wash, the two axes in each, and the lines.
  *
- * A pixel's strength is 1 − e^(−count × brightness), bent by the curve, so the
- * first few links on a pixel show clearly and a pile of hundreds saturates
- * rather than blowing out. The diagonal is scaled separately: a book's links to
- * its own next verses are by far the densest cells and would otherwise drown
- * the rest.
+ * The same code builds the cached image (every cell, in image pixels) and the
+ * live drawing when zoomed in (only the cells on screen, in screen pixels), so
+ * the two match where one hands over to the other.
+ *
+ * With the books' colors every cell needs its own gradient, so each cell is one
+ * stroke. The rainbow and the single ink don't depend on the cell, so their
+ * lines from every cell share a few paths and a few strokes.
  */
-export function colorGrid(
-  grid: GridCounts,
-  config: GridConfig,
+function drawCells(
+  ctx: CanvasRenderingContext2D,
+  data: ConnectionsData,
+  cells: GridCells,
   layout: GridLayout,
+  grid: GridConfig,
+  detail: DetailConfig,
+  palette: ConnectionsPalette,
+  at: Placement,
+  rows: number[],
+  cols: number[],
+  width: number,
+): number {
+  const lanes = layout.lanes;
+  const L = lanes.length;
+  /** A lane's start and length, measured from the grid's corner. */
+  const box = (lane: GridLane) => [lane.at * at.unit, lane.size * at.unit] as const;
+
+  // The wash.
+  if (grid.cellTint > 0) {
+    for (const r of rows) {
+      const [y, h] = box(lanes[r]);
+      for (const c of cols) {
+        const [x, w] = box(lanes[c]);
+        ctx.fillStyle = rgba(lanes[c].rgb, grid.cellTint);
+        ctx.fillRect(at.ox + x, at.oy + y, w, h);
+      }
+    }
+  }
+
+  // Where each cell's two axes stand, and how tall each is.
+  const geometry = (r: number, c: number) => {
+    const row = lanes[r];
+    const col = lanes[c];
+    const [bx, w] = box(col);
+    const [by, h] = box(row);
+    const x = at.ox + bx;
+    const y = at.oy + by;
+    const inset = w * grid.inset;
+    const spanL = row.end - row.start;
+    const spanR = col.end - col.start;
+    const longest = Math.max(spanL, spanR);
+    const hL = detail.scale === 'true' ? (h * spanL) / longest : h;
+    const hR = detail.scale === 'true' ? (h * spanR) / longest : h;
+    return { x0: x + inset, x1: x + w - inset, y, hL, hR, row, col, spanL, spanR };
+  };
+
+  // The axes.
+  if (grid.axisAlpha > 0) {
+    const axes = new Path2D();
+    for (const r of rows) {
+      for (const c of cols) {
+        const g = geometry(r, c);
+        axes.moveTo(g.x0, g.y);
+        axes.lineTo(g.x0, g.y + g.hL);
+        axes.moveTo(g.x1, g.y);
+        axes.lineTo(g.x1, g.y + g.hR);
+      }
+    }
+    ctx.strokeStyle = rgba(rgbOf(palette.rule), grid.axisAlpha);
+    ctx.lineWidth = Math.max(0.5, width);
+    ctx.stroke(axes);
+  }
+
+  // The lines.
+  ctx.lineWidth = width;
+  ctx.lineCap = 'butt';
+  const ink = rgbOf(palette.text);
+  const shared = detail.colorBy === 'books' ? null : [0, 1].map(() => Array.from({ length: RAINBOW }, () => new Path2D()));
+  let drawn = 0;
+
+  for (const r of rows) {
+    for (const c of cols) {
+      const k = r * L + c;
+      const n = cells.counts[k];
+      if (!n) continue;
+      const g = geometry(r, c);
+      const reach = ((g.x1 - g.x0) / 2) * detail.curve;
+      const diag = r === c ? 1 : 0;
+      const own = shared ? null : new Path2D();
+
+      for (let j = cells.offsets[k]; j < cells.offsets[k + 1]; j++) {
+        const i = cells.links[j];
+        const sf = (data.from[i] - g.row.start + 0.5) / g.spanL;
+        const ya = g.y + sf * g.hL;
+        const yb = g.y + (((data.toStart[i] + data.toEnd[i] + 1) / 2 - g.col.start) / g.spanR) * g.hR;
+        const path = own ?? shared![diag][detail.colorBy === 'rainbow' ? Math.min(RAINBOW - 1, Math.floor(sf * RAINBOW)) : 0];
+        path.moveTo(g.x0, ya);
+        path.bezierCurveTo(g.x0 + reach, ya, g.x1 - reach, yb, g.x1, yb);
+        drawn++;
+      }
+
+      if (own) {
+        const alpha = grid.opacity * (diag ? grid.diagonal : 1);
+        const leave = detail.crossed ? g.col.rgb : g.row.rgb;
+        const land = detail.crossed ? g.row.rgb : g.col.rgb;
+        const gradient = ctx.createLinearGradient(g.x0, 0, g.x1, 0);
+        const half = detail.crossfadeWidth / 2;
+        const a = clamp01(detail.crossfadeAt - half);
+        const b = Math.max(a, clamp01(detail.crossfadeAt + half));
+        gradient.addColorStop(0, rgba(leave, alpha));
+        gradient.addColorStop(a, rgba(leave, alpha));
+        gradient.addColorStop(b, rgba(land, alpha));
+        gradient.addColorStop(1, rgba(land, alpha));
+        ctx.strokeStyle = gradient;
+        ctx.stroke(own);
+      }
+    }
+  }
+
+  if (shared) {
+    for (const diag of [0, 1]) {
+      const alpha = grid.opacity * (diag ? grid.diagonal : 1);
+      for (let bucket = 0; bucket < RAINBOW; bucket++) {
+        ctx.strokeStyle =
+          detail.colorBy === 'rainbow'
+            ? `hsla(${(bucket / RAINBOW) * 300}, 80%, ${palette.pale ? 42 : 62}%, ${alpha})`
+            : rgba(ink, alpha);
+        ctx.stroke(shared[diag][bucket]);
+        if (detail.colorBy === 'ink') break;
+      }
+    }
+  }
+  return drawn;
+}
+
+/** The whole grid, drawn once into an image. */
+export function paintGrid(
+  data: ConnectionsData,
+  cells: GridCells,
+  layout: GridLayout,
+  grid: GridConfig,
+  detail: DetailConfig,
   palette: ConnectionsPalette,
 ): { image: HTMLCanvasElement; ms: number } {
   const t0 = performance.now();
-  const S = grid.size;
-  const lanes = layout.lanes;
-
-  const laneOfPx = new Int16Array(S).fill(-1);
-  lanes.forEach((lane, i) => {
-    const a = Math.floor(lane.at * S);
-    const b = Math.min(S, Math.ceil((lane.at + lane.size) * S));
-    for (let p = a; p < b; p++) laneOfPx[p] = i;
-  });
-
-  const [br, bg, bb] = rgbOf(palette.bg);
-  const ink = rgbOf(palette.text);
-  const tint = config.cellTint;
-  const gain = config.brightness;
-  const curve = config.curve;
-  const diagonal = config.diagonal;
-
+  const S = Math.max(256, Math.round(grid.imageSize));
   const image = document.createElement('canvas');
   image.width = S;
   image.height = S;
   const ctx = image.getContext('2d')!;
-  const out = ctx.createImageData(S, S);
-  const px = out.data;
-  const counts = grid.counts;
-
-  for (let y = 0; y < S; y++) {
-    const ly = laneOfPx[y];
-    const rowBase = y * S;
-    for (let x = 0; x < S; x++) {
-      const o = (rowBase + x) * 4;
-      const lx = laneOfPx[x];
-      if (ly < 0 || lx < 0) {
-        px[o] = br;
-        px[o + 1] = bg;
-        px[o + 2] = bb;
-        px[o + 3] = 255;
-        continue;
-      }
-      const base = config.colorBy === 'source' ? lanes[ly].rgb : config.colorBy === 'target' ? lanes[lx].rgb : ink;
-      const cr = br + (base[0] - br) * tint;
-      const cg = bg + (base[1] - bg) * tint;
-      const cb = bb + (base[2] - bb) * tint;
-      let c = counts[rowBase + x];
-      let a = 0;
-      if (c > 0) {
-        if (ly === lx) c *= diagonal;
-        a = Math.pow(1 - Math.exp(-c * gain), curve);
-      }
-      px[o] = cr + (base[0] - cr) * a;
-      px[o + 1] = cg + (base[1] - cg) * a;
-      px[o + 2] = cb + (base[2] - cb) * a;
-      px[o + 3] = 255;
-    }
-  }
-  ctx.putImageData(out, 0, 0);
+  ctx.fillStyle = palette.bg;
+  ctx.fillRect(0, 0, S, S);
+  const all = layout.lanes.map((_, i) => i);
+  drawCells(ctx, data, cells, layout, grid, detail, palette, { ox: 0, oy: 0, unit: S }, all, all, grid.lineWidth);
   return { image, ms: performance.now() - t0 };
 }
 
@@ -519,6 +586,14 @@ export function bandAt(
   return null;
 }
 
+/** Everything the grid draws from. */
+export interface GridScene {
+  data: ConnectionsData;
+  cells: GridCells;
+  layout: GridLayout;
+  image: HTMLCanvasElement;
+}
+
 export interface GridDrawOptions {
   palette: ConnectionsPalette;
   view: GridView;
@@ -530,21 +605,34 @@ export interface GridDrawOptions {
   dimTo?: number;
 }
 
+export interface GridDrawStats {
+  /** True when the cells on screen were drawn live rather than from the image. */
+  live: boolean;
+  /** Lines on screen: drawn live, or the count that was too many to. */
+  lines: number;
+  ms: number;
+}
+
 /**
- * One frame: the cached image under the pan and zoom, then the pinned names.
- * Cheap enough to run on every pointer move.
+ * One frame: the grid under the pan and zoom, then the pinned names.
+ *
+ * Within the image's own resolution the cached image is drawn, which costs
+ * nothing. Zoomed past it, the cells on screen are drawn live if their lines
+ * fit under the limit, so they stay lines rather than blurring.
  */
 export function drawGrid(
   ctx: CanvasRenderingContext2D,
-  image: HTMLCanvasElement,
-  layout: GridLayout,
-  config: GridConfig,
+  scene: GridScene,
+  grid: GridConfig,
+  detail: DetailConfig,
   viewport: { width: number; height: number },
   opts: GridDrawOptions,
-): void {
+): GridDrawStats {
+  const t0 = performance.now();
   const { width: W, height: H } = viewport;
   const { palette, view } = opts;
-  const frame = gridFrame(viewport, config);
+  const { layout, image } = scene;
+  const frame = gridFrame(viewport, grid);
   const unit = frame.side * view.k;
   const gx = frame.left + view.x;
   const gy = frame.top + view.y;
@@ -556,15 +644,34 @@ export function drawGrid(
   ctx.beginPath();
   ctx.rect(frame.band, frame.band, W - frame.band, H - frame.band);
   ctx.clip();
-  // Zoomed past one image pixel per screen pixel, square pixels are honest:
-  // each one is a run of verses, and blurring them pretends to detail.
-  ctx.imageSmoothingEnabled = config.smooth || unit < image.width;
-  ctx.drawImage(image, gx, gy, unit, unit);
+
+  let live = false;
+  let lines = 0;
+  if (grid.sharpZoom && unit > image.width) {
+    // The lanes on screen, and how many lines their cells hold.
+    const seen = (axis: 'x' | 'y', lo: number, hi: number) =>
+      layout.lanes
+        .map((lane, i) => ({ i, edge: laneOnScreen(lane, frame, view, axis) }))
+        .filter(({ edge }) => edge[1] > lo && edge[0] < hi)
+        .map(({ i }) => i);
+    const cols = seen('x', frame.band, W);
+    const rows = seen('y', frame.band, H);
+    const L = layout.lanes.length;
+    for (const r of rows) for (const c of cols) lines += scene.cells.counts[r * L + c];
+    if (lines <= grid.liveLimit) {
+      live = true;
+      lines = drawCells(ctx, scene.data, scene.cells, layout, grid, detail, palette, { ox: gx, oy: gy, unit }, rows, cols, grid.lineWidth);
+    }
+  }
+  if (!live) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(image, gx, gy, unit, unit);
+  }
 
   if (opts.focus) {
     const lane = layout.lanes[opts.focus.lane];
     const [a, b] = laneOnScreen(lane, frame, view, opts.focus.axis === 'col' ? 'x' : 'y');
-    ctx.fillStyle = withAlpha(palette.bg, 1 - (opts.dimTo ?? 0.3));
+    ctx.fillStyle = rgba(rgbOf(palette.bg), 1 - (opts.dimTo ?? 0.3));
     if (opts.focus.axis === 'col') {
       ctx.fillRect(frame.band, frame.band, a - frame.band, H);
       ctx.fillRect(b, frame.band, W - b, H);
@@ -583,7 +690,8 @@ export function drawGrid(
   }
   ctx.restore();
 
-  drawBands(ctx, layout, config, frame, view, viewport, palette, opts.focus ?? null);
+  drawBands(ctx, layout, grid, frame, view, viewport, palette, opts.focus ?? null);
+  return { live, lines, ms: performance.now() - t0 };
 }
 
 /** The names, pinned to the top and left edges. */
@@ -668,7 +776,10 @@ function drawBands(
   ctx.fillText('to →', 4, 4 + size + 2);
 }
 
-function withAlpha(color: string, alpha: number): string {
-  const [r, g, b] = rgbOf(color);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+function rgba(c: readonly [number, number, number], a: number): string {
+  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
+}
+
+function clamp01(v: number): number {
+  return Math.min(1, Math.max(0, v));
 }

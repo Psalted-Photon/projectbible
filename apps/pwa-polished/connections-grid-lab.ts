@@ -18,12 +18,13 @@ import {
   bandAt,
   buildGridLayout,
   cellAt,
-  colorGrid,
-  countGrid,
   drawGrid,
+  paintGrid,
+  sortIntoCells,
   gridFrame,
   type GridConfig,
-  type GridCounts,
+  type GridCells,
+  type GridDrawStats,
   type GridLayout,
   type GridView,
 } from './src/lib/connections/grid';
@@ -72,14 +73,15 @@ let mode: 'grid' | 'detail' = 'grid';
 
 // ── Grid state ──
 let layout: GridLayout | null = null;
-let counts: GridCounts | null = null;
+let cells: GridCells | null = null;
 let image: HTMLCanvasElement | null = null;
-let colorMs = 0;
+let paintMs = 0;
+let lastGrid: GridDrawStats | null = null;
 let gridView: GridView = { x: 0, y: 0, k: 1 };
 let pickedCell: { row: number; col: number } | null = null;
 let focus: { axis: 'row' | 'col'; lane: number } | null = null;
-/** What the grid needs redone: the counting (and everything after), or just the coloring. */
-let gridStale: 'count' | 'color' | null = 'count';
+/** What the grid needs redone: sorting the links into cells (and the painting after), or just the painting. */
+let gridStale: 'count' | 'paint' | null = 'count';
 let gridStaleAt = 0;
 
 // ── Detail state ──
@@ -169,7 +171,7 @@ function refreshPalette() {
 // ── Building the grid image ──────────────────────────────────────────────
 
 /** Mark the grid image out of date. It is rebuilt shortly after the last change, not on every slider step. */
-function staleGrid(level: 'count' | 'color') {
+function staleGrid(level: 'count' | 'paint') {
   if (gridStale !== 'count') gridStale = level;
   gridStaleAt = performance.now();
   dirty = true;
@@ -177,16 +179,16 @@ function staleGrid(level: 'count' | 'color') {
 
 function rebuildGrid() {
   if (!data || !gridStale) return;
-  if (gridStale === 'count' || !layout || !counts) {
+  if (gridStale === 'count' || !layout || !cells) {
     layout = buildGridLayout(data, GRID);
-    counts = countGrid(data, GRID, layout);
+    cells = sortIntoCells(data, GRID, layout);
     // A different layout means different lanes; the old pick may point anywhere.
     pickedCell = null;
     focus = null;
   }
-  const colored = colorGrid(counts, GRID, layout, colors);
-  image = colored.image;
-  colorMs = colored.ms;
+  const painted = paintGrid(data, cells, layout, GRID, DETAIL, colors);
+  image = painted.image;
+  paintMs = painted.ms;
   gridStale = null;
   dirty = true;
   refreshStats();
@@ -213,12 +215,12 @@ function render(now: number) {
 
   if (mode === 'grid') {
     animating = false;
-    if (!image || !layout) {
+    if (!image || !layout || !cells) {
       ctx.fillStyle = colors.bg;
       ctx.fillRect(0, 0, W, H);
       return;
     }
-    drawGrid(ctx, image, layout, GRID, viewport, {
+    lastGrid = drawGrid(ctx, { data, cells, layout, image }, GRID, DETAIL, viewport, {
       palette: colors,
       view: gridView,
       picked: pickedCell,
@@ -261,10 +263,14 @@ function frame() {
     if (now > flashUntil) {
       const fps = Math.round((fpsFrames * 1000) / (now - fpsT0));
       fpsEl.style.whiteSpace = 'pre';
-      if (mode === 'grid' && counts) {
+      if (mode === 'grid' && cells && image) {
+        const g = lastGrid;
+        const how = g?.live
+          ? `drawn live · ${g.lines.toLocaleString()} lines · ${g.ms.toFixed(1)} ms/draw`
+          : `from the image${g && g.lines ? ` (${g.lines.toLocaleString()} lines on screen, too many to draw live)` : ''}`;
         fpsEl.textContent =
-          `${fps} fps · image ${counts.size}px\n` +
-          `count ${counts.ms.toFixed(0)} ms · color ${colorMs.toFixed(0)} ms · ${counts.links.toLocaleString()} links`;
+          `${fps} fps · ${how}\n` +
+          `image ${image.width}px built in ${(cells.ms + paintMs).toFixed(0)} ms · ${cells.passed.toLocaleString()} links`;
       } else if (mode === 'detail' && lastDetail && model) {
         const air = lastDetail.flying ? ' · flying' : '';
         fpsEl.textContent =
@@ -393,7 +399,7 @@ function tap(at: { x: number; y: number }) {
  * and dims the rest (tap it again to let go); a cell opens the detail.
  */
 function tapGrid(at: { x: number; y: number }) {
-  if (!layout || !counts) return;
+  if (!layout || !cells) return;
   const frame = gridFrame({ width: W, height: H }, GRID);
   const band = bandAt(layout, frame, gridView, at);
   if (band) {
@@ -413,11 +419,11 @@ function tapGrid(at: { x: number; y: number }) {
 
 /** Open the two-sided view for a pair of lanes. */
 async function openDetail(row: number, col: number) {
-  if (!data || !layout || !counts) return;
+  if (!data || !layout || !cells) return;
   const L = layout.lanes.length;
   const a = layout.lanes[row];
   const b = layout.lanes[col];
-  const n = counts.cells[row * L + col];
+  const n = cells.counts[row * L + col];
   picked =
     `<b style="color:${a.color}">${a.name}</b> → <b style="color:${b.color}">${b.name}</b><br>` +
     `${n.toLocaleString()} link${n === 1 ? '' : 's'}`;
@@ -687,15 +693,15 @@ function refreshPicked() {
 
 function refreshStats() {
   const box = document.getElementById('grid-stats');
-  if (box && counts) {
-    box.textContent = `${counts.links.toLocaleString()} links in the image, ${counts.size} × ${counts.size} pixels.`;
+  if (box && cells && image) {
+    box.textContent = `${cells.passed.toLocaleString()} links in the image, ${image.width} × ${image.height} pixels.`;
   }
 }
 
 /** Grid dials that change where things are or what is counted. */
 const recount = () => staleGrid('count');
-/** Grid dials that only change the colors. */
-const recolor = () => staleGrid('color');
+/** Dials that only change how the grid's lines are painted. */
+const repaint = () => staleGrid('paint');
 
 function buildDrawer() {
   drawer.innerHTML = '';
@@ -704,13 +710,28 @@ function buildDrawer() {
   el('div', { className: 'picked', id: 'picked' }, drawer);
   refreshPicked();
 
+  heading('Lines: grid and detail');
+  note('A grid cell is its detail view in miniature: the source book’s axis down its left edge, the target’s down its right, one line per link. These set how a line looks in both.');
+  slider('curve', () => DETAIL.curve, (v) => { DETAIL.curve = v; repaint(); }, 0, 1, 0.01,
+    '0 is straight. 1 leaves each verse level and lands level, like a ribbon.');
+  choice('color', ['books', 'rainbow', 'ink'] as const, () => DETAIL.colorBy, (v) => { DETAIL.colorBy = v; repaint(); },
+    { books: 'the two books', rainbow: 'by place in the source', ink: 'one ink' },
+    '“By place in the source” runs a rainbow down the left book, so a line can be followed across.');
+  checks([['crossed, like the arcs', () => DETAIL.crossed, (v) => { DETAIL.crossed = v; repaint(); }]]);
+  slider('swap point', () => DETAIL.crossfadeAt, (v) => { DETAIL.crossfadeAt = v; repaint(); }, 0, 1, 0.01,
+    'With the two books’ colors: where along the line the color changes over. Crossed, a line leaves wearing the other book’s color.');
+  slider('blend length', () => DETAIL.crossfadeWidth, (v) => { DETAIL.crossfadeWidth = v; repaint(); }, 0, 1, 0.01);
+  choice('axis length', ['fill', 'true'] as const, () => DETAIL.scale, (v) => { DETAIL.scale = v; repaint(); },
+    { fill: 'both full height', true: 'to scale' },
+    'To scale keeps a short book short beside a long one. Full height stretches both.');
+
   heading('Grid: layout');
-  note('Rows are where a link starts, columns are where it lands. Each cell is the two books verse by verse: source verses top to bottom, target verses left to right.');
+  note('Rows are where a link starts, columns are where it lands.');
   slider('book size', () => GRID.bookSize, (v) => { GRID.bookSize = v; recount(); }, 0, 1, 0.05,
     '0 gives every book the same row and column. 1 sizes them by verse count, so Psalms is 100 times Obadiah. Between bends toward it.');
   choice('groups', ['start', 'each', 'off'] as const, () => GRID.groups, (v) => { GRID.groups = v; recount(); },
     { start: 'together, first', each: 'before each group', off: 'none' },
-    'The seven group rows and columns: Law, History, Poetry, Prophets, Gospels (with Acts), Paul, Letters (with Revelation). Each one is all its books squeezed into one row.');
+    'The seven group rows and columns: Law, History, Poetry, Prophets, Gospels (with Acts), Paul, Letters (with Revelation). Each one is all its books on one axis.');
   slider('group size', () => GRID.groupSize, (v) => { GRID.groupSize = v; recount(); }, 0.5, 8, 0.1,
     'A group row, as a multiple of an average book row.');
   slider('gap', () => GRID.gap, (v) => { GRID.gap = v; recount(); }, 0, 0.6, 0.01,
@@ -718,58 +739,46 @@ function buildDrawer() {
   slider('group gap', () => GRID.groupGap, (v) => { GRID.groupGap = v; recount(); }, 0, 2, 0.05,
     'The wider gap where one group of books ends and the next begins.');
 
-  heading('Grid: dots');
+  heading('Grid: lines');
   slider('min votes', () => GRID.voteFloor, (v) => { GRID.voteFloor = v; recount(); }, 0, 100, 1,
-    'Hide links fewer readers voted for. 0 keeps every one.');
-  slider('dot size', () => GRID.dotSize, (v) => { GRID.dotSize = v; recount(); }, 1, 4, 1,
-    'Each link’s dot, in image pixels.');
-  choice('image size', ['1024', '2048', '3072', '4096'] as const, () => String(GRID.imageSize) as '2048', (v) => {
-    GRID.imageSize = Number(v);
-    recount();
-  }, undefined, 'The cached picture’s side. Bigger stays sharp further into a zoom, but takes longer to build and more memory. Each pixel at 2048 is about 15 verses.');
-  slider('brightness', () => GRID.brightness, (v) => { GRID.brightness = v; recolor(); }, 0.02, 3, 0.01,
-    'How fast a spot fills in as links pile onto it.');
-  slider('curve', () => GRID.curve, (v) => { GRID.curve = v; recolor(); }, 0.2, 2, 0.01,
-    'Below 1 lifts the faint single links; above 1 leaves only the busy spots bright.');
-  slider('diagonal', () => GRID.diagonal, (v) => { GRID.diagonal = v; recolor(); }, 0, 2, 0.01,
-    'Brightness where a book links to itself, compared to the rest. Those cells are the busiest by far and can drown everything else.');
-  choice('color', ['target', 'source', 'ink'] as const, () => GRID.colorBy, (v) => { GRID.colorBy = v; recolor(); },
-    { target: 'the column’s book', source: 'the row’s book', ink: 'one ink' });
-  slider('cell tint', () => GRID.cellTint, (v) => { GRID.cellTint = v; recolor(); }, 0, 0.4, 0.01,
-    'A faint wash of each cell’s color, so empty cells still show as cells.');
+    'Hide links fewer readers voted for. 0 keeps every one, which is a lot of lines.');
+  slider('line width', () => GRID.lineWidth, (v) => { GRID.lineWidth = v; repaint(); }, 0.1, 3, 0.05,
+    'In image pixels, and in screen pixels once zoomed in and drawn live.');
+  slider('opacity', () => GRID.opacity, (v) => { GRID.opacity = v; repaint(); }, 0.01, 1, 0.01,
+    'How solid one line is. Where many cross they add up, so a bright band means many links.');
+  slider('diagonal', () => GRID.diagonal, (v) => { GRID.diagonal = v; repaint(); }, 0, 2, 0.01,
+    'Lines where a book links to itself, compared to the rest. Those cells are the busiest by far and can drown everything else.');
+  slider('axis inset', () => GRID.inset, (v) => { GRID.inset = v; repaint(); }, 0, 0.3, 0.01,
+    'How far each cell’s two axes stand in from its edges.');
+  slider('axes', () => GRID.axisAlpha, (v) => { GRID.axisAlpha = v; repaint(); }, 0, 1, 0.01,
+    'How strongly the two axes in each cell are drawn. 0 leaves them out.');
+  slider('cell tint', () => GRID.cellTint, (v) => { GRID.cellTint = v; repaint(); }, 0, 0.4, 0.01,
+    'A faint wash of each cell in its column’s color, so empty cells still show.');
 
-  heading('Grid: names');
+  heading('Grid: image and zoom');
+  choice('image size', ['2048', '3072', '4096', '6144'] as const, () => String(GRID.imageSize) as '3072', (v) => {
+    GRID.imageSize = Number(v);
+    repaint();
+  }, undefined, 'The picture the grid is drawn into once. Bigger is sharper before the live drawing takes over, but slower to build and heavier on memory.');
+  checks([['draw sharp when zoomed in', () => GRID.sharpZoom, (v) => { GRID.sharpZoom = v; }]]);
+  slider('live limit', () => GRID.liveLimit, (v) => { GRID.liveLimit = v; }, 5000, 300000, 5000,
+    'Zoomed past the image, the cells on screen are drawn fresh so lines stay sharp, but only with no more than this many lines on screen. Lower it if zooming stutters.');
   slider('name size', () => GRID.labelSize, (v) => { GRID.labelSize = v; }, 8, 16, 0.5,
     'Book names along the top and left. They stay pinned to the edges as you pan.');
-  checks([['smooth when zoomed in', () => GRID.smooth, (v) => { GRID.smooth = v; }]]);
   el('p', { className: 'note', id: 'grid-stats' }, drawer);
   refreshStats();
 
   heading('Detail: layout');
-  note('Tap a grid cell to open it: the source book on the left, the target on the right, one line per link.');
-  choice('axis length', ['fill', 'true'] as const, () => DETAIL.scale, (v) => { DETAIL.scale = v; },
-    { fill: 'both full height', true: 'to scale' },
-    'To scale keeps a short book short beside a long one. Full height stretches both.');
+  note('Tap a grid cell to open it: the source book on the left, the target on the right.');
   slider('side room', () => DETAIL.sideRoom, (v) => { DETAIL.sideRoom = v; }, 0.05, 0.45, 0.01,
     'Room outside each axis for its numbers and headings, as a share of the width.');
   slider('min votes', () => DETAIL.voteFloor, (v) => { DETAIL.voteFloor = v; rebuildDetail(); }, 0, 100, 1,
     'Hide links fewer readers voted for.');
-
-  heading('Detail: lines');
-  slider('curve', () => DETAIL.curve, (v) => { DETAIL.curve = v; }, 0, 1, 0.01,
-    '0 is straight. 1 leaves each verse level and lands level, like a ribbon.');
   slider('thickness', () => DETAIL.thickness, (v) => { DETAIL.thickness = v; }, 0.1, 4, 0.05);
   slider('opacity', () => DETAIL.opacity, (v) => { DETAIL.opacity = v; }, 0.02, 1, 0.01,
     'How solid each line is. Where many cross they add up.');
   slider('dim floor', () => DETAIL.dimFloor, (v) => { DETAIL.dimFloor = v; }, 0, 1, 0.01,
     'While something is lit, how faint the rest goes, as a share of the opacity. 0 hides them.');
-  choice('color', ['books', 'rainbow', 'ink'] as const, () => DETAIL.colorBy, (v) => { DETAIL.colorBy = v; },
-    { books: 'the two books', rainbow: 'by place in the source', ink: 'one ink' },
-    '“By place in the source” runs a rainbow down the left book, so a line can be followed across.');
-  checks([['crossed, like the arcs', () => DETAIL.crossed, (v) => { DETAIL.crossed = v; }]]);
-  slider('swap point', () => DETAIL.crossfadeAt, (v) => { DETAIL.crossfadeAt = v; }, 0, 1, 0.01,
-    'With the two books’ colors: where along the line the color changes over.');
-  slider('blend length', () => DETAIL.crossfadeWidth, (v) => { DETAIL.crossfadeWidth = v; }, 0, 1, 0.01);
 
   heading('Detail: axes');
   slider('axis width', () => DETAIL.axisWidth, (v) => { DETAIL.axisWidth = v; }, 0.5, 6, 0.1);
@@ -806,7 +815,7 @@ function buildDrawer() {
   choice('theme', ['reader', 'dark', 'light', 'sepia'] as const, () => themeName, (v) => {
     themeName = v;
     refreshPalette();
-    recolor();
+    repaint();
   }, { reader: 'the app’s theme' });
 
   heading('Copy values', { label: 'Copy', onClick: copyValues });
