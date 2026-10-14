@@ -922,6 +922,9 @@ function drawRuler(
   // Where two names would collide the wider book wins — at rest the twelve
   // minor prophets share about forty pixels and can't all be named — and the
   // rest appear as you zoom in and they get room.
+  //
+  // Letters wear the same edge as the chapter numbers. The edge is what keeps
+  // a divider from striking through a name; no block behind the letters.
   ctx.textBaseline = 'middle';
   const top = BAR_MAX + NAME_GAP;
 
@@ -946,29 +949,23 @@ function drawRuler(
     if (names.some((p) => p.to > from && p.from < to)) continue;
     names.push({ book: n.book, from, to });
 
-    // The dividers run through the name band, so a name sitting over one is
-    // given its own ground first — otherwise a short book's name is struck
-    // through by the lines either side of it.
-    ctx.fillStyle = palette.bg;
-    ctx.beginPath();
     // Centered in the band, so a name that couldn't reach the full height
     // (the clamps on letter size) sits in the middle rather than up top.
-    const stack = name.length * size;
-    const nameTop = horizontal ? top + (config.nameHeight - stack) / 2 : top;
-    if (horizontal) rect(from, nameTop, column, stack);
-    else rect(from, top, column, ctx.measureText(name).width);
-    ctx.fill();
+    const nameTop = horizontal ? top + (config.nameHeight - name.length * size) / 2 : top;
     ctx.fillStyle = nameColor(BOOK_RGB[n.book] ?? [138, 143, 152], palette);
     if (horizontal) {
       ctx.textAlign = 'center';
       for (let i = 0; i < name.length; i++) {
         if (name[i] === ' ') continue;
-        ctx.fillText(name[i], n.mid, rule + nameTop + i * size + size / 2);
+        const y = rule + nameTop + i * size + size / 2;
+        if (edge > 0) ctx.strokeText(name[i], n.mid, y);
+        ctx.fillText(name[i], n.mid, y);
       }
     } else {
       // A vertical axis runs down the screen already, so the name reads across
       // it as an ordinary word.
       ctx.textAlign = 'left';
+      if (edge > 0) ctx.strokeText(name, rule + top, n.mid);
       ctx.fillText(name, rule + top, n.mid);
     }
   }

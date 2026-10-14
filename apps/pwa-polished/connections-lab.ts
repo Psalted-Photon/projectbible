@@ -786,11 +786,11 @@ function buildDrawer() {
     'Chapter numbers sit at the tip of each bar, and climb their own bar where two would overlap. They show once a chapter is wide enough: zoom in, or lengthen the line.',
   );
   slider(
-    'number outline',
+    'outline',
     () => CONFIG.numberOutline,
     (v) => { CONFIG.numberOutline = v; },
     0, 4, 0.1,
-    'The dark edge around each number (light on a light theme), so it reads on top of its own bar. 0 is no edge.',
+    'The dark edge around each chapter number and book-name letter (light on a light theme), so they read on top of the bars and dividers. 0 is no edge.',
   );
   slider(
     'name height',

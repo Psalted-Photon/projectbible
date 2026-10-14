@@ -63,10 +63,16 @@ export interface ConnectionsLights {
 
 /** What the app ships, and what the lab's Reset puts back. */
 export const LIGHTS: ConnectionsLights = {
-  open: { flightMs: 900, staggerMs: 1500 },
-  tap: { flightMs: 650, staggerMs: 250 },
+  open: {
+    flightMs: 1150,
+    staggerMs: 4000,
+  },
+  tap: {
+    flightMs: 1150,
+    staggerMs: 4000,
+  },
   openOnLoad: true,
-  dotSize: 1.8,
+  dotSize: 0.6,
 };
 
 /**
