@@ -675,6 +675,11 @@ const SOURCE_FIXES = {
     // eBible's KJV keeps <wj> open through "And the common people heard him gladly."
     'MRK:12:37': [{ text: 'David therefore himself calleth him Lord; and whence is he then his son?' }],
   },
+  net: {
+    // WEB reports this as indirect speech ("he asked him if he saw anything"),
+    // so NET had no WEB span to borrow for its direct question.
+    'MRK:8:23': [{ text: '“Do you see anything?”' }],
+  },
 };
 
 // ── Run alignment ─────────────────────────────────────────────────────────────
@@ -695,8 +700,10 @@ for (const { id, getter } of translations) {
   let aligned = 0, skipped = 0;
 
   const sourceSpans = (id === 'kjv') ? kjvWjSpans : (id === 'bsb') ? bsbWjSpans : wjSpans;
-  for (const [key, sourceDefs] of Object.entries(sourceSpans)) {
-    const spanDefs = SOURCE_FIXES[id]?.[key] ?? sourceDefs;
+  // A fix can name a verse the source never marked, so walk those too.
+  const keys = new Set([...Object.keys(sourceSpans), ...Object.keys(SOURCE_FIXES[id] ?? {})]);
+  for (const key of keys) {
+    const spanDefs = SOURCE_FIXES[id]?.[key] ?? sourceSpans[key];
     // NET has no <wj> markup of its own; it borrows WEB's spans.
     const ownSpans = id !== 'net';
     const webText = webByKey[key];
