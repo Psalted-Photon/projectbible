@@ -20,5 +20,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "tree-motion-lab.ts", "connections-lab.ts"]
+  "include": ["src", "tree-motion-lab.ts", "connections-lab.ts", "connections-grid-lab.ts"]
 }
