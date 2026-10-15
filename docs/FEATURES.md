@@ -199,6 +199,21 @@ Built on the *Treasury of Scripture Knowledge*, the classic cross-reference coll
 - **Tap a marker** to see every passage connected to that word, each one a link.
 - **Shorthand is resolved for you** — a reference written "3:14,15" or just "31" is understood relative to the book and chapter you're reading, and lands you in the right place.
 
+### Connections
+
+A window that draws every cross-reference in the Bible at once: 344,799 links from OpenBible.info, each with the votes readers gave it. It needs the free Connections pack.
+
+- **Arcs** — the whole Bible as one line, Genesis to Revelation, with an arc for every link. Tap a book, a chapter or drag across a range to light its arcs and dim the rest. Tap an arc to see its two verses.
+- **Grid** — every book against every other book, with group rows and columns (Law, History, Wisdom/Poetry, Prophets, Gospels, Pauline Epistles, General Epistles). Tap a square to open that pair.
+- **Detail** — two books side by side, with one line per link from the first to the second.
+- **Chord** — the 66 books around a ring, with a ribbon between each pair as wide as its links. Tap a book to keep only its ribbons and see its busiest partners. Tap a ribbon to open that pair on Detail.
+- **Links shown** — leave out links with few votes, or keep only the most-voted.
+- **Sets** — gather verses, chapters or books into a named set with its own color, and only the links touching it light in that color. Ready-made sets cover Old Testament quotes in the New, parallel accounts, and your highlight colors.
+- **Saved views** — keep a tab with its settings and sets, synced to your account.
+- **Save as image** — any tab as a large picture with its title and the irisBible mark, to save or share.
+- **Black or cream** behind the picture, whatever the theme. Pan, zoom, and full screen too.
+- **Connections strip in the reader** — under each chapter title, a thin line of the whole Bible with an arc to everywhere that chapter reaches. Tap it to open the Arcs tab with that chapter already lit. It shows only when the pack is installed, and Settings has a switch to turn it off.
+
 ## 9. Search
 
 Two ways to search, depending on how hard the question is.
