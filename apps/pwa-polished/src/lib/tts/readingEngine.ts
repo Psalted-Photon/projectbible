@@ -137,6 +137,16 @@ const GAP_AFTER = 2;
 const HEADING_GAP_BEFORE = 1;
 const HEADING_GAP_AFTER = 0.5;
 
+/** Silence between paragraphs of plain text, in seconds. */
+const PARAGRAPH_GAP = 0.7;
+
+/**
+ * Longest piece of plain text handed to the voice in one go. Piper does not
+ * break long input up on its own, and a short first piece is what keeps the
+ * wait before the first word as short as it is for a verse.
+ */
+const MAX_CHUNK_CHARS = 300;
+
 /** Fallback pace before any real audio has been measured (seconds per character). */
 const DEFAULT_SECONDS_PER_CHAR = 0.067;
 
@@ -175,11 +185,28 @@ export interface Passage {
 }
 
 /**
- * One thing to speak: a verse of scripture, a section heading, or a spoken
- * chapter announcement.
+ * One piece of plain text to read — a commentary chapter, a devotional. Its
+ * paragraphs are read in order, with no verse numbers and nothing lit on the
+ * page.
+ */
+export interface TextPassage {
+  /** Short, for the player and the lock screen: "Spurgeon · John 3". */
+  title: string;
+  paragraphs: string[];
+}
+
+/**
+ * Which kind of reading is going on. The reader, its top-bar controls and the
+ * session restore act only on 'bible'; plain text has the floating player.
+ */
+export type ReadingSource = { kind: 'bible' } | { kind: 'text'; title: string };
+
+/**
+ * One thing to speak: a verse of scripture, a section heading, a spoken
+ * chapter announcement, or a piece of a paragraph of plain text.
  */
 interface Utterance {
-  kind: 'verse' | 'heading' | 'announce';
+  kind: 'verse' | 'heading' | 'announce' | 'paragraph';
   text: string;
   book: string;
   chapter: number;
@@ -191,6 +218,14 @@ interface Utterance {
   verse: number | null;
   /** The verse a heading sits above, so the counter does not drop to zero. */
   headingFor?: number;
+  /**
+   * Plain text only: which paragraph this piece belongs to, counted across the
+   * whole run. A long paragraph is spoken in several pieces that share one
+   * number, so skipping moves a paragraph at a time, not a sentence.
+   */
+  paragraph?: number;
+  /** Plain text only: the title of its passage, for the player. */
+  title?: string;
   /**
    * Which passage of the playlist this belongs to.
    *
@@ -248,6 +283,8 @@ export interface ReadingPosition {
 // ── public state ────────────────────────────────────────────────────────────
 
 export const readingState = writable<ReadingState>('idle');
+
+export const readingSource = writable<ReadingSource>({ kind: 'bible' });
 export const readingError = writable<string>('');
 
 export const readingPosition = writable<ReadingPosition | null>(null);
@@ -327,6 +364,16 @@ let tailChapter = 0;
 let playlist: Passage[] | null = null;
 /** Index of the passage at the tail of the queue, for keying progress. */
 let tailPassageIndex = 0;
+/**
+ * Plain text: where the next passage comes from once this one runs out, or
+ * null to stop at the end. Only asked when auto-advance is on — it never falls
+ * through into Bible order.
+ */
+let textNext: (() => Promise<TextPassage | null>) | null = null;
+/** True while reading plain text rather than scripture. */
+let textMode = false;
+/** Paragraphs numbered so far in this run. */
+let paragraphCount = 0;
 let currentUrl: string | null = null;
 /** Element events are ours, not the user's, while a segment is being swapped. */
 let swapping = false;
@@ -343,6 +390,8 @@ let failedInARow = 0;
 const MAX_FAILED_IN_A_ROW = 3;
 /** Set by the sleep timer's "end of chapter": stop once we leave this chapter. */
 let stopAfterChapter: { book: string; chapter: number } | null = null;
+/** The same for plain text, where a "chapter" is one passage. */
+let stopAfterPassage: number | null = null;
 
 function secondsPerChar(): number {
   if (measuredChars < 200) return DEFAULT_SECONDS_PER_CHAR;
@@ -603,6 +652,74 @@ async function loadGreekVerses(
   return out;
 }
 
+// ── plain text ──────────────────────────────────────────────────────────────
+
+/**
+ * Cut a paragraph into pieces of at most MAX_CHUNK_CHARS, breaking at sentence
+ * ends. A single sentence longer than that is broken at a comma or semicolon,
+ * and failing that at a space.
+ */
+export function splitForSpeech(text: string): string[] {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  if (clean.length <= MAX_CHUNK_CHARS) return [clean];
+
+  // Split only at a space after a stop, so "3.16" and "e.g." stay whole and
+  // nothing between the pieces is lost.
+  const sentences = clean.split(/(?<=[.!?]["'\u201d\u2019)\]]*)\s+/);
+  const pieces: string[] = [];
+  let current = '';
+  for (const raw of sentences) {
+    for (const sentence of breakLong(raw.trim())) {
+      if (current && current.length + 1 + sentence.length > MAX_CHUNK_CHARS) {
+        pieces.push(current);
+        current = sentence;
+      } else {
+        current = current ? `${current} ${sentence}` : sentence;
+      }
+    }
+  }
+  if (current) pieces.push(current);
+  return pieces;
+}
+
+/** One over-long sentence as pieces that each fit. */
+function breakLong(sentence: string): string[] {
+  const out: string[] = [];
+  let rest = sentence;
+  while (rest.length > MAX_CHUNK_CHARS) {
+    const window = rest.slice(0, MAX_CHUNK_CHARS);
+    let cut = Math.max(window.lastIndexOf('; '), window.lastIndexOf(', '));
+    if (cut < MAX_CHUNK_CHARS / 3) cut = window.lastIndexOf(' ');
+    if (cut <= 0) cut = MAX_CHUNK_CHARS - 1;
+    out.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1).trim();
+  }
+  if (rest) out.push(rest);
+  return out;
+}
+
+/**
+ * A passage of plain text as utterances. `lead` is the silence before its
+ * first word: none for a start you asked for, a chapter's pause for a handoff.
+ */
+function textUtterances(passage: TextPassage, passageIndex: number, lead: number): Utterance[] {
+  const out: Utterance[] = [];
+  for (const paragraph of passage.paragraphs) {
+    const pieces = splitForSpeech(paragraph);
+    if (pieces.length === 0) continue;
+    const number = paragraphCount++;
+    pieces.forEach((text, i) => {
+      out.push({
+        kind: 'paragraph', text, book: '', chapter: 0, verse: null,
+        paragraph: number, title: passage.title, passageIndex,
+        gapBefore: i > 0 ? 0 : out.length === 0 ? lead : PARAGRAPH_GAP,
+      });
+    });
+  }
+  return out;
+}
+
 /**
  * Append what comes next. False at the end of the road.
  *
@@ -611,6 +728,21 @@ async function loadGreekVerses(
  * playback stops at the end of the day instead of rolling onward.
  */
 async function extendQueue(): Promise<boolean> {
+  // Plain text asks its own source for more, and nothing else. Running out of
+  // it ends the reading; it never carries on into a Bible chapter.
+  if (textMode) {
+    if (!textNext) return false;
+    const next = await textNext();
+    if (!next) return false;
+    const utterances = textUtterances(next, tailPassageIndex + 1, GAP_BEFORE);
+    // Nothing speakable in it — try the one after, as a playlist does.
+    if (utterances.length === 0) return extendQueue();
+    tailPassageIndex++;
+    queue = [...queue, ...utterances];
+    console.log(`🔊 Read Aloud queued ${next.title}`);
+    return true;
+  }
+
   if (playlist) {
     const next = playlist.shift();
     if (!next) return false;
@@ -1066,6 +1198,11 @@ function updatePositionFromClock(): void {
   if (!mark) return;
   const u = mark.utterance;
 
+  if (u.kind === 'paragraph') {
+    updateTextPositionFromClock(mark);
+    return;
+  }
+
   // "End of chapter" beats auto-advance — stop the moment we leave it.
   if (stopAfterChapter && (u.book !== stopAfterChapter.book || u.chapter !== stopAfterChapter.chapter)) {
     stopAfterChapter = null;
@@ -1102,6 +1239,36 @@ function updatePositionFromClock(): void {
 
   // Progress through the chapter: where this utterance starts, plus how far
   // into it we are. Exact, even though the chapter total is an estimate.
+  const into = Math.max(0, getSharedTtsAudio().currentTime - mark.startSeconds);
+  const position = (u.chapterOffset ?? 0) + into;
+  chapterProgress.set({ position, duration: Math.max(position, estimateChapterSeconds(u.passageIndex)) });
+}
+
+/**
+ * Plain text's half of the above. No verse is being read, so the reader's
+ * position, highlight and glow are left empty — that is what keeps the Bible
+ * page from following along. Only the title and the progress move.
+ */
+function updateTextPositionFromClock(mark: Mark): void {
+  const u = mark.utterance;
+
+  if (stopAfterPassage !== null && u.passageIndex !== stopAfterPassage) {
+    stopAfterPassage = null;
+    cancelSleepTimer();
+    stopReading();
+    return;
+  }
+
+  const key = `${u.passageIndex}|p${u.paragraph}`;
+  if (key !== lastVerseKey) {
+    lastVerseKey = key;
+    const title = u.title ?? '';
+    const source = get(readingSource);
+    if (source.kind !== 'text' || source.title !== title) {
+      readingSource.set({ kind: 'text', title });
+    }
+  }
+
   const into = Math.max(0, getSharedTtsAudio().currentTime - mark.startSeconds);
   const position = (u.chapterOffset ?? 0) + into;
   chapterProgress.set({ position, duration: Math.max(position, estimateChapterSeconds(u.passageIndex)) });
@@ -1305,6 +1472,73 @@ export async function startReadingPlaylist(
   }
 }
 
+/**
+ * Begin reading plain text — a commentary chapter, a devotional.
+ *
+ * The same engine and the same voice as scripture: the voice check, the head
+ * start, the stitching, pause, stop and the sleep timer all work unchanged.
+ * `next` is asked for the following passage when this one runs out, and only
+ * while auto-advance is on; leave it out to stop at the end.
+ *
+ * Must be called from a user gesture, for the same reason as `startReading`.
+ */
+export async function startReadingText(
+  passage: TextPassage,
+  next?: () => Promise<TextPassage | null>
+): Promise<void> {
+  unlockTtsAudio();
+
+  stopReading();
+  const gen = ++generation;
+
+  const settings = getTtsSettings();
+  translation = '';
+  voiceId = settings.voiceId;
+  rate = settings.rate;
+  greekPronunciation = settings.greekPronunciation;
+  bilingualReading = settings.bilingualReading;
+
+  textMode = true;
+  readingSource.set({ kind: 'text', title: passage.title });
+  readingState.set('starting');
+  readingError.set('');
+
+  try {
+    if (!(await isVoiceInstalled(voiceId))) {
+      readingState.set('voice-needed');
+      return;
+    }
+    if (gen !== generation) return;
+
+    const utterances = textUtterances(passage, 0, 0);
+    if (utterances.length === 0) {
+      readingState.set('error');
+      readingError.set('There is nothing here to read aloud.');
+      return;
+    }
+
+    queue = utterances;
+    renderCursor = 0;
+    segments = [];
+    segmentIndex = 0;
+    tailPassageIndex = 0;
+    // Set last, as with a playlist: nothing may extend the queue before the
+    // first passage is in it.
+    textNext = next ?? null;
+    lastVerseKey = '';
+    recomputeChapterOffsets(0);
+
+    await buildHeadStart(gen);
+    if (gen !== generation) return;
+
+    await playSegment(gen);
+  } catch (err: any) {
+    if (gen !== generation) return;
+    readingState.set('error');
+    readingError.set(err?.message ?? 'Could not start reading.');
+  }
+}
+
 export function pauseReading(): void {
   if (get(readingState) !== 'playing') return;
   getSharedTtsAudio().pause();
@@ -1442,6 +1676,48 @@ export function skipChapter(direction: 1 | -1): void {
   void startReading(translation, next.book, next.chapter);
 }
 
+/**
+ * Plain text: back or forward one paragraph.
+ *
+ * Back restarts the paragraph being read once it is a few seconds in, and goes
+ * to the one before only when it has just begun — the way a music player's back
+ * button treats a song. Built the same way as `jumpToVerse`: a seek when the
+ * paragraph is already rendered, a re-plan from there when it is not.
+ */
+export function skipParagraph(direction: 1 | -1): void {
+  if (!textMode) return;
+  const here = currentMark()?.utterance.paragraph;
+  if (here === undefined) return;
+
+  let target = here + direction;
+  if (direction === -1) {
+    // Measured from the paragraph's first piece. One that began in an earlier
+    // segment has been playing a while, so it counts as well under way.
+    const start = locate((u) => u.paragraph === here);
+    const into = start && start.index === segmentIndex
+      ? getSharedTtsAudio().currentTime - start.at
+      : Infinity;
+    if (into > 3) target = here;
+  }
+  if (target < 0) target = 0;
+
+  const found = locate((u) => u.paragraph === target);
+  if (found) {
+    seekTo(found);
+    return;
+  }
+
+  const index = queue.findIndex((u) => u.paragraph === target);
+  if (index === -1) return;
+
+  const gen = ++generation;
+  renderCursor = index;
+  segments = [];
+  segmentIndex = 0;
+  lastVerseKey = '';
+  void playSegment(gen);
+}
+
 /** Stop, and release everything — nothing should linger in memory. */
 export function stopReading(): void {
   generation++;
@@ -1466,6 +1742,10 @@ export function stopReading(): void {
   tailChapter = 0;
   tailPassageIndex = 0;
   playlist = null;
+  textNext = null;
+  textMode = false;
+  paragraphCount = 0;
+  stopAfterPassage = null;
   lastVerseKey = '';
   measuredChars = 0;
   measuredSeconds = 0;
@@ -1481,6 +1761,7 @@ export function stopReading(): void {
   chapterProgress.set(null);
   currentVerseWindow.set(null);
   ttsCurrentVerse.set(null);
+  readingSource.set({ kind: 'bible' });
 }
 
 // ── keeping in step with the element ────────────────────────────────────────
@@ -1556,6 +1837,11 @@ sleepStopNonce.subscribe((nonce) => {
 stopAtChapterEnd.subscribe((armed) => {
   if (!armed) {
     stopAfterChapter = null;
+    stopAfterPassage = null;
+    return;
+  }
+  if (textMode) {
+    stopAfterPassage = currentMark()?.utterance.passageIndex ?? null;
     return;
   }
   const position = get(readingPosition);
