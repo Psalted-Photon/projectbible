@@ -200,6 +200,16 @@ function patternOf(strongsId: string): Promise<RegExp | null> {
   return found;
 }
 
+/** True when the number's English covers `offset` in `text`: the same match, run the other way. */
+export async function meansAt(strongsId: string, text: string, offset: number): Promise<boolean> {
+  const pattern = await patternOf(strongsId);
+  if (!pattern) return false;
+  for (const m of text.matchAll(pattern)) {
+    if (m.index! <= offset && offset < m.index! + m[0].length) return true;
+  }
+  return false;
+}
+
 /**
  * Where a number's English sits in each verse text: one list of spans per
  * text, all empty unless the match is unambiguous. `marked` is how many words

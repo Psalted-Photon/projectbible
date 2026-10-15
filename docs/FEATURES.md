@@ -106,7 +106,7 @@ A toolbar button toggles it while you read. The same controls also live in Setti
 
 ### 4.3 The layers
 
-- **English gloss** — the English equivalent under each word. Always on; it's the point of an interlinear.
+- **English gloss** — the English equivalent under each word. Always on; it's the point of an interlinear. Hebrew glosses come from the Strong's dictionary's short definition (בָּרָא in Genesis 1:1 reads "to create"), because the Hebrew word data's own glosses are often wrong.
 - **Transliteration** — how the word is pronounced, in English letters.
 - **Lemma** — the dictionary form of the word, as you'd look it up.
 - **Strong's number** — the standard reference number for the word.
@@ -118,14 +118,14 @@ Tap any word in the text to open a full study panel for it. Works on English wor
 
 ### 5.1 For Greek and Hebrew words
 
-Tap a Greek or Hebrew word and the Dictionary shows its grammar: the word as written, its dictionary form, transliteration, English meaning and parsing. Its Strong's number opens the full entry in **Strong's**, one tab over — or tap the number under the word in the ring to go straight there. The entry holds:
+Tap a Greek or Hebrew word and the Dictionary shows its grammar: the word as written, its dictionary form, transliteration, English meaning and parsing. Its Strong's number opens the full entry in **Strong's**, one tab over — or tap the number under the word in the ring to go straight there. That pill reads word · number · meaning. Tapping an English word in KJV, BSB, WEB or NET does the same when the Word Links pack knows the Greek or Hebrew behind it (tap "loved" in John 3:16 and the pill reads "ἀγαπάω · G25 · to love"); in other English translations the pill appears only when exactly one word in the original verse means the word you tapped. Nothing is drawn on the verse. The entry's header line and its back trail also carry the meaning. The entry holds:
 
 - **Entry information** — the word, its transliteration, its dictionary form, and its Strong's number.
 - **Short definition** — the quick answer.
 - **Full definition** — the complete lexicon entry.
 - **KJV usage** — every way the King James Version rendered this word, which shows its range of meaning at a glance.
 - **Derivation** — the root the word comes from.
-- **Inflection forms** — the other forms this word takes across the text.
+- **Inflection forms** — the other forms this word takes across the text, each Greek form with its transliteration.
 - **Occurrences** — every verse in the Bible using this word, so you can see how it's actually used rather than only how it's defined. Tap a verse to read it. Where the Hebrew or the Septuagint numbers a verse differently from your Bible (Hebrew Malachi 3:19 is English 4:1, and a psalm's title is a verse of its own in Hebrew), the reader still opens on the right verse.
 - **The Greek your English came from** — when a word appears in more than one Greek text, the list opens on the one your translation was made from: SBLGNT for NET and BSB, the Textus Receptus for the KJV, the Byzantine for the rest. Reading a Greek text, it opens on that one.
 - **English under each verse** — on the Forms and Occurrences tabs, each Greek or Hebrew verse has the same verse in English beneath it: the translation you're reading, or your Settings default when you're reading Greek or Hebrew, or NET. Its own verse number shows when it differs (Hebrew Malachi 3:19 shows NET 4:1), and a Hebrew psalm title shows only the English title. The word you looked up is marked in the English too, in the same orange, whenever the verse leaves no doubt which English word it is; when it's unclear, nothing is marked. Where a translation leaves a verse out (Matthew 17:21 in NET), it says so and shows the KJV instead. The **English** button beside the count turns this off or on everywhere at once, and the choice follows your account.

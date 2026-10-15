@@ -37,6 +37,7 @@
     languageName,
     partOfSpeechText,
     glossTerm,
+    glossHead,
     isRtl,
     displayId,
     classicId,
@@ -127,7 +128,12 @@
   $: canSay = !!entry && entry.language === "greek" && canSpeakGreek();
   $: entry, (speakStatus = null);
   $: subtitle = entry
-    ? [languageName(entry), entry.transliteration, entry.partOfSpeech ? partOfSpeechText(entry.partOfSpeech) : ""]
+    ? [
+        languageName(entry),
+        entry.transliteration,
+        glossHead(entry.shortDefinition ?? ""),
+        entry.partOfSpeech ? partOfSpeechText(entry.partOfSpeech) : "",
+      ]
         .filter(Boolean)
         .join("  ·  ")
     : "";
@@ -212,10 +218,17 @@
     openEntry(stop.id);
   }
 
+  /** How an entry reads on the back trail: "G25 ἀγαπάω · to love". */
+  function crumbName(e: StrongsEntryData): string {
+    const gloss = glossHead(e.shortDefinition ?? "");
+    const head = `${displayId(e.id)} ${firstForm(e.lemma)}`;
+    return gloss ? `${head} · ${gloss}` : head;
+  }
+
   /** Follow a link inside the entry, leaving this one on the trail. */
   function followEntry(id: string) {
     if (entry && id !== entry.id) {
-      trail = [...trail, { id: entry.id, name: `${displayId(entry.id)} ${firstForm(entry.lemma)}` }];
+      trail = [...trail, { id: entry.id, name: crumbName(entry) }];
     }
     openEntry(id);
   }
@@ -436,7 +449,7 @@
           <button class="crumb" on:click={() => popTrailTo(i)}>{stop.name}</button>
           <span class="crumb-sep"><CaretRight size="1em" weight="bold" class="ph-inline" /></span>
         {/each}
-        {#if entry}<span class="crumb here">{displayId(entry.id)} {firstForm(entry.lemma)}</span>{/if}
+        {#if entry}<span class="crumb here">{crumbName(entry)}</span>{/if}
       </nav>
     {/if}
     <div class="strongs-body" bind:this={bodyEl}>

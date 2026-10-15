@@ -116,6 +116,8 @@
   import { applyChapterHighlights } from "../lib/highlightRenderer";
   import { isTextEntry } from "../lib/isTextEntry";
   import { openStrongsWord } from "../lib/openWork";
+  import { glossFor } from "../lib/strongs/entry";
+  import { cleanOffsetOf, originalAt } from "../lib/wordLinks";
   import { isOriginalLanguage, isHebrewText as isHebrewTranslation, isEnglishTranslation } from "../lib/translationKind";
   import {
     resolveWordAt,
@@ -1141,6 +1143,10 @@
   let selectedIsPerson = false;
   /** Guards against a slow person lookup landing after the next word click. */
   let personLabelToken = 0;
+  /** The Strong's number behind a tapped English word (Word Links), or "". */
+  let selectedLink = "";
+  /** Guards against a slow word-link lookup landing after the next word click. */
+  let wordLinkToken = 0;
   /** Located places tied to the clicked character. Empty means no Map seat. */
   let selectedPersonPlaces: { name: string; latitude: number; longitude: number; modernName?: string | null; placeType?: string | null }[] = [];
   /** Clicked word resolved to an ISBE place/entry — relabels Define → More Info. */
@@ -2394,8 +2400,16 @@
   // (Hebrew has none at all), so fall back to the Strong's lexicon's
   // dictionary-form transliteration for any word that has a Strong's id.
   // Mutates the entries in place before interlinear HTML is baked; a missing
-  // Lexical pack just leaves the fields empty.
+  // Lexical pack just leaves the fields empty. Hebrew glosses are swapped for
+  // the lexicon's too (see glossFor): the Hebrew word data's own are often wrong.
   async function fillMissingTransliterations(entries: DBMorphology[]) {
+    await Promise.all(
+      entries
+        .filter((m) => m.strongsId && (m.language === "hebrew" || m.language === "aramaic"))
+        .map(async (m) => {
+          m.gloss_en = await glossFor(m.strongsId, m.gloss_en || m.gloss, m.language);
+        }),
+    );
     try {
       const missing = entries.filter((m) => !m.transliteration && m.strongsId);
       if (missing.length === 0) return;
@@ -4261,6 +4275,8 @@
     selectedContext = null;
     selectedMeasureCtx = null;
     selectedMorphology = null;
+    selectedLink = "";
+    wordLinkToken++;
     selectionMode = "word";
 
     refreshSelectionFromPair();
@@ -4435,6 +4451,8 @@
     // Find the verse text container
     const verseText = target.closest(".verse-text");
     if (!verseText) return;
+    selectedLink = "";
+    const linkToken = ++wordLinkToken;
 
     // Get verse number from parent verse element
     const verseElement = target.closest(".verse") as HTMLElement;
@@ -4581,6 +4599,17 @@
       selectedMorphology = null;
 
       if (!selectedText) return;
+
+      // The Greek or Hebrew word behind it, for the ring's Strong's pill. Read
+      // before the selection is painted, which splits the text nodes.
+      const linkAt = verseNumInt ? cleanOffsetOf(verseText, textNode, wordBounds.start) : null;
+      if (linkAt && isEnglishTranslation(currentTranslation)) {
+        originalAt(currentTranslation, selectedMeasureCtx.book, selectedMeasureCtx.chapter, verseNumInt!, linkAt)
+          .then((id) => {
+            if (linkToken === wordLinkToken && id) selectedLink = id;
+          })
+          .catch(() => {});
+      }
 
       // Create selection range
       try {
@@ -5591,6 +5620,7 @@
     // Capture before any async gap — reactive var may be overwritten by a
     // subsequent word click while the dynamic import is resolving.
     const capturedMorphology = selectedMorphology;
+    const capturedLink = selectedLink;
     const capturedContext = selectedContext;
     console.log(`Action: ${action} on "${text}"`);
     // Any card this opens answers to this reader: its Bible links move it.
@@ -5607,6 +5637,8 @@
         // The Strong's number under the word in the ring: straight to its entry.
         if (capturedMorphology?.strongsId) {
           openStrongsWord(capturedMorphology.strongsId, text, capturedMorphology);
+        } else if (!capturedMorphology && capturedLink) {
+          openStrongsWord(capturedLink, text, null);
         }
         showToast = false;
         break;
@@ -6321,7 +6353,8 @@
       chapter={currentChapter}
       verse={selectedVerseNumber}
       lemma={selectedMorphology?.lemma ?? ""}
-      strongs={selectedMorphology?.strongsId ?? ""}
+      strongs={selectedMorphology ? (selectedMorphology.strongsId ?? "") : selectedLink}
+      gloss={selectedMorphology?.gloss_en ?? ""}
       measure={measureLabel}
       on:action={handleToastAction}
       on:modeChange={handleModeChange}

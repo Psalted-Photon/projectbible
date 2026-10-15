@@ -120,6 +120,40 @@ export function isRtl(lang: string | undefined): boolean {
   return lang === 'hebrew' || lang === 'aramaic';
 }
 
+const shortDefinitions = new Map<string, Promise<string>>();
+
+/** A number's short definition from the lexicon, read once per number. Empty when it has none. */
+function shortDefinitionOf(strongsId: string): Promise<string> {
+  let found = shortDefinitions.get(strongsId);
+  if (!found) {
+    found = lookupStrongs(strongsId)
+      .then((e) => String(e?.shortDefinition ?? '').trim())
+      .catch(() => '');
+    shortDefinitions.set(strongsId, found);
+  }
+  return found;
+}
+
+/**
+ * The English to show beside an original word in small spots: the tap ring,
+ * the entry header, the Hebrew interlinear. Hebrew always uses the lexicon's
+ * short definition, because the Hebrew word data's own glosses are wrong
+ * about half the time (בָּרָא "to fatten" in Gen 1:1). Greek keeps its word
+ * data's gloss, which reads for that verse, and falls back to the lexicon.
+ * The word data's gloss is the last resort when the lexicon isn't installed.
+ */
+export async function glossFor(
+  strongsId: string | null | undefined,
+  morphGloss: string | null | undefined,
+  language?: string | null,
+): Promise<string> {
+  const own = String(morphGloss ?? '').trim();
+  const hebrew = language ? language === 'hebrew' || language === 'aramaic' : /^H/i.test(strongsId ?? '');
+  if (!hebrew && own) return own;
+  if (!strongsId) return own;
+  return (await shortDefinitionOf(strongsId)) || own;
+}
+
 /** Glosses often qualify themselves — "Abraham, the patriarch" — and only the
  *  head word stands a chance of resolving or of being a dictionary entry. */
 export function glossHead(gloss: string): string {

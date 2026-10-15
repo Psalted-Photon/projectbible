@@ -37,6 +37,8 @@ export interface UsageRow {
   /** The inflected surface form as it appears in the text. */
   form: string;
   morphCode: string;
+  /** The form in Latin letters. Greek only; the Hebrew word data has none. */
+  transliteration: string;
 }
 
 /** One verse, after the editions carrying it have been folded together. */
@@ -58,6 +60,7 @@ export interface FormGroup {
   key: string;
   form: string;
   morphCode: string;
+  transliteration: string;
   /** Distinct verses, not raw hits — see the note at the top of this file. */
   count: number;
   uses: VerseUse[];
@@ -172,6 +175,7 @@ export async function loadStrongsUsage(strongsId: string): Promise<StrongsUsage>
           wordIndex: Number(m.word_index ?? (Number(m.wordPosition ?? 1) - 1)),
           form,
           morphCode: String(m.morph_code ?? m.parsing ?? '').trim(),
+          transliteration: String(m.transliteration ?? '').trim(),
         });
       }
       cursor.continue();
@@ -235,7 +239,14 @@ export function buildFormGroups(usage: StrongsUsage, source: string | null): For
   const groups: FormGroup[] = [];
   for (const [key, rows] of byForm) {
     const uses = foldVerses(rows, null);
-    groups.push({ key, form: rows[0].form, morphCode: rows[0].morphCode, count: uses.length, uses });
+    groups.push({
+      key,
+      form: rows[0].form,
+      morphCode: rows[0].morphCode,
+      transliteration: rows.find((r) => r.transliteration)?.transliteration ?? '',
+      count: uses.length,
+      uses,
+    });
   }
   // Commonest first; ties alphabetical so the order is stable between opens.
   return groups.sort((a, b) => b.count - a.count || a.form.localeCompare(b.form));

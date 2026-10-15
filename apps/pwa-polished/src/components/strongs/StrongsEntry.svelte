@@ -396,6 +396,7 @@
               <button class="form-row" on:click={() => toggleForm(f.key)}>
                 <span class="form-caret motion-caret" class:open={openForm === f.key}><CaretRight size="1em" weight="bold" /></span>
                 <span class="form-text" dir={rtl ? "rtl" : "ltr"}>{f.form}</span>
+                {#if f.transliteration}<span class="form-translit">{f.transliteration}</span>{/if}
                 <span class="form-parse">{parseOf(f.morphCode)}</span>
                 <span class="form-count">{f.count}</span>
               </button>
@@ -922,6 +923,12 @@
   .form-text {
     font-family: "Gentium Plus", "SBL Greek", "SBL Hebrew", serif;
     font-size: 15px;
+  }
+
+  .form-translit {
+    color: var(--text-muted, #9aa0aa);
+    font-size: 12px;
+    font-style: italic;
   }
 
   .form-parse {

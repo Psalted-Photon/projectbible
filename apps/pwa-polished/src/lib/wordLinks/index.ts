@@ -12,7 +12,10 @@ import { readTransaction } from '../../adapters/db';
 import { normalizeBookName } from '../bibleData';
 import { installedThisSession, updatedThisSession } from '../packUpdates';
 import { classicId } from '../strongs/entry';
-import { isNeverMarked, type Span } from './glossMatch';
+import { testamentOf } from '../strongsUsage';
+import { greekPartnerFor } from '../translationKind';
+import { convertRef, schemeOf } from '../versification';
+import { isNeverMarked, meansAt, type Span } from './glossMatch';
 
 export interface WordLink {
   s: number;
@@ -117,4 +120,96 @@ export function spansForStrongs(
 /** The link under a clean-text offset, if any. */
 export function linkAtOffset(links: WordLink[], offset: number): WordLink | null {
   return links.find((l) => l.s <= offset && offset < l.e) ?? null;
+}
+
+/**
+ * Where a spot in the reader's verse text falls in its clean text, read off
+ * the reader's own markup: notes are left out and a plural "you" marker counts
+ * as the one character it stands for. Also hands back the clean text, for
+ * matching by meaning. Null when `node` isn't inside the verse.
+ */
+export function cleanOffsetOf(
+  verseTextEl: Element,
+  node: Node,
+  offset: number,
+): { offset: number; text: string } | null {
+  let text = '';
+  const found = { at: -1 };
+  const walk = (n: Node) => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      if (n === node) found.at = text.length + offset;
+      text += n.nodeValue ?? '';
+      return;
+    }
+    if (!(n instanceof Element)) return;
+    if (n.classList.contains('inline-note')) {
+      if (n.contains(node)) found.at = text.length;
+      return;
+    }
+    if (n.classList.contains('plural-marker')) {
+      if (n.contains(node)) found.at = text.length;
+      text += '⌃';
+      return;
+    }
+    n.childNodes.forEach((child, i) => {
+      if (n === node && i === offset) found.at = text.length;
+      walk(child);
+    });
+    if (n === node && offset >= n.childNodes.length) found.at = text.length;
+  };
+  walk(verseTextEl);
+  return found.at < 0 ? null : { offset: found.at, text };
+}
+
+/** The Strong's numbers tagged in one verse of an original-language text. */
+function verseNumbers(source: string, book: string, chapter: number, verse: number): Promise<string[]> {
+  return readTransaction<{ strongsId?: string }[]>('morphology', (store) =>
+    store.index('verse_ref').getAll(IDBKeyRange.only([source, book, chapter, verse])),
+  )
+    .then((rows) => (rows ?? []).map((r) => r.strongsId ?? '').filter(Boolean))
+    .catch(() => []);
+}
+
+/**
+ * The numbers in the Greek or Hebrew behind an English verse: the Hebrew for
+ * the Old Testament, the translation's own Greek for the New (any installed
+ * Greek when that one isn't). The English Septuagint has none, since the
+ * Septuagint has no word data.
+ */
+async function originalNumbers(translation: string, book: string, chapter: number, verse: number): Promise<string[]> {
+  if (schemeOf(translation) === 'lxx2012') return [];
+  const sources = testamentOf(book) === 'OT' ? ['hebrew-oshb'] : [...new Set([greekPartnerFor(translation), 'byz', 'tr'])];
+  for (const source of sources) {
+    const ids = new Set<string>();
+    for (const ref of convertRef(translation, source, { book, chapter, verse })) {
+      for (const id of await verseNumbers(source, packBook(ref.book), ref.chapter, ref.verse)) ids.add(id);
+    }
+    if (ids.size) return [...ids].filter((id) => !isNeverMarked(classicId(id)));
+  }
+  return [];
+}
+
+/**
+ * The Greek or Hebrew word behind an English word: the number linked at
+ * `at.offset` in the verse's clean text. A translation the Word Links pack
+ * doesn't cover falls back to meaning, and answers only when exactly one
+ * number in the original verse means the word tapped. Null when unsure.
+ */
+export async function originalAt(
+  translation: string,
+  book: string,
+  chapter: number,
+  verse: number,
+  at: { offset: number; text: string },
+): Promise<string | null> {
+  const links = await getVerseLinks(translation, book, chapter, verse);
+  if (links) {
+    return linkAtOffset(links, at.offset)?.ids.find((id) => !isNeverMarked(id)) ?? null;
+  }
+  const hits: string[] = [];
+  for (const id of await originalNumbers(translation, book, chapter, verse)) {
+    if (await meansAt(id, at.text, at.offset)) hits.push(id);
+  }
+  const distinct = new Set(hits.map(classicId));
+  return distinct.size === 1 ? hits[0] : null;
 }

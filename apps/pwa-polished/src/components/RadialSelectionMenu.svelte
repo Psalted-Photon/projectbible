@@ -23,7 +23,7 @@
   } from '../lib/radialMenu';
   import { normalizeBookName, getBookColor } from '../lib/bibleData';
   import { lookupStrongs } from '../adapters/lexicon-lookup';
-  import { displayId, languageColor } from '../lib/strongs/entry';
+  import { displayId, glossFor, glossHead, languageColor } from '../lib/strongs/entry';
   import { firstForm, isGreekText, isHebrewText } from '../lib/strongs/collate';
   import { motionLevel } from '../lib/motion';
 
@@ -59,6 +59,8 @@
    */
   export let lemma = '';
   export let strongs = '';
+  /** The word data's own gloss; glossFor() decides what the pill shows. */
+  export let gloss = '';
   /**
    * What a unit word comes to today ("about 450 feet", "a day's wage"). When
    * set it takes the bottom pill over from the lemma, which Define still shows.
@@ -146,25 +148,33 @@
    */
   let headword = '';
   let headwordFor = '';
+  /** What the word means, after the number: "ἀγαπάω · G25 · to love". */
+  let meaning = '';
   $: {
-    const key = `${lemma}|${strongs}`;
+    const key = `${lemma}|${strongs}|${gloss}`;
     if (key !== headwordFor) {
       headwordFor = key;
       const readable = isGreekText(lemma) || isHebrewText(lemma);
       headword = readable ? lemma : '';
-      if (!readable && strongs) {
-        lookupStrongs(strongs)
-          .then((found) => {
-            if (headwordFor === key && found?.lemma) headword = firstForm(found.lemma);
-          })
-          .catch(() => {});
+      meaning = '';
+      if (strongs) {
+        if (!readable) {
+          lookupStrongs(strongs)
+            .then((found) => {
+              if (headwordFor === key && found?.lemma) headword = firstForm(found.lemma);
+            })
+            .catch(() => {});
+        }
+        glossFor(strongs, gloss).then((g) => {
+          if (headwordFor === key) meaning = glossHead(g);
+        });
       }
     }
   }
   $: number = strongs ? displayId(strongs) : '';
   /** A Strong's number makes the pill a link to its entry. A measure doesn't. */
   $: strongsLink = !measure && !!strongs;
-  $: originLabel = measure || [headword, number].filter(Boolean).join(' · ');
+  $: originLabel = measure || [headword, number, meaning].filter(Boolean).join(' · ');
 
   function openStrongs() {
     dispatch('action', { action: 'strongs', text: selectedText });
@@ -362,7 +372,7 @@
         {#if headword}<bdi>{headword}</bdi> · {/if}<span
           class="pill-num"
           style="color: {languageColor(/^H/i.test(strongs) ? 'hebrew' : 'greek')}">{number}</span
-        >
+        >{#if meaning} · {meaning}{/if}
       </span>
     </button>
   {:else if originLabel}
@@ -585,6 +595,7 @@
   /* The Strong's pill is a link: it takes the press the other pill lets fall
      through to the scrim, and its number is underlined like a link. */
   .pill.link {
+    max-width: 176px;
     pointer-events: auto;
     cursor: pointer;
     font-family: inherit;
