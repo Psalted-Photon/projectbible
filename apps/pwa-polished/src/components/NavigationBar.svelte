@@ -53,7 +53,7 @@
     readingState,
     readingPosition,
     readingVerseList,
-    isReadingActive,
+    isBibleReadingActive,
     isPreparing,
     togglePlayPause,
     stopReading,
@@ -2253,9 +2253,9 @@
   let ttsControlsEl: HTMLElement | undefined;
   let wasReadingActive = false;
 
-  $: if ($isReadingActive !== wasReadingActive) {
-    wasReadingActive = $isReadingActive;
-    if ($isReadingActive) void centerTtsControls();
+  $: if ($isBibleReadingActive !== wasReadingActive) {
+    wasReadingActive = $isBibleReadingActive;
+    if ($isBibleReadingActive) void centerTtsControls();
   }
 
   async function centerTtsControls(): Promise<void> {
@@ -2624,7 +2624,7 @@
       <div class="nav-spacer"></div>
     {/if}
     <!-- ── Read Aloud controls (only while reading) ───────────────────────── -->
-    {#if $isReadingActive}
+    {#if $isBibleReadingActive}
       <div class="nav-tts" bind:this={ttsControlsEl}>
         {#if $isPreparing}
           <!-- Generating audio, not playing. Without this the button would show

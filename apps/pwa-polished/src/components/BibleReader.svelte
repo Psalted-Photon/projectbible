@@ -195,7 +195,7 @@
   import type { InterlinearSettings } from "../adapters/settings";
   import { ttsCurrentVerse } from "../stores/audioStore";
   import { getSharedTtsAudio } from "../adapters/tts";
-  import { readingPosition, isReadingActive, currentVerseWindow } from "../lib/tts/readingEngine";
+  import { readingPosition, isBibleReadingActive, currentVerseWindow } from "../lib/tts/readingEngine";
   import { startGlow } from "../lib/ttsGlow";
   import {
     showVerseHighlight,
@@ -1841,9 +1841,9 @@
   // Starting to read reveals the navbar, because that is where the controls now
   // live — otherwise they would appear somewhere the user cannot see.
   let wasReadingActive = false;
-  $: if ($isReadingActive !== wasReadingActive) {
-    wasReadingActive = $isReadingActive;
-    if ($isReadingActive) navBarOffset = 0;
+  $: if ($isBibleReadingActive !== wasReadingActive) {
+    wasReadingActive = $isBibleReadingActive;
+    if ($isBibleReadingActive) navBarOffset = 0;
   }
 
   // Listen for settings updates

@@ -16,11 +16,13 @@ import { get } from 'svelte/store';
 import {
   readingPosition,
   readingState,
+  readingSource,
   verseCounter,
   chapterProgress,
   togglePlayPause,
   stopReading,
   skipChapter,
+  skipParagraph,
 } from './readingEngine';
 
 function available(): boolean {
@@ -50,17 +52,25 @@ function bindHandlers(): void {
   // restarting — the restart path reloads from the database and regenerates,
   // which is exactly the work that stalls when the screen is off, and was why
   // "next chapter" used to do nothing until the phone was unlocked.
-  set('nexttrack', () => skipChapter(1));
-  set('previoustrack', () => skipChapter(-1));
+  // Plain text has no chapters to skip, so the same buttons move a paragraph.
+  set('nexttrack', () => (isText() ? skipParagraph(1) : skipChapter(1)));
+  set('previoustrack', () => (isText() ? skipParagraph(-1) : skipChapter(-1)));
+}
+
+function isText(): boolean {
+  return get(readingSource).kind === 'text';
 }
 
 /** Title stays at chapter level so it never churns; the verse line carries detail. */
 function currentTitle(): string {
+  const source = get(readingSource);
+  if (source.kind === 'text') return source.title;
   const position = get(readingPosition);
   return position ? `${position.book} ${position.chapter}` : '';
 }
 
 function currentSubtitle(): string {
+  if (isText()) return 'irisBible';
   const counter = get(verseCounter);
   if (!counter || counter.total === 0) return 'irisBible';
   if (counter.index === 0) return 'irisBible';
@@ -78,8 +88,10 @@ export function updateMediaSession(): void {
   const session = navigator.mediaSession;
   const state = get(readingState);
   const position = get(readingPosition);
+  // Plain text never has a Bible position; it is live whenever the engine is.
+  const text = isText();
 
-  if (state === 'idle' || !position) {
+  if (state === 'idle' || (!position && !text)) {
     session.playbackState = 'none';
     session.metadata = null;
     lastTitle = '';
@@ -104,7 +116,7 @@ export function updateMediaSession(): void {
     session.metadata = new MediaMetadata({
       title,
       artist: subtitle,
-      album: position.translation.toUpperCase(),
+      album: position ? position.translation.toUpperCase() : '',
       artwork: [
         { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
         { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
@@ -133,6 +145,7 @@ export function initMediaSession(): void {
   if (!available()) return;
   readingState.subscribe(() => updateMediaSession());
   readingPosition.subscribe(() => updateMediaSession());
+  readingSource.subscribe(() => updateMediaSession());
   verseCounter.subscribe(() => updateMediaSession());
   chapterProgress.subscribe(() => updateMediaSession());
 }

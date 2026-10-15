@@ -22,7 +22,7 @@
     adoptVoice,
   } from '../adapters/tts.js';
   import { getTtsSettings } from '../adapters/settings.js';
-  import { startReadingPlaylist, readingState, isPreparing } from '../lib/tts/readingEngine';
+  import { startReadingPlaylist, readingState, readingSource, isPreparing } from '../lib/tts/readingEngine';
   import { getTodayPlaylist, buildPlaylistForDay, type PlanPlaylist } from '../lib/tts/planPlaylist';
   import { beginPlanRun } from '../lib/tts/planTicker';
   import { navigationStore } from '../stores/navigationStore';
@@ -47,7 +47,8 @@
   let voiceId = '';
   $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
   $: voiceLabel = getVoiceInfo(voiceId)?.label.replace(/ \(.*\)$/, '') ?? 'voice';
-  $: isLive = $readingState === 'playing' || $readingState === 'paused';
+  // Plain text in the floating player is not this button's reading.
+  $: isLive = $readingSource.kind === 'bible' && ($readingState === 'playing' || $readingState === 'paused');
 
   /** True when the day runs straight through one book, as the plan links judge it. */
   function isConsecutiveDay(chapters: Array<{ book: string; chapter: number }>): boolean {

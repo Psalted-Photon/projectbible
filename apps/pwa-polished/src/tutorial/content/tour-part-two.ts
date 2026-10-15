@@ -21,7 +21,7 @@ import {
 import { tutorial } from '../state';
 import { navigationStore, availableTranslations } from '../../stores/navigationStore';
 import { normalizeBookName } from '../../lib/bibleData';
-import { isReadingActive } from '../../lib/tts/readingEngine';
+import { isBibleReadingActive } from '../../lib/tts/readingEngine';
 import { packInstallFinished } from '../../adapters/db-manager';
 import { installAll, packsStillToInstall, voicesStillToInstall } from '../../lib/packInstaller';
 
@@ -299,8 +299,8 @@ export const PART_TWO: TourStep[] = [
     target: readAloudButton,
     reveal: 'center',
     pad: 8,
-    skipIf: () => !inMainReader('.tts-player') || get(isReadingActive),
-    doneWhen: () => get(isReadingActive),
+    skipIf: () => !inMainReader('.tts-player') || get(isBibleReadingActive),
+    doneWhen: () => get(isBibleReadingActive),
     title: 'Read Aloud',
     body: 'Tap the talking head and irisBible reads the chapter to you.',
   },
@@ -308,7 +308,7 @@ export const PART_TWO: TourStep[] = [
     id: 'read-aloud-controls',
     target: () => inMainReader('.nav-tts'),
     reveal: true,
-    skipIf: () => !get(isReadingActive),
+    skipIf: () => !get(isBibleReadingActive),
     title: 'While it reads',
     body: 'The controls wait up here: pause, jump to a verse, stop, carry on into the next chapter, and a sleep timer.',
   },

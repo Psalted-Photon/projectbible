@@ -17,7 +17,7 @@ import { parallelStore, type ParallelLayout } from '../stores/parallelStore';
 import { familyTreeStore } from '../stores/familyTreeStore';
 import { windowStore } from './stores/windowStore';
 import { openHarmonyView } from './windowTypes';
-import { readingState, readingPosition, startReading } from './tts/readingEngine';
+import { readingState, readingPosition, readingSource, startReading } from './tts/readingEngine';
 import { showNotice } from '../stores/noticeStore';
 import { SESSION_KEY as KEY, QUICK_RETURN_MS } from './resume';
 
@@ -72,8 +72,10 @@ export function saveSession(): void {
         .map(({ type, position, width, height }) => ({ type, position, width, height })),
       tree: tree.isOpen ? { focusId: tree.focusId, tribe: tree.tribe } : null,
       harmony: captureHarmony(),
+      // Only scripture comes back. Plain text has no Bible position to reopen
+      // at, and a commentary or devotional is not picked up again on its own.
       reading:
-        pos && get(readingState) === 'playing'
+        pos && get(readingSource).kind === 'bible' && get(readingState) === 'playing'
           ? { translation: pos.translation, book: pos.book, chapter: pos.chapter, verse: pos.verse }
           : null,
     };

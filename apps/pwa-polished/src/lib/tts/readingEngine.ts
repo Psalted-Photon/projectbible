@@ -318,6 +318,16 @@ export const isReadingActive = derived(readingState, ($s) =>
 );
 
 /**
+ * Reading scripture, as opposed to plain text. The reader's top-bar controls
+ * and anything else that only makes sense for a chapter of the Bible go by
+ * this; plain text has the floating player instead.
+ */
+export const isBibleReadingActive = derived(
+  [isReadingActive, readingSource],
+  ([$active, $source]) => $active && $source.kind === 'bible'
+);
+
+/**
  * True whenever the engine is generating audio rather than playing it.
  *
  * Starting up is only the obvious case. Playback also waits when the buffer runs
