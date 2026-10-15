@@ -9,9 +9,13 @@
   import { ENOCH_EDITIONS, isEnochAuthor, enochLabelFor, loadEnoch } from "../lib/enochBooks";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import PackDropdownSection from "./PackDropdownSection.svelte";
+  import ReadAloudTextButton from "./ReadAloudTextButton.svelte";
 
   export let windowId: string | undefined = undefined;
   export let style: string = "";
+  /** Read Aloud for what the reader shows; no button while there is nothing. */
+  export let readTitle: string = "";
+  export let readParagraphs: (() => string[]) | null = null;
 
   /* Matches the main navbar: the reference dropdown is two side-by-side columns,
      OT then NT, each reading straight top-to-bottom. */
@@ -358,6 +362,12 @@
         <span class="icon-badge icon-badge-anchor"><Anchor size={18} weight="bold" /><span class="icon-overlay"><Anchor size={18} weight="thin" /></span></span>
       </button>
     {/if}
+
+    {#if readParagraphs}
+      <span class="pill-read">
+        <ReadAloudTextButton title={readTitle} paragraphs={readParagraphs} size={18} label="Read this commentary aloud" />
+      </span>
+    {/if}
   </div>
 
   <!-- Dropdowns rendered outside nav-content to avoid overflow clipping -->
@@ -587,6 +597,29 @@
     padding: 0 8px;
   }
   .pill-anchor:hover { background: #252525; }
+
+  /* Read Aloud: the anchor's pill, holding the talking head. */
+  .pill-read {
+    display: flex;
+    align-items: center;
+    height: 34px;
+    flex-shrink: 0;
+  }
+  .pill-read :global(.rat-btn) {
+    height: 34px;
+    padding: 0 12px;
+    background: #1c1c1c;
+    border-radius: 6px;
+    color: #aaa;
+    transition: background 0.15s, color 0.15s;
+  }
+  .pill-read :global(.rat-btn:hover) {
+    background: #252525;
+    color: #ccc;
+  }
+  .pill-read :global(.rat-btn.live) {
+    color: #9d7af5;
+  }
 
   .icon-badge {
     display: inline-flex;

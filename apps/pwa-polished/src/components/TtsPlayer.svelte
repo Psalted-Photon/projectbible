@@ -11,18 +11,8 @@
    * Voice download stays here, on purpose: it is the chapter you tapped that
    * should show the prompt, not every chapter at once.
    */
-  import {
-    isTtsSupported,
-    isVoiceInstalled,
-    downloadVoice,
-    getVoiceInfo,
-    unlockTtsAudio,
-    greekSpeechRoute,
-    voiceToOffer,
-    isVoiceDownloading,
-    adoptVoice,
-  } from '../adapters/tts.js';
-  import { getTtsSettings } from '../adapters/settings.js';
+  import { isTtsSupported, getVoiceInfo, unlockTtsAudio } from '../adapters/tts.js';
+  import { voiceForTap, fetchVoice, useVoice } from '../lib/tts/voiceForTap.js';
   import { canSpeakOriginal } from '../lib/tts/originalText.js';
   import { originalLanguageOf } from '../lib/translationKind.js';
   import {
@@ -51,11 +41,7 @@
   // picks, which may not be the voice the user reads English with.
   $: isGreek =
     originalLanguageOf(translation) === 'greek' && canSpeakOriginal(translation);
-  /**
-   * The voice this tap reads with or offers. For English that can be Heart
-   * rather than the saved voice on a device with no voices yet — see
-   * voiceToOffer. Greek always needs its own voice, so it is never swapped.
-   */
+  /** The voice this tap reads with or offers — see voiceForTap. */
   let voiceId = '';
   $: voiceSizeMB = getVoiceInfo(voiceId)?.approxSizeMB ?? 64;
   $: voiceLabel = getVoiceInfo(voiceId)?.label.replace(/ \(.*\)$/, '') ?? 'voice';
@@ -85,23 +71,20 @@
     pressing = true;
 
     try {
-      // Read fresh on each tap: the saved voice can change behind this button
-      // (Settings, or the first-launch download finishing).
-      voiceId = isGreek
-        ? greekSpeechRoute().voiceId
-        : await voiceToOffer(getTtsSettings().voiceId);
       // Check before handing off, so only this chapter shows the download prompt.
-      if (!(await isVoiceInstalled(voiceId))) {
-        // Already coming in (the first-launch download): wait on it with its
-        // progress rather than asking for a download that is under way.
-        if (isVoiceDownloading(voiceId)) {
-          await handleDownloadVoice();
-          return;
-        }
+      const check = await voiceForTap(isGreek);
+      voiceId = check.voiceId;
+      // Already coming in (the first-launch download): wait on it with its
+      // progress rather than asking for a download that is under way.
+      if (check.status === 'downloading') {
+        await handleDownloadVoice();
+        return;
+      }
+      if (check.status === 'needed') {
         local = 'voice-needed';
         return;
       }
-      if (!isGreek) adoptVoice(voiceId);
+      useVoice(voiceId, isGreek);
       await startReading(translation, book, chapter);
     } finally {
       pressing = false;
@@ -112,16 +95,14 @@
     local = 'downloading';
     downloadPct = 0;
     try {
-      await downloadVoice(voiceId, (p) => {
-        downloadPct = p.total > 0 ? Math.round((100 * p.loaded) / p.total) : 0;
-      });
+      await fetchVoice(voiceId, (pct) => (downloadPct = pct));
     } catch (e: any) {
       local = 'error';
       errorMsg = e?.message ?? 'Voice download failed.';
       return;
     }
     local = 'idle';
-    if (!isGreek) adoptVoice(voiceId);
+    useVoice(voiceId, isGreek);
     await startReading(translation, book, chapter);
   }
 </script>

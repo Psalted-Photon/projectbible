@@ -10,7 +10,8 @@
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { sanitizePackHtml } from "../lib/sanitizePackHtml";
   import { parseRefString } from "../lib/parseRefString";
-  import { loadEnoch, isEnochAuthor, type EnochBook, type EnochChapter } from "../lib/enochBooks";
+  import { loadEnoch, isEnochAuthor, enochLabelFor, type EnochBook, type EnochChapter } from "../lib/enochBooks";
+  import { commentaryParagraphs } from "../lib/tts/speechText";
   import { packInstallFinished } from "../adapters/db-manager";
   import GetPacksCard from "./GetPacksCard.svelte";
   import { showOriginalWordAt } from "./OriginalWordPopup.svelte";
@@ -44,6 +45,27 @@
     windowState?.contentState?.highlightedVerse ??
     $navigationStore.highlightedVerse ??
     null;
+
+  // ── Read Aloud ─────────────────────────────────────────────────────────────
+  // The whole chapter for this commentator (or all of them), then it stops.
+  $: readTitle = isEnoch
+    ? `${enochLabelFor(currentAuthor) ?? "Enoch"} · ${enochChapter?.label ?? `Chapter ${currentChapter}`}`
+    : `${currentAuthor ?? "Commentaries"} · ${currentBook} ${currentChapter}`;
+  $: readParagraphs = isEnoch
+    ? enochChapter
+      ? enochParagraphs.bind(null, enochChapter)
+      : null
+    : entries.length > 0
+      ? commentaryParagraphsFor.bind(null, entries, currentBook, currentChapter)
+      : null;
+
+  function enochParagraphs(ch: EnochChapter): string[] {
+    return [...ch.headings, ch.label, ...ch.verses.map((v) => v.text)];
+  }
+
+  function commentaryParagraphsFor(list: CommentaryEntry[], book: string, chapter: number): string[] {
+    return [`${book} ${chapter}.`, ...commentaryParagraphs(list)];
+  }
 
   // Load commentary when navigation changes (skipped entirely in Enoch mode)
   $: {
@@ -225,7 +247,7 @@
 </script>
 
 <div class="commentary-reader" bind:this={readerElement}>
-  <CommentaryNavigationBar {windowId} />
+  <CommentaryNavigationBar {windowId} {readTitle} {readParagraphs} />
 
   {#if isEnoch}
     <div class="commentary-container enoch-container">
