@@ -6,11 +6,14 @@
   import { isbeModalStore, type IsbeTab } from "../stores/isbeModalStore";
   import { isbeReturnStore, type IsbeReturn } from "../stores/isbeReturnStore";
   import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
+  import { verseAtEnglishRef } from "../lib/companion";
+  import { ENGLISH_NUMBERING } from "../lib/versification";
+  import CompanionLine from "./CompanionLine.svelte";
+  import EnglishChip from "./EnglishChip.svelte";
   import { windowStore } from "../lib/stores/windowStore";
   import { createResizeFit } from "../lib/atlas/fit";
   import { openMapWindow } from "../lib/openMapWindow";
   import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
-  import { IndexedDBTextStore } from "../adapters/TextStore";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import {
     getIsbeEntry,
@@ -135,7 +138,6 @@
   // Keyed on the book NAME — keying on the BookInfo object silently made every
   // lookup miss, which turned the canonical sort below into a no-op.
   const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
-  const verseTextStore = new IndexedDBTextStore();
 
   // Load full data whenever the article target changes. Docked, that also fires
   // when a cross-reference rewrites the window's contentState.
@@ -453,6 +455,8 @@
   let placeNames: string[] = [];
   let expandedBooks = new Set<string>();
   let versePreviews: Record<string, string> = {}; // "Book chapter:verse" -> text
+  /** The translation the previews were read in, which decides whether English goes under them. */
+  let previewTranslation = "";
 
   async function toggleBook(book: string) {
     const next = new Set(expandedBooks);
@@ -473,11 +477,12 @@
   async function loadBookText(book: string) {
     const refs = versesByBook.find((g) => g.book === book)?.refs ?? [];
     const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
+    previewTranslation = translation;
     const loaded = await Promise.all(
       refs.map(async (r) => {
         const key = `${book} ${r.chapter}:${r.verse}`;
         if (versePreviews[key] !== undefined) return [key, versePreviews[key]] as const;
-        const text = (await verseTextStore.getVerse(translation, book, r.chapter, r.verse)) ?? "";
+        const text = await verseAtEnglishRef(translation, book, r.chapter, r.verse);
         return [key, text] as const;
       }),
     );
@@ -684,6 +689,7 @@
       chapter,
       verse,
       snap ? { surface: 'isbe', modal: { kind, entryId, placeId, primaryName }, snapshot: snap } : undefined,
+      ENGLISH_NUMBERING,
     );
     // A docked article stays open across the jump — reading the passage beside
     // the article is the whole point of pinning it.
@@ -1260,6 +1266,7 @@
       </div>
     {:else if activeTab === "verses"}
       <div class="verses">
+        <EnglishChip shown={previewTranslation} bar />
         {#each versesByBook as group}
           <div class="vb-group">
             <button class="vb-header" on:click={() => toggleBook(group.book)}>
@@ -1283,6 +1290,7 @@
                     {#if versePreviews[key]}
                       <span class="vb-ref-text">{@html versePreview(versePreviews[key])}</span>
                     {/if}
+                    <CompanionLine shown={previewTranslation} book={group.book} chapter={r.chapter} verse={r.verse} englishRef maxLength={150} />
                   </button>
                 {/each}
               </div>

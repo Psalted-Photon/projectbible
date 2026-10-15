@@ -294,3 +294,26 @@ export function convertRef(fromTranslation: string, toTranslation: string, ref: 
     }),
   );
 }
+
+/**
+ * The translation to convert from for references printed in English
+ * numbering: the encyclopedias, Nave's, notes, saved lists, the verse of the
+ * day.
+ */
+export const ENGLISH_NUMBERING = 'kjv';
+
+/**
+ * An English-numbered verse where `translationId` keeps it: Malachi 4:1 is
+ * 3:19 in the Hebrew. Where the text splits a psalm's title from its body,
+ * the body. Null when the text has no counterpart.
+ */
+export function englishRefIn(translationId: string, ref: VerseRef): VerseRef | null {
+  const found = convertRef(ENGLISH_NUMBERING, translationId, ref);
+  const pick = found.find((r) => r.part !== 'title') ?? found[0];
+  return pick ? { book: ref.book, chapter: pick.chapter, verse: pick.verse } : null;
+}
+
+/** Where an English-numbered reference lands in `translationId`: its own verse there, or the reference as it is. */
+export function landingIn(translationId: string, ref: VerseRef): VerseRef {
+  return englishRefIn(translationId, ref) ?? ref;
+}

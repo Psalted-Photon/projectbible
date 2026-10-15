@@ -2,8 +2,10 @@
   import { createEventDispatcher } from "svelte";
   import { get } from "svelte/store";
   import bookIntroductions from "../data/book-introductions.json";
-  import { IndexedDBTextStore } from "../adapters/TextStore";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
+  import { verseAtEnglishRef } from "../lib/companion";
+  import { landingIn } from "../lib/versification";
+  import CompanionLine from "./CompanionLine.svelte";
   import { parseRefString } from "../lib/parseRefString";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { navigationStore } from "../stores/navigationStore";
@@ -38,7 +40,8 @@
     navigateTo: { book: string; chapter: number; verse: number };
   }>();
 
-  const textStore = new IndexedDBTextStore();
+  /** The translation the pill's verse was read in. */
+  let previewTranslation = "";
 
   /**
    * A tapped reference's verse, shown over the bottom of the sheet. Tapping it
@@ -69,13 +72,13 @@
     if (!target) return;
     panelLoading = true;
     const translation = get(navigationStore).translation;
-    const verses = await textStore.getChapter(translation, target.book, target.chapter);
-    const targetVerse = verses.find((v: any) => v.verse === target.verse);
+    const text = await verseAtEnglishRef(translation, target.book, target.chapter, target.verse);
+    previewTranslation = translation;
     pillPreview = {
       book: target.book,
       chapter: target.chapter,
       verse: target.verse,
-      text: targetVerse?.text ?? "",
+      text,
     };
     panelLoading = false;
   }
@@ -83,7 +86,8 @@
   /** Go to the previewed verse in the reader, which closes the sheet and leaves a crumb. */
   function handlePillClick() {
     if (!pillPreview) return;
-    const { book: toBook, chapter: toChapter, verse: toVerse } = pillPreview;
+    // The reference is in English numbering; the reader lands where its text keeps it.
+    const { book: toBook, chapter: toChapter, verse: toVerse } = landingIn(get(navigationStore).translation, pillPreview);
     pillPreview = null;
     dispatch("navigateTo", { book: toBook, chapter: toChapter, verse: toVerse });
   }
@@ -152,6 +156,7 @@
           {:else}
             <span class="hint">Verse text not available.</span>
           {/if}
+          <CompanionLine shown={previewTranslation} book={pillPreview.book} chapter={pillPreview.chapter} verse={pillPreview.verse} englishRef />
         </div>
         <div class="pill-hint">Tap to go there</div>
       </div>

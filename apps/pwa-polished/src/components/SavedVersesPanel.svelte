@@ -4,8 +4,10 @@
   import { get } from 'svelte/store';
   import { navigationStore } from '../stores/navigationStore';
   import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
-  import { IndexedDBTextStore } from '../lib/adapters';
   import { renderVersePreviewHtml } from '../lib/verseRendering';
+  import { verseAtEnglishRef } from '../lib/companion';
+  import { landingIn } from '../lib/versification';
+  import CompanionLine from './CompanionLine.svelte';
   import { BIBLE_BOOKS } from '@projectbible/core';
   import type { HighlightStyle, UserNote } from '@projectbible/core';
   import { HIGHLIGHT_CATEGORIES, categoryKeyFor } from '../lib/highlightCategories';
@@ -15,7 +17,6 @@
   const dispatch = createEventDispatcher<{ close: void }>();
 
   const userDataStore = syncedUserDataStore;
-  const textStore = new IndexedDBTextStore();
 
   // ─── sub-tab state ──────────────────────────────────────────────────────────
   type SubTab = 'verses' | 'notes';
@@ -47,6 +48,8 @@
   }
 
   let savedVerses: SavedVerse[] = [];
+  /** The translation the previews were read in, which decides whether English goes under them. */
+  let previewTranslation = '';
   let savedNotes: SavedNote[] = [];
   let loadingVerses = true;
   let loadingNotes = true;
@@ -162,11 +165,12 @@
       }
 
       const translation = $navigationStore.translation;
+      previewTranslation = translation;
 
       // Fetch verse text for each unique verse
       const results = await Promise.all(
         Array.from(map.values()).map(async ({ book, chapter, verse, createdAt, categories }) => {
-          const text = await textStore.getVerse(translation, book, chapter, verse);
+          const text = await verseAtEnglishRef(translation, book, chapter, verse);
           return { book, chapter, verse, text, createdAt, categories: [...categories] } satisfies SavedVerse;
         })
       );
@@ -207,7 +211,8 @@
   // ─── navigation ──────────────────────────────────────────────────────────────
   function navigateTo(book: string, chapter: number, verse: number) {
     navigationStore.pushHistory(get(navigationStore), 'notes');
-    navigationStore.navigateTo($navigationStore.translation, book, chapter, verse);
+    const at = landingIn($navigationStore.translation, { book, chapter, verse });
+    navigationStore.navigateTo($navigationStore.translation, book, at.chapter, at.verse);
     dispatch('close');
   }
 
@@ -308,6 +313,7 @@
                     {:else}
                       <span class="svp-text svp-text--missing">Text unavailable</span>
                     {/if}
+                    <CompanionLine shown={previewTranslation} book={item.book} chapter={item.chapter} verse={item.verse} englishRef />
                   </li>
                 {/each}
               </ul>
@@ -331,6 +337,7 @@
             {:else}
               <span class="svp-text svp-text--missing">Text unavailable</span>
             {/if}
+            <CompanionLine shown={previewTranslation} book={item.book} chapter={item.chapter} verse={item.verse} englishRef />
           </li>
         {/each}
       </ul>

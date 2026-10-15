@@ -30,6 +30,7 @@
   import { get } from 'svelte/store';
   import { windowStore } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
+  import { landingIn } from '../lib/versification';
   import { lookupStore } from '../stores/lookupStore';
   import GetPacksCard from './GetPacksCard.svelte';
   import TimelineCard from './TimelineCard.svelte';
@@ -935,7 +936,8 @@
     void setFullscreen(false);
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'timeline');
-    navigationStore.navigateToVerse(current.translation, p.b, p.c, p.v);
+    const at = landingIn(current.translation, { book: p.b, chapter: p.c, verse: p.v });
+    navigationStore.navigateToVerse(current.translation, p.b, at.chapter, at.verse);
   }
 
   function zoomButton(factor: number) {

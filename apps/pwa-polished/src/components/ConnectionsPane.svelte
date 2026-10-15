@@ -28,6 +28,7 @@
   import { get } from 'svelte/store';
   import { windowStore } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
+  import { landingIn } from '../lib/versification';
   import { lookupStore } from '../stores/lookupStore';
   import { motionLevel } from '../lib/motion';
   import GetPacksCard from './GetPacksCard.svelte';
@@ -1772,7 +1773,8 @@
     await setFullscreen(false);
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'connections');
-    navigationStore.navigateToVerse(current.translation, ref.book, ref.chapter, ref.verse);
+    const at = landingIn(current.translation, ref);
+    navigationStore.navigateToVerse(current.translation, ref.book, at.chapter, at.verse);
   }
 
   // ===== Full screen =====

@@ -118,6 +118,7 @@
   import { openStrongsWord } from "../lib/openWork";
   import { glossFor } from "../lib/strongs/entry";
   import { cleanOffsetOf, originalAt } from "../lib/wordLinks";
+  import { verseAtEnglishRef } from "../lib/companion";
   import { isOriginalLanguage, isHebrewText as isHebrewTranslation, isEnglishTranslation } from "../lib/translationKind";
   import {
     resolveWordAt,
@@ -1331,7 +1332,7 @@
     footnoteUnavailable = false;
     footnoteBusy = true;
     try {
-      const text = await textStore.getVerse(currentTranslation, target.book, target.chapter, target.verse);
+      const text = await verseAtEnglishRef(currentTranslation, target.book, target.chapter, target.verse);
       if (ticket !== footnoteFetchTicket) return; // a newer reference owns the card
       // Rendered the preview way: notes and structural markers out, so a note
       // inside the quoted verse does not sprout markers of its own in here.

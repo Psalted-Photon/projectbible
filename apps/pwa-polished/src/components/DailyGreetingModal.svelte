@@ -7,10 +7,10 @@
   import { get } from 'svelte/store';
   import verseOfDay from '../data/verse-of-the-day.json';
   import { renderVerseHtml } from '../lib/verseRendering';
-  import { DEFAULT_TRANSLATION, getBookChapters, translationLabel } from '../lib/bibleData';
+  import { getBookChapters, translationLabel } from '../lib/bibleData';
   import { testamentOf } from '../lib/testamentDefaults';
   import { booksInTranslation } from '../lib/translationBooks';
-  import { mtToLxxPsalm } from '../lib/lxxPsalms';
+  import { englishRefIn } from '../lib/versification';
   import { Sun, ArrowRight, SunHorizon, MoonStars, CalendarBlank } from 'phosphor-svelte';
   import { isDevotionalsInstalled, type DevotionalSlot } from '../lib/devotionals/devotionalsData';
   import { currentSlotStore, todayMonthDay, ONE_A_DAY_WORKS } from '../lib/devotionals/slot';
@@ -39,15 +39,6 @@
       endVerse: one[3] ? parseInt(one[3], 10) : parseInt(one[2], 10),
     };
   }
-
-  // The list's references use English verse numbers. The Septuagint runs a
-  // psalm behind, which lib/lxxPsalms converts; the Hebrew (and the LXX lemma
-  // text) also counts psalm titles as verses and starts a few chapters early
-  // or late. In these a chapter is only used when it has as many verses as the
-  // English, so the card says the verse isn't available rather than quietly
-  // showing a different one.
-  const LXX_NUMBERING = new Set(['lxx', 'lxx2012']);
-  const OWN_NUMBERING = new Set(['hebrew-oshb', 'wlc', ...LXX_NUMBERING]);
 
   interface VerseSpan { chapter: number; startVerse: number; endVerse: number }
 
@@ -82,7 +73,6 @@
     if (!parsed) { textLoading = false; return; }
     const p = parsed;
     const translation = get(navigationStore).translation;
-    const id = translation.toLowerCase();
     const label = translationLabel(translation);
 
     const books = await booksInTranslation(translation);
@@ -96,23 +86,18 @@
       return;
     }
 
-    let at: VerseSpan | null = { chapter: p.chapter, startVerse: p.startVerse, endVerse: p.endVerse };
-    let checkCount = OWN_NUMBERING.has(id);
-    if (LXX_NUMBERING.has(id) && p.book === 'Psalm') {
-      const s = mtToLxxPsalm(p.chapter, p.startVerse);
-      const e = mtToLxxPsalm(p.chapter, p.endVerse);
-      at = s && e && s.chapter === e.chapter ? { chapter: s.chapter, startVerse: s.verse, endVerse: e.verse } : null;
-      // The conversion is checked against lxx2012 at build time. The lemma
-      // text counts titles as verses on top, so it still gets the count check.
-      if (id === 'lxx2012') checkCount = false;
-    }
-    if (at && checkCount) {
-      const [own, english] = await Promise.all([
-        textStore.getChapter(translation, p.book, at.chapter),
-        textStore.getChapter(DEFAULT_TRANSLATION, p.book, p.chapter),
-      ]);
-      if (own[own.length - 1]?.verse !== english[english.length - 1]?.verse) at = null;
-    }
+    // The list's references use English verse numbers. The Hebrew, the
+    // Septuagint and a few English packs number some verses differently
+    // (Malachi 4:1 is Hebrew 3:19); lib/versification finds where the
+    // translation keeps them, and a verse it can't place says so rather than
+    // showing a different one.
+    const ref = (verse: number) => ({ book: p.book, chapter: p.chapter, verse });
+    const first = englishRefIn(translation, ref(p.startVerse));
+    const last = p.endVerse === p.startVerse ? first : englishRefIn(translation, ref(p.endVerse));
+    const at: VerseSpan | null =
+      first && last && first.chapter === last.chapter && last.verse >= first.verse
+        ? { chapter: first.chapter, startVerse: first.verse, endVerse: last.verse }
+        : null;
     if (!at) {
       unavailable = `Not available in ${label}, which numbers the verses of this chapter differently.`;
       textLoading = false;

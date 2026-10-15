@@ -15,7 +15,7 @@ import { IndexedDBTextStore } from '../adapters/TextStore';
 import { DEFAULT_TRANSLATION } from './bibleData';
 import { defaultTranslationFor, testamentOf } from './testamentDefaults';
 import { isOriginalLanguage } from './translationKind';
-import { convertRef, schemeOf, type MappedRef, type VerseRef } from './versification';
+import { convertRef, englishRefIn, schemeOf, type MappedRef, type VerseRef } from './versification';
 import { cleanVersePreviewText, companionText } from './verseRendering';
 import { glossSpans, type Span } from './wordLinks/glossMatch';
 import { getVerseLinks, spansForStrongs } from './wordLinks/index';
@@ -158,4 +158,15 @@ export async function loadCompanionVerse(
     }
   }
   return { translation, pieces: [], missing: true, fallback };
+}
+
+/**
+ * An English-numbered verse's stored text in `translation`, read where that
+ * text numbers it, so a Hebrew preview of English Malachi 4:1 shows Hebrew
+ * 3:19. Empty when the text has no such verse.
+ */
+export async function verseAtEnglishRef(translation: string, book: string, chapter: number, verse: number): Promise<string> {
+  const at = englishRefIn(translation, { book, chapter, verse });
+  if (!at) return '';
+  return (await textStore.getVerse(translation, book, at.chapter, at.verse).catch(() => null)) ?? '';
 }

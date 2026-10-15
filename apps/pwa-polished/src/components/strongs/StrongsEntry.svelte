@@ -30,6 +30,7 @@
     type Meaning,
   } from "../../lib/strongs/entry";
   import { reveal } from "../../lib/motion";
+  import { showOriginalWordAt } from "../OriginalWordPopup.svelte";
 
   /**
    * One Strong's entry: the definition, and how the word is used across the
@@ -231,7 +232,12 @@
       onOpenEntry(number);
       return;
     }
-    if (!target.classList.contains("scripture-ref")) return;
+    if (!target.classList.contains("scripture-ref")) {
+      // A Greek or Hebrew word in the definition or derivation: its meaning
+      // beside it, and its number opens here like the linked numbers do.
+      if (target.closest(".full-def, .derivation") && !target.closest("a, button")) showOriginalWordAt(e, onOpenEntry);
+      return;
+    }
     const osisRef = target.dataset.ref;
     if (!osisRef) return;
     const parsed = parseOsisRef(osisRef);

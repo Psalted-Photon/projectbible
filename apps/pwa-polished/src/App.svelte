@@ -8,6 +8,7 @@
   import { saveSession, restoreSession } from "./lib/sessionRestore";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
+  import OriginalWordPopup from "./components/OriginalWordPopup.svelte";
   import WelcomeModal from "./components/WelcomeModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
   import AppNotice from "./components/AppNotice.svelte";
@@ -461,6 +462,9 @@
 
     <!-- "Running Latest Version" toast after an auto-update reload -->
     <UpdateNotice />
+
+    <!-- A Greek or Hebrew word's meaning, tapped inside commentaries and definitions -->
+    <OriginalWordPopup />
 
     <!-- In-app messages (installs, removals, errors) in place of alert() -->
     <AppNotice />

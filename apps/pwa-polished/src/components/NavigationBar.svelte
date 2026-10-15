@@ -2857,6 +2857,7 @@
             chapter={goTo.chapter}
             verse={goTo.verse}
             label={goTo.label}
+            englishRef={false}
             onOpen={() => jumpToQueryRef(goTo)}
           />
         </div>

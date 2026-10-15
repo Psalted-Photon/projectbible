@@ -3,8 +3,10 @@
   import { get } from "svelte/store";
   import type { CommentaryEntry } from "../adapters/CommentaryStore";
   import type { TskEntry } from "../adapters/TskReferenceStore";
-  import { IndexedDBTextStore } from "../adapters/TextStore";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
+  import { verseAtEnglishRef } from '../lib/companion';
+  import { landingIn } from '../lib/versification';
+  import CompanionLine from './CompanionLine.svelte';
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
   import { parseRefString } from "../lib/parseRefString";
   import { getBookColor } from "../lib/bibleData";
@@ -14,6 +16,7 @@
   import { fixedOrigin } from "../lib/fixedOrigin";
   import AuthorPill from "./AuthorPill.svelte";
   import CloseX from "./CloseX.svelte";
+  import { showOriginalWordAt } from "./OriginalWordPopup.svelte";
 
   export let open = false;
   export let book = "";
@@ -119,7 +122,8 @@
     tick().then(() => scrollToTarget(targetAuthor));
   }
 
-  const textStore = new IndexedDBTextStore();
+  /** The translation the pill's verse was read in. */
+  let previewTranslation = '';
 
   let activeTab: "references" | "commentary" = initialTab;
   $: if (open) activeTab = initialTab;
@@ -140,13 +144,13 @@
     const savedScrollTop = bodyEl?.scrollTop ?? 0;
     panelLoading = true;
     const translation = get(navigationStore).translation;
-    const verses = await textStore.getChapter(translation, target.book, target.chapter);
-    const targetVerse = verses.find(v => v.verse === target.verse);
+    const text = await verseAtEnglishRef(translation, target.book, target.chapter, target.verse);
+    previewTranslation = translation;
     pillPreview = {
       book: target.book,
       chapter: target.chapter,
       verse: target.verse,
-      text: targetVerse?.text ?? '',
+      text,
     };
     panelLoading = false;
     await tick();
@@ -156,7 +160,8 @@
   /** Go to the previewed verse in the reader. The reader closes the sheet and leaves a crumb. */
   function handlePillClick() {
     if (!pillPreview) return;
-    const { book: toBook, chapter: toChapter, verse: toVerse } = pillPreview;
+    // The reference is in English numbering; the reader lands where its text keeps it.
+    const { book: toBook, chapter: toChapter, verse: toVerse } = landingIn(get(navigationStore).translation, pillPreview);
     pillPreview = null;
     dispatch('navigateTo', { book: toBook, chapter: toChapter, verse: toVerse });
   }
@@ -168,7 +173,11 @@
   // Event delegation for commentary-ref spans injected by linkifyCommentaryRefs.
   function handleCommentaryBodyClick(e: MouseEvent | KeyboardEvent) {
     const target = e.target as HTMLElement;
-    if (!target.classList.contains('commentary-ref')) return;
+    if (!target.classList.contains('commentary-ref')) {
+      // A Greek or Hebrew word in the comment: its meaning beside it.
+      if (e instanceof MouseEvent && !target.closest('a, button')) showOriginalWordAt(e);
+      return;
+    }
     if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return;
     const ref = target.dataset.ref;
     if (ref) handleRefClick(ref);
@@ -345,6 +354,7 @@
           {:else}
             <span class="hint">Verse text not available.</span>
           {/if}
+          <CompanionLine shown={previewTranslation} book={pillPreview.book} chapter={pillPreview.chapter} verse={pillPreview.verse} englishRef />
         </div>
         <div class="pill-hint">Tap to go there</div>
       </div>

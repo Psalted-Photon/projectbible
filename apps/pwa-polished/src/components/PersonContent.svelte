@@ -6,9 +6,12 @@
   import { Tree } from "phosphor-svelte";
   import { get } from "svelte/store";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
-  import { IndexedDBTextStore } from "../lib/adapters";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
+  import { verseAtEnglishRef } from "../lib/companion";
+  import { ENGLISH_NUMBERING } from "../lib/versification";
+  import CompanionLine from "./CompanionLine.svelte";
+  import EnglishChip from "./EnglishChip.svelte";
   import { windowStore } from "../lib/stores/windowStore";
   import { personModalStore } from "../stores/personModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
@@ -477,8 +480,9 @@
   let showVerseList = false;
   let expandedBooks = new Set<string>();
   let versePreviews: Record<string, string> = {};
+  /** The translation the previews were read in, which decides whether English goes under them. */
+  let previewTranslation = "";
   const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
-  const verseTextStore = new IndexedDBTextStore();
 
   // Start the list over whenever the person changes, new lookup or homonym.
   $: person?.id, resetVerseList();
@@ -511,11 +515,12 @@
     next.add(book);
     expandedBooks = next;
     const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
+    previewTranslation = translation;
     const loadedText = await Promise.all(
       refs.map(async (r) => {
         const key = `${book} ${r.chapter}:${r.verse}`;
         if (versePreviews[key] !== undefined) return [key, versePreviews[key]] as const;
-        const text = (await verseTextStore.getVerse(translation, book, r.chapter, r.verse)) ?? "";
+        const text = await verseAtEnglishRef(translation, book, r.chapter, r.verse);
         return [key, text] as const;
       }),
     );
@@ -552,6 +557,7 @@
       chapter,
       verse,
       docked ? undefined : { surface: 'person', snapshot: viewSnapshot() },
+      ENGLISH_NUMBERING,
     );
     // A pinned bio stays open across the jump — reading the passage beside the
     // person is the whole point of pinning it.
@@ -742,6 +748,7 @@
                 <p class="char-verses-loading show-late">Loading…</p>
               {:else}
                 <div class="char-verses-books">
+                  <EnglishChip shown={previewTranslation} bar />
                   {#each versesByBook as { book, refs, color }}
                     <div class="cv-book-group">
                       <button class="cv-book-header" on:click={() => toggleBook(book, refs)}>
@@ -763,6 +770,7 @@
                                   {@html renderVersePreviewHtml(versePreviews[`${book} ${r.chapter}:${r.verse}`])}
                                 </span>
                               {/if}
+                              <CompanionLine shown={previewTranslation} {book} chapter={r.chapter} verse={r.verse} englishRef />
                             </button>
                           {/each}
                         </div>

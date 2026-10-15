@@ -8,8 +8,9 @@
   import { TRIBE_READING, tribeSection, type TribePart } from "../lib/gems/tribes";
   import { getBookColor } from "../lib/bibleData.js";
   import { parseOsisRef } from "../lib/parseRefString";
-  import { IndexedDBTextStore } from "../adapters/TextStore";
   import { cardJumpToVerse, lookupReader, readerState } from "../stores/navigationStore";
+  import { verseAtEnglishRef } from "../lib/companion";
+  import { ENGLISH_NUMBERING } from "../lib/versification";
   import { isbeModalStore } from "../stores/isbeModalStore";
   import { sanitizePackHtml } from "../lib/sanitizePackHtml";
   import { getIsbeEntry, getNavesTopic, type NavesPoint, type NavesRef } from "../adapters/lexicon-lookup.js";
@@ -100,7 +101,7 @@
   function navigateToVerse(book: string, chapter: number, verse: number) {
     // The back arrow walks the reader that opened the card back to where it
     // was. The tribe card itself isn't a saved surface, so it doesn't reopen.
-    cardJumpToVerse(get(lookupReader), book, chapter, verse);
+    cardJumpToVerse(get(lookupReader), book, chapter, verse, undefined, ENGLISH_NUMBERING);
     onClose();
   }
 
@@ -131,13 +132,15 @@
   // --- Verse lists ------------------------------------------------------
   let expanded: Record<string, boolean> = {};
   let versePreviews: Record<string, string> = {};
-  const verseTextStore = new IndexedDBTextStore();
+  /** The translation the previews were read in, which decides whether English goes under them. */
+  let previewTranslation = "";
 
   async function toggleRefs(key: string, refs: NavesRef[]) {
     const opening = !expanded[key];
     expanded = { ...expanded, [key]: opening };
     if (!opening) return;
     const translation = readerState(get(lookupReader)).translation;
+    previewTranslation = translation;
     const wanted = new Map<string, { book: string; chapter: number; verse: number }>();
     for (const r of refs) {
       const k = navesRefKey(r.osis);
@@ -148,7 +151,7 @@
     if (!wanted.size) return;
     const loaded = await Promise.all(
       [...wanted].map(async ([k, t]) => {
-        const text = (await verseTextStore.getVerse(translation, t.book, t.chapter, t.verse)) ?? "";
+        const text = await verseAtEnglishRef(translation, t.book, t.chapter, t.verse);
         return [k, text] as const;
       }),
     );
@@ -217,6 +220,7 @@
                   links={[]}
                   open={!!expanded[`${pi}.${i}`]}
                   previews={versePreviews}
+                  shown={previewTranslation}
                   onToggle={() => toggleRefs(`${pi}.${i}`, point.refs)}
                   onRef={openRef}
                   onLink={() => {}}

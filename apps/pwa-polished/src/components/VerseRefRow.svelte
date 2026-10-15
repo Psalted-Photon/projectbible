@@ -1,5 +1,6 @@
 <script context="module" lang="ts">
   import { IndexedDBTextStore } from '../lib/adapters';
+  import { englishRefIn } from '../lib/versification';
 
   /**
    * Verse text already fetched, by "translation|Book c:v". Shared by every row
@@ -8,15 +9,22 @@
   const previewCache = new Map<string, Promise<string>>();
   let textStore: IndexedDBTextStore | null = null;
 
-  function previewFor(translation: string, book: string, chapter: number, verse: number): Promise<string> {
-    const key = `${translation}|${book} ${chapter}:${verse}`;
+  /**
+   * The verse's text. An English-numbered reference is read where the
+   * translation keeps it (Hebrew Malachi 3:19 for English 4:1).
+   */
+  function previewFor(translation: string, book: string, chapter: number, verse: number, english: boolean): Promise<string> {
+    const key = `${translation}|${book} ${chapter}:${verse}|${english}`;
     let hit = previewCache.get(key);
     if (!hit) {
       textStore ??= new IndexedDBTextStore();
-      hit = textStore
-        .getVerse(translation, book, chapter, verse)
-        .then((t) => t ?? '')
-        .catch(() => '');
+      const at = english ? englishRefIn(translation, { book, chapter, verse }) : { book, chapter, verse };
+      hit = at
+        ? textStore
+            .getVerse(translation, book, at.chapter, at.verse)
+            .then((t) => t ?? '')
+            .catch(() => '')
+        : Promise.resolve('');
       previewCache.set(key, hit);
     }
     return hit;
@@ -38,6 +46,7 @@
   import { getBookColor } from '../lib/bibleData';
   import { renderVersePreviewHtml } from '../lib/verseRendering';
   import { navigationStore } from '../stores/navigationStore';
+  import CompanionLine from './CompanionLine.svelte';
 
   export let book: string;
   export let chapter: number;
@@ -45,16 +54,19 @@
   /** What to print: "Genesis 46:1–47:12". Defaults to the verse itself. */
   export let label: string | undefined = undefined;
   export let onOpen: () => void;
+  /** The reference is in English numbering, as every list's data is; a reference
+   *  typed into the search bar is in the reader's own. */
+  export let englishRef = true;
 
   $: color = getBookColor(book);
   $: translation = $navigationStore.translation;
   let text = '';
-  $: load(translation, book, chapter, verse);
+  $: load(translation, book, chapter, verse, englishRef);
 
-  async function load(t: string, b: string, c: number, v: number) {
+  async function load(t: string, b: string, c: number, v: number, english: boolean) {
     text = '';
     if (!t) return;
-    const got = await previewFor(t, b, c, v);
+    const got = await previewFor(t, b, c, v, english);
     // Only if the row still shows the same verse it asked for.
     if (t === translation && b === book && c === chapter && v === verse) text = got;
   }
@@ -65,6 +77,7 @@
   {#if text}
     <span class="ref-row-text" dir="auto">{@html renderVersePreviewHtml(text, { maxLength: 150 })}</span>
   {/if}
+  <CompanionLine shown={translation} {book} {chapter} {verse} {englishRef} maxLength={150} />
 </button>
 
 <style>

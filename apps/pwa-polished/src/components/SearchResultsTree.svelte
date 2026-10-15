@@ -9,6 +9,8 @@
   import type { SearchTreeNode } from "../lib/searchTree";
   import type { SearchResult } from "../lib/services/searchService";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
+  import { navigationStore } from "../stores/navigationStore";
+  import CompanionLine from "./CompanionLine.svelte";
 
   export let nodes: SearchTreeNode[] = [];
   /** Shared across the whole tree so nested levels stay independent. */
@@ -107,6 +109,18 @@
               <div class="tree-result-title">{result.title}</div>
               {#if result.subtitle}
                 <div class="tree-result-subtitle">{@html subtitleHtml(result)}</div>
+              {/if}
+              <!-- A Greek or Hebrew hit carries its English; a Strong's hit marks the word. -->
+              {#if (result.type === "verse" || result.type === "strongs") && result.data?.translation}
+                <CompanionLine
+                  shown={result.data.translation}
+                  book={result.data.book}
+                  chapter={result.data.chapter}
+                  verse={result.data.verse}
+                  readerTranslation={$navigationStore.translation}
+                  strongsId={result.type === "strongs" ? result.data.strongsId : null}
+                  maxLength={150}
+                />
               {/if}
             </button>
           {/each}

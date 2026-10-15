@@ -13,6 +13,7 @@
   import { loadEnoch, isEnochAuthor, type EnochBook, type EnochChapter } from "../lib/enochBooks";
   import { packInstallFinished } from "../adapters/db-manager";
   import GetPacksCard from "./GetPacksCard.svelte";
+  import { showOriginalWordAt } from "./OriginalWordPopup.svelte";
 
   export let windowId: string | undefined = undefined;
 
@@ -108,7 +109,11 @@
   // event delegation on the body and navigate to the referenced verse.
   function handleCommentaryBodyClick(e: MouseEvent | KeyboardEvent) {
     const target = e.target as HTMLElement;
-    if (!target.classList.contains("commentary-ref")) return;
+    if (!target.classList.contains("commentary-ref")) {
+      // A Greek or Hebrew word in the comment: its meaning beside it.
+      if (e instanceof MouseEvent && !target.closest("a, button")) showOriginalWordAt(e);
+      return;
+    }
     if (e instanceof KeyboardEvent && e.key !== "Enter" && e.key !== " ") return;
     e.preventDefault();
     const ref = target.dataset.ref;

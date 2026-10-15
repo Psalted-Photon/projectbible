@@ -22,9 +22,7 @@
     type Token,
   } from "../lib/strongsUsage";
   import { reveal } from "../lib/motion";
-  import { englishCompanion } from "../lib/englishCompanion";
-  import { loadCompanionVerse, type CompanionVerse, type CompanionPiece } from "../lib/companion";
-  import { renderCompanionHtml } from "../lib/verseRendering";
+  import CompanionLine from "./CompanionLine.svelte";
 
   export let uses: VerseUse[] = [];
   /** The number the list is for; its English is marked under each verse. */
@@ -150,51 +148,6 @@
     previews ={ ...previews, ...Object.fromEntries(loaded) };
   }
 
-  // --- English under each preview -----------------------------------------
-  // Keyed by the reader's translation too, since that picks which English,
-  // and by the number, since that picks what is marked in it.
-  let english: Record<string, CompanionVerse> = {};
-
-  function englishKey(u: VerseUse): string {
-    return `${previewKey(u)}|${readerTranslation ?? ""}|${strongsId ?? ""}`;
-  }
-
-  async function loadEnglish(group: BookGroup) {
-    if (!$englishCompanion) return;
-    const wanted = group.uses.filter((u) => english[englishKey(u)] === undefined);
-    if (!wanted.length) return;
-    const loaded = await Promise.all(
-      wanted.map(async (u) => {
-        const highlight = strongsId ? { strongsId, marked: marksFor(u).length } : undefined;
-        const en = await loadCompanionVerse(previewSource(u), u.book, u.chapter, u.verse, readerTranslation, highlight);
-        return [englishKey(u), en] as const;
-      }),
-    );
-    english = { ...english, ...Object.fromEntries(loaded) };
-  }
-
-  // Switched on, or a different reader translation: fill the open books.
-  $: if ($englishCompanion) fillOpenBooks(corpora, expandedBooks, readerTranslation, strongsId);
-  function fillOpenBooks(list: Corpus[], open: Set<string>, _reader: string | null, _id: string | null) {
-    for (const c of list) {
-      for (const g of c.books) if (open.has(bookKey(c.testament, g.book))) loadEnglish(g);
-    }
-  }
-
-  /** Several verses share the room one would have. */
-  function englishHtml(pieces: CompanionPiece[]): string {
-    const max = Math.max(80, Math.floor(180 / pieces.length));
-    return pieces.map((p) => renderCompanionHtml(p.stored, p.spans, { range: p.ref.part, maxLength: max })).join(" ");
-  }
-
-  /** "NET", plus where the verse sits when its number differs from the original's. */
-  function englishLabel(translation: string, pieces: CompanionPiece[], u: VerseUse): string {
-    const name = translation.toUpperCase();
-    const moved = pieces.length > 1 || pieces.some((p) => p.ref.chapter !== u.chapter || p.ref.verse !== u.verse);
-    if (!moved) return name;
-    return `${name} ${pieces.map((p) => `${p.ref.chapter}:${p.ref.verse}`).join(", ")}`;
-  }
-
   /**
    * The stretch of verse worth showing.
    *
@@ -276,23 +229,15 @@
                         {#if win.after}<span class="vb-elide"> …</span>{/if}
                       </span>
                     {/if}
-                    {#if $englishCompanion}
-                      {@const en = english[englishKey(u)]}
-                      {#if en && !en.missing}
-                        <span class="vb-en" dir="ltr" lang="en"
-                          >{@html englishHtml(en.pieces)}
-                          <span class="vb-en-tag">{englishLabel(en.translation, en.pieces, u)}</span></span
-                        >
-                      {:else if en}
-                        <span class="vb-en vb-en-missing" dir="ltr" lang="en">Not in {en.translation.toUpperCase()}</span>
-                        {#if en.fallback}
-                          <span class="vb-en" dir="ltr" lang="en"
-                            >{@html englishHtml(en.fallback.pieces)}
-                            <span class="vb-en-tag">{englishLabel(en.fallback.translation, en.fallback.pieces, u)}</span></span
-                          >
-                        {/if}
-                      {/if}
-                    {/if}
+                    <CompanionLine
+                      shown={previewSource(u)}
+                      book={u.book}
+                      chapter={u.chapter}
+                      verse={u.verse}
+                      {readerTranslation}
+                      {strongsId}
+                      marked={marks.length}
+                    />
                   </button>
                 {/each}
               </div>
@@ -416,7 +361,7 @@
 
   .vb-ref.visited .vb-ref-label,
   .vb-ref.visited .vb-ref-text,
-  .vb-ref.visited .vb-en {
+  .vb-ref.visited :global(.companion-line) {
     opacity: 0.5;
   }
 
@@ -461,33 +406,9 @@
     color: var(--text-muted, #777);
   }
 
-  /* The same verse in English: the app's own font, dimmer than the original,
-     and always left to right, even under Hebrew. */
-  .vb-en {
-    display: block;
-    margin-top: 2px;
-    color: var(--text-muted, #9aa0aa);
-    font-size: 12.5px;
-    line-height: 1.45;
-    text-align: left;
-  }
-
-  .vb-en-missing {
-    font-style: italic;
-    opacity: 0.75;
-  }
-
-  .vb-en-tag {
-    font-size: 10px;
-    letter-spacing: 0.04em;
-    opacity: 0.7;
-    white-space: nowrap;
-  }
-
   /* Same mark treatment as search results and the encyclopedia, so a highlighted
      word means the same thing everywhere in the app. */
-  .vb-ref-text .marked,
-  .vb-en :global(mark) {
+  .vb-ref-text .marked {
     background: rgba(249, 115, 22, 0.35);
     color: #fdba74;
     border-radius: 2px;

@@ -21,6 +21,7 @@
   import { renderVersePreviewHtml } from "../../lib/verseRendering";
   import { reveal } from "../../lib/motion";
   import type { NavesRef, NavesLink } from "../../adapters/lexicon-lookup.js";
+  import CompanionLine from "../CompanionLine.svelte";
 
   /**
    * Everything one outline point cites.
@@ -40,6 +41,8 @@
   export let open = false;
   /** Verse text by `navesRefKey`, shared with the Verses tab's cache. */
   export let previews: Record<string, string> = {};
+  /** The translation the previews are in; English goes under Greek and Hebrew ones. */
+  export let shown = "";
   /** Sits under a collapsible heading rather than beside a plain point. */
   export let indent = false;
   export let onToggle: () => void;
@@ -55,13 +58,15 @@
    */
   $: rows = refs.map((r) => {
     const key = navesRefKey(r.osis);
+    const at = parseOsisRef(r.osis);
     return {
+      at,
       osis: r.osis,
       label: r.label,
       key,
       live: key !== null,
       // A ref we can't read falls through to getBookColor's own neutral gray.
-      color: getBookColor(parseOsisRef(r.osis)?.book ?? ""),
+      color: getBookColor(at?.book ?? ""),
     };
   });
 </script>
@@ -86,6 +91,9 @@
                 <span class="ref-row-text">
                   {@html renderVersePreviewHtml(previews[row.key], { maxLength: 150 })}
                 </span>
+              {/if}
+              {#if row.at && shown}
+                <CompanionLine {shown} book={row.at.book} chapter={row.at.chapter} verse={row.at.verse ?? 1} englishRef maxLength={150} />
               {/if}
             </button>
           {:else}

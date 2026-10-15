@@ -18,7 +18,10 @@
   import { dragScroll } from '../lib/dragScroll';
   import { windowStore, type MapTarget } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
-  import { IndexedDBTextStore } from '../adapters/TextStore';
+  import { verseAtEnglishRef } from '../lib/companion';
+  import { landingIn } from '../lib/versification';
+  import CompanionLine from './CompanionLine.svelte';
+  import EnglishChip from './EnglishChip.svelte';
   import { renderVersePreviewHtml } from '../lib/verseRendering';
   import { createAtlasMap, TILE_BASEMAPS } from '../lib/atlas/map.js';
   import { createResizeFit } from '../lib/atlas/fit';
@@ -107,7 +110,8 @@
   let openBooks: Record<string, boolean> = {};
   /** The verse behind each reference, by OSIS id, in the reader's translation. */
   let versePreviews: Record<string, string> = {};
-  const verseTextStore = new IndexedDBTextStore();
+  /** The translation the previews were read in, which decides whether English goes under them. */
+  let previewTranslation = '';
 
   /** The photograph being viewed full-screen, if any. */
   let viewing: any = null;
@@ -715,7 +719,8 @@
     if (!ev.first) return;
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'map');
-    navigationStore.navigateToVerse(current.translation, ev.first.book, ev.first.chapter, ev.first.verse);
+    const at = landingIn(current.translation, ev.first);
+    navigationStore.navigateToVerse(current.translation, ev.first.book, at.chapter, at.verse);
   }
 
   // ------------------------------------------------------ the tapped panel
@@ -742,19 +747,14 @@
    */
   async function loadBookText(group: any) {
     const translation = get(navigationStore).translation;
+    previewTranslation = translation;
     const loaded = await Promise.all(
       (group.refs ?? []).map(async (ref: any) => {
         if (versePreviews[ref.osis] !== undefined) {
           return [ref.osis, versePreviews[ref.osis]] as const;
         }
         const [book, chapter, verse] = ref.osis.split('.');
-        const text =
-          (await verseTextStore.getVerse(
-            translation,
-            bookName(book),
-            Number(chapter),
-            Number(verse) || 1,
-          )) ?? '';
+        const text = await verseAtEnglishRef(translation, bookName(book), Number(chapter), Number(verse) || 1);
         return [ref.osis, text] as const;
       }),
     );
@@ -807,7 +807,8 @@
 
     const current = get(navigationStore);
     navigationStore.pushHistory(current, 'map');
-    navigationStore.navigateToVerse(current.translation, bookName(book), chapter, verse);
+    const at = landingIn(current.translation, { book: bookName(book), chapter, verse });
+    navigationStore.navigateToVerse(current.translation, bookName(book), at.chapter, at.verse);
   }
 
   // -------------------------------------------------------------- how far
@@ -1639,6 +1640,7 @@
           {/if}
           {#if (info.kind === 'place' || info.kind === 'measure') && info.verses.length}
             <div class="info-h">{info.kind === 'measure' ? 'Verses naming both' : 'Where it appears'}</div>
+            <EnglishChip shown={previewTranslation} bar />
             {#each versesByBook(info.verses) as group, i}
               <!-- The first book opens, so the panel never lands as a wall of
                    closed rows. -->
@@ -1662,6 +1664,7 @@
                       {#if versePreviews[ref.osis]}
                         <span class="vb-ref-text">{@html versePreview(ref.osis)}</span>
                       {/if}
+                      <CompanionLine shown={previewTranslation} book={bookName(group.book)} chapter={Number(ref.osis.split('.')[1])} verse={Number(ref.osis.split('.')[2]) || 1} englishRef maxLength={150} />
                     </button>
                   {/each}
                 </div>

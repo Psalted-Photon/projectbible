@@ -5,8 +5,18 @@
    * it in all of them.
    */
   import { englishCompanion } from "../lib/englishCompanion";
+  import { isOriginalLanguage } from "../lib/translationKind";
+
+  /** The translation the previews are in; the chip hides unless it is Greek or Hebrew. */
+  export let shown: string | null = null;
+  /** On a row of its own above a list, at the right. */
+  export let bar = false;
+
+  $: visible = shown === null || isOriginalLanguage(shown);
 </script>
 
+{#if visible}
+<div class:english-bar={bar} class:english-inline={!bar}>
 <button
   class="english-chip"
   class:active={$englishCompanion}
@@ -16,8 +26,20 @@
 >
   English
 </button>
+</div>
+{/if}
 
 <style>
+  .english-inline {
+    display: contents;
+  }
+
+  .english-bar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 4px 4px 6px;
+  }
+
   /* Drawn like the word study's source chips beside it. */
   .english-chip {
     background: none;

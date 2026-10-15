@@ -25,8 +25,10 @@
   import { navigationStore } from '../../stores/navigationStore';
   import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
   import { devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
-  import { IndexedDBTextStore } from '../../lib/adapters';
   import { renderVerseHtml, cleanVersePreviewText } from '../../lib/verseRendering';
+  import { verseAtEnglishRef } from '../../lib/companion';
+  import { landingIn } from '../../lib/versification';
+  import CompanionLine from '../CompanionLine.svelte';
   import { sanitizePackHtml } from '../../lib/sanitizePackHtml';
   import { parseOsisRef } from '../../lib/parseRefString';
   import { getBookColor, normalizeBookName, translationLabel } from '../../lib/bibleData';
@@ -47,7 +49,6 @@
   export let target: DevotionalTarget;
 
   const dispatch = createEventDispatcher<{ close: void; step: DevotionalTarget }>();
-  const textStore = new IndexedDBTextStore();
 
   let reading: DevotionalReading | null = null;
   let loading = true;
@@ -122,7 +123,7 @@
     const book = normalizeBookName(k.book);
     const parts: string[] = [];
     for (const v of versesOf(k)) {
-      const t = await textStore.getVerse(trans, book, k.chapter, v);
+      const t = await verseAtEnglishRef(trans, book, k.chapter, v);
       if (t) parts.push(t);
     }
     verseCache = { ...verseCache, [key]: parts.join(' ') };
@@ -241,7 +242,8 @@
       notesScrollTop: notesOpen ? notesEl?.scrollTop ?? 0 : 0,
     });
     // navigateToVerse (not navigateTo) so the verse gets the fade highlight.
-    navigationStore.navigateToVerse(current.translation, t.book, t.chapter, t.verse ?? 1);
+    const at = landingIn(current.translation, { book: t.book, chapter: t.chapter, verse: t.verse ?? 1 });
+    navigationStore.navigateToVerse(current.translation, t.book, at.chapter, at.verse);
     readingPlanModalStore.close();
   }
 
@@ -362,6 +364,9 @@
             <div class="dl-frag">
               {#if text}
                 <p class="dl-text">{@html renderVerseHtml(text)}</p>
+                {#each versesOf(k) as v}
+                  <CompanionLine shown={translation} book={normalizeBookName(k.book)} chapter={k.chapter} verse={v} englishRef maxLength={600} />
+                {/each}
               {:else if text === ''}
                 <p class="dr-muted">{translationLabel(translation)} doesn't have this verse.</p>
               {/if}
@@ -382,6 +387,9 @@
       <div class="dr-headline">
         {#if text}
           <p class="dr-verse">{@html renderVerseHtml(text)}</p>
+          {#each versesOf(k) as v}
+            <CompanionLine shown={translation} book={normalizeBookName(k.book)} chapter={k.chapter} verse={v} englishRef maxLength={600} />
+          {/each}
         {:else if text === ''}
           <p class="dr-muted">{translationLabel(translation)} doesn't have this verse.</p>
         {/if}

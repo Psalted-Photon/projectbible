@@ -5,10 +5,13 @@
   import GetPacksCard from "./GetPacksCard.svelte";
   import { get } from "svelte/store";
   import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
-  import { IndexedDBTextStore } from "../adapters/TextStore";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { parseOsisRef } from "../lib/parseRefString";
   import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
+  import { verseAtEnglishRef } from "../lib/companion";
+  import { ENGLISH_NUMBERING } from "../lib/versification";
+  import CompanionLine from "./CompanionLine.svelte";
+  import EnglishChip from "./EnglishChip.svelte";
   import { windowStore } from "../lib/stores/windowStore";
   import { navesModalStore } from "../stores/navesModalStore";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
@@ -83,7 +86,6 @@
   let trail: TrailStop[] = [...initialTrail];
 
   const bookOrder = new Map(BIBLE_BOOKS.map((b, i) => [b.name, i]));
-  const verseTextStore = new IndexedDBTextStore();
 
   // Reload whenever the target changes. Docked, that also fires when following
   // a cross-reference rewrites the window's contentState.
@@ -219,6 +221,7 @@
   /** Verse text for a point's citations, into the cache the Verses tab reads. */
   async function loadRefText(refs: NavesRef[]) {
     const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
+    previewTranslation = translation;
     const wanted = new Map<string, { book: string; chapter: number; verse: number }>();
     for (const r of refs) {
       const key = navesRefKey(r.osis);
@@ -229,7 +232,7 @@
     if (!wanted.size) return;
     const loaded = await Promise.all(
       [...wanted].map(async ([key, t]) => {
-        const text = (await verseTextStore.getVerse(translation, t.book, t.chapter, t.verse)) ?? "";
+        const text = await verseAtEnglishRef(translation, t.book, t.chapter, t.verse);
         return [key, text] as const;
       }),
     );
@@ -256,6 +259,8 @@
   // --- Verses tab --------------------------------------------------------
   let expandedBooks = new Set<string>();
   let versePreviews: Record<string, string> = {};
+  /** The translation the previews were read in, which decides whether English goes under them. */
+  let previewTranslation = "";
 
   $: versesByBook = (() => {
     const groups = new Map<string, VerseRef[]>();
@@ -292,11 +297,12 @@
   async function loadBookText(book: string) {
     const refs = versesByBook.find((g) => g.book === book)?.refs ?? [];
     const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
+    previewTranslation = translation;
     const loaded = await Promise.all(
       refs.map(async (r) => {
         const key = `${book} ${r.chapter}:${r.verse}`;
         if (versePreviews[key] !== undefined) return [key, versePreviews[key]] as const;
-        const text = (await verseTextStore.getVerse(translation, book, r.chapter, r.verse)) ?? "";
+        const text = await verseAtEnglishRef(translation, book, r.chapter, r.verse);
         return [key, text] as const;
       }),
     );
@@ -320,6 +326,7 @@
       chapter,
       verse,
       snap ? { surface: 'naves', snapshot: snap } : undefined,
+      ENGLISH_NUMBERING,
     );
     // A pinned topic stays open across the jump — reading the passage beside
     // the outline is the whole point of pinning it.
@@ -621,6 +628,7 @@
                 links={section.point.links}
                 open={!!expanded[`r${i}`]}
                 previews={versePreviews}
+                shown={previewTranslation}
                 onToggle={() => toggleRefs(`r${i}`, section.point.refs)}
                 onRef={openRef}
                 onLink={followLink}
@@ -635,6 +643,7 @@
                         links={child.links}
                         open={!!expanded[`r${i}.${j}`]}
                         previews={versePreviews}
+                        shown={previewTranslation}
                         onToggle={() => toggleRefs(`r${i}.${j}`, child.refs)}
                         onRef={openRef}
                         onLink={followLink}
@@ -653,6 +662,7 @@
                   links={section.point.links}
                   open={!!expanded[`r${i}`]}
                   previews={versePreviews}
+                  shown={previewTranslation}
                   onToggle={() => toggleRefs(`r${i}`, section.point.refs)}
                   onRef={openRef}
                   onLink={followLink}
@@ -667,6 +677,7 @@
           <GetPacksCard packs={["encyclotopical"]} title="Finish installing" repair />
         {:else}
           <div class="verses">
+            <EnglishChip shown={previewTranslation} bar />
             {#each versesByBook as group}
               <div class="vb-group">
                 <button class="vb-header" on:click={() => toggleBook(group.book)}>
@@ -689,6 +700,7 @@
                         {#if versePreviews[key]}
                           <span class="vb-ref-text">{@html renderVersePreviewHtml(versePreviews[key], { maxLength: 150 })}</span>
                         {/if}
+                        <CompanionLine shown={previewTranslation} book={group.book} chapter={r.chapter} verse={r.verse} englishRef maxLength={150} />
                       </button>
                     {/each}
                   </div>
