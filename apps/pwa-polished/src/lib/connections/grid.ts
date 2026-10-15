@@ -6,8 +6,8 @@
  * cell's left edge, the target's down its right, and one line across for every
  * link between them — the same curve and the same colors the detail draws
  * (lib/connections/detail.ts), because a cell is the detail seen from further
- * off. Seven group rows and columns (Law, History, Poetry, Prophets, Gospels,
- * Paul, Letters) sum their books up the same way: a group is a run of whole
+ * off. Seven group rows and columns (Law, History, Wisdom/Poetry, Prophets,
+ * Gospels, Pauline Epistles, General Epistles) sum their books up the same way: a group is a run of whole
  * books, so it squeezes onto one axis exactly as a book does.
  *
  * The whole grid is drawn once into an image, and that image is what pans and
@@ -72,19 +72,19 @@ export interface GridConfig {
 /** What the app ships, and what the lab's Reset puts back. */
 export const GRID: GridConfig = {
   voteFloor: 1,
-  bookSize: 0.5,
-  groups: 'start',
-  groupSize: 2.5,
+  bookSize: 0,
+  groups: 'each',
+  groupSize: 2,
   gap: 0.12,
   groupGap: 0.5,
   imageSize: 3072,
-  lineWidth: 0.5,
-  opacity: 0.2,
-  diagonal: 0.5,
+  lineWidth: 0.15,
+  opacity: 0.79,
+  diagonal: 0.86,
   inset: 0.04,
-  axisAlpha: 0.35,
+  axisAlpha: 0.29,
   cellTint: 0.05,
-  labelSize: 11,
+  labelSize: 12,
   sharpZoom: true,
   liveLimit: 80000,
 };
@@ -95,6 +95,8 @@ export const GRID: GridConfig = {
 
 export interface BookGroup {
   name: string;
+  /** What a lane too narrow for the full name shows. */
+  short: string;
   first: string;
   last: string;
   category: BookInfo['category'];
@@ -103,18 +105,18 @@ export interface BookGroup {
 /**
  * The seven groups, each a run of whole books in canonical order.
  *
- * Acts rides with the Gospels and Revelation with the Letters: the plan names
+ * Acts rides with the Gospels and Revelation with the General Epistles: the plan names
  * seven groups, and both are a single book whose neighbours are their nearest
  * kin. Each group wears its first category's color.
  */
 export const BOOK_GROUPS: BookGroup[] = [
-  { name: 'Law', first: 'Genesis', last: 'Deuteronomy', category: 'pentateuch' },
-  { name: 'History', first: 'Joshua', last: 'Esther', category: 'historical' },
-  { name: 'Poetry', first: 'Job', last: 'Song of Solomon', category: 'wisdom' },
-  { name: 'Prophets', first: 'Isaiah', last: 'Malachi', category: 'major-prophets' },
-  { name: 'Gospels', first: 'Matthew', last: 'Acts', category: 'gospels' },
-  { name: 'Paul', first: 'Romans', last: 'Philemon', category: 'pauline' },
-  { name: 'Letters', first: 'Hebrews', last: 'Revelation', category: 'general' },
+  { name: 'Law', short: 'Law', first: 'Genesis', last: 'Deuteronomy', category: 'pentateuch' },
+  { name: 'History', short: 'History', first: 'Joshua', last: 'Esther', category: 'historical' },
+  { name: 'Wisdom/Poetry', short: 'Wisdom', first: 'Job', last: 'Song of Solomon', category: 'wisdom' },
+  { name: 'Prophets', short: 'Prophets', first: 'Isaiah', last: 'Malachi', category: 'major-prophets' },
+  { name: 'Gospels', short: 'Gospels', first: 'Matthew', last: 'Acts', category: 'gospels' },
+  { name: 'Pauline Epistles', short: 'Pauline', first: 'Romans', last: 'Philemon', category: 'pauline' },
+  { name: 'General Epistles', short: 'General', first: 'Hebrews', last: 'Revelation', category: 'general' },
 ];
 
 /* --------------------------------------------------------------------------- *
@@ -176,7 +178,7 @@ export function buildGridLayout(data: ConnectionsData, config: GridConfig): Grid
     return {
       kind: 'group',
       name: g.name,
-      short: g.name,
+      short: g.short,
       start: first.start,
       end: last.end,
       rgb: rgbOf(color),

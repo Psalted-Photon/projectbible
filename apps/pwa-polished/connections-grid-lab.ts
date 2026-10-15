@@ -731,7 +731,7 @@ function buildDrawer() {
     '0 gives every book the same row and column. 1 sizes them by verse count, so Psalms is 100 times Obadiah. Between bends toward it.');
   choice('groups', ['start', 'each', 'off'] as const, () => GRID.groups, (v) => { GRID.groups = v; recount(); },
     { start: 'together, first', each: 'before each group', off: 'none' },
-    'The seven group rows and columns: Law, History, Poetry, Prophets, Gospels (with Acts), Paul, Letters (with Revelation). Each one is all its books on one axis.');
+    'The seven group rows and columns: Law, History, Wisdom/Poetry, Prophets, Gospels (with Acts), Pauline Epistles, General Epistles (with Revelation). Each one is all its books on one axis.');
   slider('group size', () => GRID.groupSize, (v) => { GRID.groupSize = v; recount(); }, 0.5, 8, 0.1,
     'A group row, as a multiple of an average book row.');
   slider('gap', () => GRID.gap, (v) => { GRID.gap = v; recount(); }, 0, 0.6, 0.01,
