@@ -5,18 +5,26 @@
  * Greek or Hebrew word.
  *
  * Each translation is added on its own and merged into the one pack file, so
- * rebuilding one leaves the others as they were:
+ * rebuilding one leaves the others as they were. Run kjv first: the WEB and
+ * NET filters read its links.
  *
- *   node scripts/build-word-links.mjs --only kjv
+ *   node scripts/build-word-links.mjs --only kjv|bsb|web|net
  *
- * KJV comes from eBible's USFX, where every translated word carries the
- * Strong's number it renders (<w s="G0025">loved</w>). BSB (Phase 5) and WEB
- * and NET (Phase 6) are still to come.
+ * - KJV: eBible's USFX, where every translated word carries the Strong's
+ *   number it renders (<w s="G0025">loved</w>). Kept as tagged.
+ * - BSB: the Berean translators' own tables (bereanbible.com/bsb_tables.tsv,
+ *   public domain), one English fragment per Greek or Hebrew word, found in
+ *   the BSB text in reading order.
+ * - WEB and NET: their sources tag words too, but by machine and often wrong
+ *   (WEB Genesis 1:1 tags "In" as heaven). A tag is kept only when its number
+ *   is in that verse's Greek (BYZ for WEB, SBLGNT for NET) or Hebrew, and the
+ *   English word is one that number can mean. A number whose tags all fail
+ *   gets a link only when its meaning matches exactly one word in the verse.
  *
  * Offsets are measured on the verse's clean text exactly as the app measures
- * it (scripts/lib/clean-text.mjs), so the tags are read from the source and
- * checked against the shipped pack word for word. Rebuilding the KJV, WEB, BSB
- * or NET pack means running this again, as with align-red-letter.mjs.
+ * it (scripts/lib/clean-text.mjs), and each source is checked against the
+ * shipped pack. Rebuilding the KJV, WEB, BSB or NET pack means running this
+ * again, as with align-red-letter.mjs.
  *
  * The pack also carries original_forms: every Greek and Hebrew spelling in the
  * ancient-languages pack, folded the way the Strong's list folds it, with the
@@ -24,25 +32,89 @@
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { produceUSFXVerses } from '../packages/packtools/src/parsers/build-usfx-pack.mjs';
 import { WORD_OPEN, WORD_SEP, WORD_CLOSE } from '../packages/packtools/src/parsers/usfm-scanner.mjs';
+import { readBooks as readNetBooks } from './build-net-pack.mjs';
 import { cleanWithIndex, locateVerbatim } from './lib/clean-text.mjs';
+import { FUNCTION_WORDS, NEVER_MARKED, inflect, patternFor, vocabularyOf } from './lib/gloss-match.mjs';
+import { fromEnglish, toEnglish } from './lib/versification.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
 const OUT_DIR = join(repoRoot, 'packs/consolidated');
 const OUT_PATH = join(OUT_DIR, 'word-links.sqlite');
 const ANCIENT_PATH = join(OUT_DIR, 'ancient-languages.sqlite');
+const CRITICAL_PATH = join(OUT_DIR, 'greek-critical.sqlite');
+const LEXICAL_PATH = join(OUT_DIR, 'lexical.sqlite');
+const BSB_TABLES = join(repoRoot, 'data-sources/berean-tables/bsb_tables.tsv');
 
 const SOURCES = {
   kjv: {
     pack: join(repoRoot, 'packs/kjv.sqlite'),
     credit: 'KJV word tags: eBible.org King James Version with Strong’s numbers (public domain).',
-    read: () =>
-      produceUSFXVerses(join(repoRoot, 'data-sources/kjv-usfx/eng-kjv_usfx.xml'), { strongsSentinels: true }).verses,
+    build: (packText) =>
+      fromTags(
+        produceUSFXVerses(join(repoRoot, 'data-sources/kjv-usfx/eng-kjv_usfx.xml'), { strongsSentinels: true }).verses,
+        packText,
+      ).rows,
+    checks: [
+      { ref: ['John', 3, 16], id: 'G0025', want: 'loved' },
+      { ref: ['Genesis', 1, 1], id: 'H1254', want: 'created' },
+      { ref: ['Psalms', 23, 1], id: 'H3068', want: 'LORD' },
+      { ref: ['Malachi', 4, 5], id: 'H0452', want: 'Elijah' },
+    ],
+  },
+  bsb: {
+    pack: join(repoRoot, 'packs/bsb.sqlite'),
+    credit: 'BSB word links: Berean Standard Bible translation tables, bereanbible.com (public domain).',
+    build: (packText) => fromBereanTables(packText),
+    checks: [
+      { ref: ['John', 3, 16], id: 'G0025', want: 'loved' },
+      { ref: ['Genesis', 1, 1], id: 'H1254', want: 'created' },
+      { ref: ['Psalms', 23, 1], id: 'H3068', want: 'LORD' },
+      { ref: ['Malachi', 4, 5], id: 'H0452', want: 'Elijah' },
+    ],
+  },
+  web: {
+    pack: join(repoRoot, 'packs/web.sqlite'),
+    credit: 'WEB word tags: eBible.org World English Bible with Strong’s numbers (public domain), checked against the Greek and Hebrew.',
+    build: (packText) =>
+      filterTags(
+        fromTags(
+          produceUSFXVerses(join(repoRoot, 'data-sources/web-usfx/eng-web_usfx.xml'), { strongsSentinels: true }).verses,
+          packText,
+        ).entries,
+        { scheme: 'web', greek: { db: ANCIENT_PATH, id: 'byz', scheme: 'majority' } },
+      ),
+    checks: [
+      { ref: ['Genesis', 1, 1], id: 'H1254', want: 'created' },
+      { ref: ['Genesis', 1, 1], id: 'H7225', want: 'beginning' },
+      { ref: ['John', 3, 16], id: 'G2889', want: 'world' },
+      { ref: ['Psalms', 23, 1], id: 'H3068', want: 'Yahweh' },
+    ],
+  },
+  net: {
+    pack: join(repoRoot, 'packs/net.sqlite'),
+    credit: 'NET word tags: NET Bible® USFM with Strong’s numbers, checked against the Greek and Hebrew.',
+    build: (packText) =>
+      filterTags(
+        fromTags(
+          readNetBooks({ strongsSentinels: true }, { quiet: true }).flatMap((b) =>
+            b.verses.map((v) => ({ book: b.name, ...v })),
+          ),
+          packText,
+        ).entries,
+        { scheme: 'english', greek: { db: CRITICAL_PATH, id: 'sblgnt', scheme: 'english' } },
+      ),
+    checks: [
+      { ref: ['Genesis', 1, 1], id: 'H1254', want: 'created' },
+      { ref: ['John', 3, 16], id: 'G2889', want: 'world' },
+      { ref: ['John', 3, 16], id: 'G0025', want: 'loved' },
+      { ref: ['Psalms', 23, 1], id: 'H3068', want: 'LORD' },
+    ],
   },
 };
 
@@ -52,7 +124,6 @@ const only = (() => {
 })();
 if (!only || !SOURCES[only]) {
   console.error(`Usage: node scripts/build-word-links.mjs --only ${Object.keys(SOURCES).join('|')}`);
-  console.error('(bsb is Phase 5; web and net are Phase 6.)');
   process.exit(1);
 }
 
@@ -84,7 +155,40 @@ function hebrewKey(text) {
     .replace(/[^א-ת]/g, '');
 }
 
-// ── Reading the tags ────────────────────────────────────────────────────────
+const verseKey = (book, chapter, verse) => `${book}|${chapter}|${verse}`;
+
+/** Links that share a span become one, with both numbers. */
+function mergeSpans(links) {
+  const bySpan = new Map();
+  for (const l of links) {
+    const k = `${l.s},${l.e}`;
+    const ids = bySpan.get(k) ?? [];
+    for (const id of l.ids.split('+')) if (!ids.includes(id)) ids.push(id);
+    bySpan.set(k, ids);
+  }
+  return [...bySpan]
+    .map(([k, ids]) => {
+      const [s, e] = k.split(',').map(Number);
+      return { s, e, ids: ids.join('+') };
+    })
+    .sort((a, b) => a.s - b.s || a.e - b.e);
+}
+
+/** A seeded shuffle, so the report's samples are the same run to run. */
+function sample(list, n) {
+  let seed = 20261015;
+  const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  const copy = [...list];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
+}
+
+const pct = (a, b) => `${((a / Math.max(1, b)) * 100).toFixed(2)}%`;
+
+// ── Tagged sources: KJV, WEB, NET ───────────────────────────────────────────
 
 /** Take the sentinels out: the stored text, and each tagged word's place in it. */
 function unwrap(text) {
@@ -131,6 +235,407 @@ function toClean(range, at, text) {
   return e > s ? { s, e } : null;
 }
 
+/**
+ * Every tag placed on the pack's clean text: `entries` (one per verse, with
+ * its clean text and tag links) and `rows` (the verses with links, ready to
+ * write).
+ */
+function fromTags(verses, packText) {
+  const entries = [];
+  let verbatim = 0;
+  let relocated = 0;
+  let notInPack = 0;
+  let wordsRead = 0;
+  let wordsLinked = 0;
+  let wordsMissed = 0;
+  let wordsUntagged = 0;
+  const drifted = [];
+
+  for (const v of verses) {
+    const key = verseKey(v.book, v.chapter, v.verse);
+    const stored = packText.get(key);
+    if (stored === undefined) { notInPack++; continue; }
+    const { stored: ours, words } = unwrap(v.text);
+    if (!words.length) continue;
+    wordsRead += words.length;
+
+    const clean = cleanWithIndex(stored);
+    const links = [];
+    if (ours === stored) {
+      verbatim++;
+      for (const w of words) {
+        const ids = linkIds(w.ids);
+        const span = ids && toClean(w, clean.at, clean.text);
+        if (!ids) wordsUntagged++;
+        else if (!span) wordsMissed++;
+        else { links.push({ ...span, ids }); wordsLinked++; }
+      }
+    } else {
+      // The source and the pack disagree somewhere in this verse: find each word
+      // in the pack's own text, in order, and drop the ones that aren't there.
+      relocated++;
+      if (drifted.length < 10) drifted.push(key);
+      let cursor = 0;
+      for (const w of words) {
+        const ids = linkIds(w.ids);
+        if (!ids) { wordsUntagged++; continue; }
+        const found = locateVerbatim(ours.slice(w.s, w.e), clean.text, cursor);
+        if (!found) { wordsMissed++; continue; }
+        cursor = found.e;
+        links.push({ ...found, ids });
+        wordsLinked++;
+      }
+    }
+    links.sort((a, b) => a.s - b.s);
+    entries.push({ book: v.book, chapter: v.chapter, verse: v.verse, text: clean.text, links });
+  }
+
+  console.log(`Verses read:            ${verses.length.toLocaleString()}` + (notInPack ? ` (${notInPack} not in the pack)` : ''));
+  console.log(`Text matches the pack:  ${verbatim.toLocaleString()} of ${(verbatim + relocated).toLocaleString()} tagged verses (${pct(verbatim, verbatim + relocated)})`);
+  if (relocated) console.log(`Found word by word:     ${relocated} verses, e.g. ${drifted.join(', ')}`);
+  console.log(`Tagged words:           ${wordsRead.toLocaleString()}`);
+  console.log(`Tags placed:            ${wordsLinked.toLocaleString()}` +
+    (wordsMissed ? `, ${wordsMissed} not found in the pack text` : '') +
+    (wordsUntagged ? `, ${wordsUntagged} with no usable number` : ''));
+
+  const rows = entries.filter((e) => e.links.length).map((e) => ({ ...e }));
+  return { entries, rows };
+}
+
+// ── BSB: the Berean tables ──────────────────────────────────────────────────
+
+const TABLE_BOOK = { Psalm: 'Psalms' };
+
+/**
+ * The tables list each verse's Greek or Hebrew words in BSB order, each with
+ * the English fragment it became. Fragments are found in the pack's clean text
+ * from a moving cursor. Words the translators supplied are in [brackets] and
+ * are trimmed off a fragment's ends, so "[was] good" links "good".
+ */
+function fromBereanTables(packText) {
+  if (!existsSync(BSB_TABLES)) {
+    console.error(`❌ Berean tables not found: ${BSB_TABLES}\n   Download https://bereanbible.com/bsb_tables.tsv there.`);
+    process.exit(1);
+  }
+  const lines = readFileSync(BSB_TABLES, 'utf8').split(/\r?\n/);
+  const header = lines[0].split('\t').map((h) => h.trim());
+  const col = (name) => {
+    const at = header.indexOf(name);
+    if (at < 0) throw new Error(`Berean tables: no "${name}" column`);
+    return at;
+  };
+  const C = {
+    verse: col('Verse'),
+    lang: col('Language'),
+    heb: col('Str Heb'),
+    grk: col('Str Grk'),
+    ref: col('VerseId'),
+    english: col('BSB version'),
+  };
+
+  // Group rows by verse, in file (BSB) order.
+  const groups = new Map();
+  const refs = new Map();
+  for (const line of lines.slice(1)) {
+    const c = line.split('\t');
+    if (c.length <= C.english) continue;
+    const n = c[C.verse];
+    if (!n) continue;
+    if (c[C.ref]) refs.set(n, c[C.ref]);
+    let list = groups.get(n);
+    if (!list) groups.set(n, (list = []));
+    list.push(c);
+  }
+
+  const rows = [];
+  const byBook = new Map();
+  let fragments = 0;
+  let found = 0;
+  let supplied = 0;
+  let noNumber = 0;
+  let notInPack = 0;
+  const missed = [];
+
+  for (const [n, list] of groups) {
+    const m = /^(.+) (\d+):(\d+)$/.exec(refs.get(n) ?? '');
+    if (!m) continue;
+    const book = TABLE_BOOK[m[1]] ?? m[1];
+    const chapter = Number(m[2]);
+    const verse = Number(m[3]);
+    const stored = packText.get(verseKey(book, chapter, verse));
+    if (stored === undefined) { notInPack++; continue; }
+    const { text } = cleanWithIndex(stored);
+    const tally = byBook.get(book) ?? { fragments: 0, found: 0 };
+    byBook.set(book, tally);
+
+    const links = [];
+    let cursor = 0;
+    for (const c of list) {
+      // "-" (no English of its own), ". . ." and "vvv" (English given with
+      // another word) have nothing to find.
+      const raw = c[C.english].replace(/<[^>]*>/g, ' ').replace(/\bvvv\b/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!/\p{L}/u.test(raw)) continue;
+      const lang = c[C.lang];
+      const num = lang === 'Greek' ? c[C.grk] : c[C.heb];
+      const id = /^\d+$/.test(num ?? '') ? classicId(`${lang === 'Greek' ? 'G' : 'H'}${num}`) : null;
+      // Supplied words at the ends come off; a fragment that is all supplied
+      // has no word of the original behind it.
+      const lead = /^\[([^\]]*)\]\s*/.exec(raw);
+      const trail = /\s*\[([^\]]*)\]$/.exec(raw);
+      const allSupplied = !!lead && lead[0].length === raw.length;
+      const linkable = id && !allSupplied;
+      if (linkable) {
+        fragments++;
+        tally.fragments++;
+      }
+
+      // Every fragment is found, linked or not, so the cursor keeps up with
+      // the reading.
+      const search = raw.replace(/[[\]{}]/g, '');
+      let at = locateVerbatim(search, text, cursor);
+      // Words of the verse skipped over means the fragment matched too far
+      // ahead; trust that only when the fragment can't be anywhere else.
+      if (at && /\p{L}/u.test(text.slice(cursor, at.s))) {
+        const first = locateVerbatim(search, text, 0);
+        const again = first && locateVerbatim(search, text, first.s + 1);
+        if (again) at = null;
+      }
+      if (at) cursor = at.e;
+      if (!id) { noNumber++; continue; }
+      if (allSupplied) { supplied++; continue; }
+      if (!at) {
+        if (missed.length < 400) missed.push(`${book} ${chapter}:${verse} "${raw}"`);
+        continue;
+      }
+      let { s, e } = at;
+      const skip = (from, count, step) => {
+        let k = from;
+        for (let left = count; left > 0 && k >= 0 && k <= text.length; k += step) {
+          if (!/\s/.test(text[step > 0 ? k : k - 1])) left--;
+        }
+        return k;
+      };
+      if (lead) s = skip(s, lead[1].replace(/\s+/g, '').length, 1);
+      if (trail && !(lead && trail.index === 0)) e = skip(e, trail[1].replace(/\s+/g, '').length, -1);
+      while (s < e && /[\s,;:.!?]/.test(text[s])) s++;
+      while (e > s && /[\s,;:]/.test(text[e - 1])) e--;
+      if (e <= s) { supplied++; continue; }
+      links.push({ s, e, ids: id });
+      found++;
+      tally.found++;
+    }
+    if (links.length) rows.push({ book, chapter, verse, links: mergeSpans(links) });
+  }
+
+  console.log(`Verses in the tables:   ${groups.size.toLocaleString()}` + (notInPack ? ` (${notInPack} not in the pack)` : ''));
+  console.log(`Fragments found:        ${found.toLocaleString()} of ${fragments.toLocaleString()} (${pct(found, fragments)})`);
+  console.log(`Left out:               ${supplied.toLocaleString()} supplied words only, ${noNumber.toLocaleString()} with no number`);
+  console.log('\nBy book (below 99% shown):');
+  let low = 0;
+  for (const [book, t] of byBook) {
+    if (t.found / Math.max(1, t.fragments) >= 0.99) continue;
+    low++;
+    console.log(`  ${book.padEnd(16)} ${pct(t.found, t.fragments)} (${t.fragments - t.found} missed)`);
+  }
+  if (!low) console.log('  every book at 99% or more');
+  const worst = Math.min(...[...byBook.values()].map((t) => t.found / Math.max(1, t.fragments)));
+  console.log(`Lowest book:            ${(worst * 100).toFixed(2)}%`);
+  if (missed.length) {
+    console.log(`\nMissed fragments (first ${Math.min(25, missed.length)}):`);
+    for (const line of missed.slice(0, 25)) console.log(`  ${line}`);
+  }
+  if (found / Math.max(1, fragments) < 0.95) {
+    console.error('\n❌ Under 95% of fragments found; the tables and the pack have drifted apart.');
+    process.exit(1);
+  }
+  return rows;
+}
+
+// ── WEB and NET: tags checked against the Greek and Hebrew ──────────────────
+
+/** Every number in each verse of a words table, by that table's numbering. */
+function originalNumbers(path, translationId) {
+  const db = new Database(path, { readonly: true });
+  const out = new Map();
+  for (const r of db.prepare('SELECT book, chapter, verse, strongs FROM words WHERE translation_id = ?').iterate(translationId)) {
+    const k = verseKey(r.book, r.chapter, r.verse);
+    let set = out.get(k);
+    if (!set) out.set(k, (set = new Set()));
+    for (const part of (r.strongs ?? '').split(/[\s,+/]+/)) {
+      const id = classicId(part);
+      if (id) set.add(id);
+    }
+  }
+  db.close();
+  return out;
+}
+
+/** Each number's vocabulary as a pattern, with its split meanings' renderings. */
+function lexiconPatterns() {
+  const db = new Database(LEXICAL_PATH, { readonly: true });
+  const phrases = new Map();
+  for (const table of ['greek_strongs_entries', 'hebrew_strongs_entries']) {
+    for (const r of db.prepare(`SELECT id, shortDefinition, kjvUsage FROM ${table}`).iterate()) {
+      const id = classicId(r.id);
+      if (!id) continue;
+      const list = phrases.get(id) ?? [];
+      list.push(...vocabularyOf(r));
+      phrases.set(id, list);
+    }
+  }
+  db.close();
+  const patterns = new Map();
+  return (id) => {
+    if (!patterns.has(id)) patterns.set(id, patternFor([...new Set(phrases.get(id) ?? [])]));
+    return patterns.get(id);
+  };
+}
+
+/** Helping verbs in KJV phrases ("shall fall", "have fallen"): never a number's own word. */
+const AUXILIARIES = new Set(
+  ('have has had hath hast having shall shalt will wilt would wouldest should shouldest ' +
+    'may mayest might must let being can could cannot did doth dost does')
+    .split(' '),
+);
+
+/** The words KJV links to each number in each verse, with their endings. */
+function kjvVocabulary() {
+  const out = new Map();
+  if (!existsSync(OUT_PATH)) return out;
+  const db = new Database(OUT_PATH, { readonly: true });
+  const has = db.prepare("SELECT 1 FROM word_links WHERE translation_id = 'kjv' LIMIT 1").get();
+  if (!has) {
+    db.close();
+    return out;
+  }
+  const kjv = new Database(SOURCES.kjv.pack, { readonly: true });
+  const getText = kjv.prepare('SELECT text FROM verses WHERE book = ? AND chapter = ? AND verse = ?');
+  for (const r of db.prepare("SELECT book, chapter, verse, links FROM word_links WHERE translation_id = 'kjv'").iterate()) {
+    const { text } = cleanWithIndex(getText.get(r.book, r.chapter, r.verse)?.text ?? '');
+    const byId = new Map();
+    for (const part of r.links.split(';')) {
+      const [s, len, ids] = part.split(',');
+      const words = text.slice(+s, +s + +len).toLowerCase().match(/[\p{L}']+/gu) ?? [];
+      for (const w of words) {
+        if (w.length < 3 || FUNCTION_WORDS.has(w) || AUXILIARIES.has(w)) continue;
+        for (const id of ids.split('+')) {
+          const set = byId.get(id) ?? new Set();
+          for (const form of inflect(w)) set.add(form);
+          byId.set(id, set);
+        }
+      }
+    }
+    out.set(verseKey(r.book, r.chapter, r.verse), byId);
+  }
+  kjv.close();
+  db.close();
+  return out;
+}
+
+/** Where a number's English sits in `text`: its vocabulary, then KJV's words for it here. */
+function meaningSpans(text, pattern, kjvWords) {
+  const spans = [];
+  if (pattern) {
+    for (const m of text.matchAll(pattern)) spans.push({ s: m.index, e: m.index + m[0].length });
+  }
+  if (kjvWords) {
+    for (const m of text.matchAll(/[\p{L}']+/gu)) {
+      if (!kjvWords.has(m[0].toLowerCase())) continue;
+      const span = { s: m.index, e: m.index + m[0].length };
+      if (!spans.some((x) => x.s <= span.s && span.e <= x.e)) spans.push(span);
+    }
+  }
+  return spans;
+}
+
+const overlaps = (a, b) => a.s < b.e && b.s < a.e;
+
+function filterTags(entries, { scheme, greek }) {
+  console.log('\nReading the Greek and Hebrew words...');
+  const hebrew = originalNumbers(ANCIENT_PATH, 'hebrew-oshb');
+  const greekWords = originalNumbers(greek.db, greek.id);
+  const patternOf = lexiconPatterns();
+  const kjv = kjvVocabulary();
+  if (!kjv.size) console.warn('⚠️  No KJV links in the pack yet; run --only kjv first for the fullest check.');
+
+  const dropped = { stop: [], notInVerse: [], meaning: [] };
+  const kept = [];
+  const added = [];
+  let tagsRead = 0;
+  const rows = [];
+
+  for (const v of entries) {
+    const ref = { book: v.book, chapter: v.chapter, verse: v.verse };
+    const english = toEnglish(scheme, ref);
+    const inVerse = new Set();
+    for (const e of english) {
+      for (const h of fromEnglish('hebrew', e)) for (const id of hebrew.get(verseKey(h.book, h.chapter, h.verse)) ?? []) inVerse.add(id);
+      for (const g of fromEnglish(greek.scheme, e)) for (const id of greekWords.get(verseKey(g.book, g.chapter, g.verse)) ?? []) inVerse.add(id);
+    }
+    const kjvHere = new Map();
+    for (const e of english) {
+      for (const [id, words] of kjv.get(verseKey(e.book, e.chapter, e.verse)) ?? []) {
+        const set = kjvHere.get(id) ?? new Set();
+        for (const w of words) set.add(w);
+        kjvHere.set(id, set);
+      }
+    }
+    const where = `${v.book} ${v.chapter}:${v.verse}`;
+
+    const links = [];
+    for (const tag of v.links) {
+      const word = v.text.slice(tag.s, tag.e);
+      for (const id of tag.ids.split('+')) {
+        tagsRead++;
+        const note = { where, id, word };
+        if (NEVER_MARKED.has(id)) { dropped.stop.push(note); continue; }
+        if (!inVerse.has(id)) { dropped.notInVerse.push(note); continue; }
+        const hit = meaningSpans(word, patternOf(id), kjvHere.get(id))[0];
+        if (!hit) { dropped.meaning.push(note); continue; }
+        links.push({ s: tag.s + hit.s, e: tag.s + hit.e, ids: id });
+        kept.push({ ...note, word: word.slice(hit.s, hit.e) });
+      }
+    }
+
+    // Numbers with no link left: one only when its meaning matches exactly
+    // one word in the verse, and no other number claims that word.
+    const linked = new Set(links.flatMap((l) => l.ids.split('+')));
+    const claims = [];
+    for (const id of inVerse) {
+      if (linked.has(id) || NEVER_MARKED.has(id)) continue;
+      const spans = meaningSpans(v.text, patternOf(id), kjvHere.get(id));
+      if (spans.length !== 1) continue;
+      if (links.some((l) => overlaps(l, spans[0]))) continue;
+      claims.push({ ...spans[0], ids: id });
+    }
+    for (const c of claims) {
+      if (claims.some((o) => o !== c && overlaps(o, c))) continue;
+      links.push(c);
+      added.push({ where, id: c.ids, word: v.text.slice(c.s, c.e) });
+    }
+
+    if (links.length) rows.push({ book: v.book, chapter: v.chapter, verse: v.verse, links: mergeSpans(links) });
+  }
+
+  const droppedCount = dropped.stop.length + dropped.notInVerse.length + dropped.meaning.length;
+  console.log(`Tags checked:           ${tagsRead.toLocaleString()}`);
+  console.log(`Kept:                   ${kept.length.toLocaleString()} (${pct(kept.length, tagsRead)})`);
+  console.log(`Dropped:                ${droppedCount.toLocaleString()}`);
+  console.log(`  never marked:         ${dropped.stop.length.toLocaleString()} (the article, "and", the object marker)`);
+  console.log(`  not in the verse:     ${dropped.notInVerse.length.toLocaleString()} (number missing from the Greek or Hebrew)`);
+  console.log(`  wrong meaning:        ${dropped.meaning.length.toLocaleString()} (English word isn't one the number means)`);
+  console.log(`Added by meaning:       ${added.length.toLocaleString()} (one clear match in the verse)`);
+  const show = (title, list) => {
+    console.log(`\n${title}:`);
+    for (const x of sample(list, 20)) console.log(`  ${x.where.padEnd(22)} ${x.id}  "${x.word}"`);
+  };
+  show('20 kept', kept);
+  show('20 dropped for meaning', dropped.meaning);
+  show('20 dropped as not in the verse', dropped.notInVerse);
+  show('20 added by meaning', added);
+  return rows;
+}
+
 // ── Build ───────────────────────────────────────────────────────────────────
 
 const source = SOURCES[only];
@@ -139,75 +644,18 @@ console.log(`🔗 Word Links: ${only.toUpperCase()}\n`);
 const packDb = new Database(source.pack, { readonly: true });
 const packText = new Map();
 for (const r of packDb.prepare('SELECT book, chapter, verse, text FROM verses').all()) {
-  packText.set(`${r.book}|${r.chapter}|${r.verse}`, r.text);
+  packText.set(verseKey(r.book, r.chapter, r.verse), r.text);
 }
 packDb.close();
 
-const verses = source.read();
-const rows = [];
-let verbatim = 0;
-let relocated = 0;
-let notInPack = 0;
-let wordsRead = 0;
-let wordsLinked = 0;
-let wordsMissed = 0;
-let wordsUntagged = 0;
-const drifted = [];
-
-for (const v of verses) {
-  const key = `${v.book}|${v.chapter}|${v.verse}`;
-  const stored = packText.get(key);
-  if (stored === undefined) { notInPack++; continue; }
-  const { stored: ours, words } = unwrap(v.text);
-  if (!words.length) continue;
-  wordsRead += words.length;
-
-  const clean = cleanWithIndex(stored);
-  const links = [];
-  if (ours === stored) {
-    verbatim++;
-    for (const w of words) {
-      const ids = linkIds(w.ids);
-      const span = ids && toClean(w, clean.at, clean.text);
-      if (!ids) wordsUntagged++;
-      else if (!span) wordsMissed++;
-      else { links.push({ ...span, ids }); wordsLinked++; }
-    }
-  } else {
-    // The source and the pack disagree somewhere in this verse: find each word
-    // in the pack's own text, in order, and drop the ones that aren't there.
-    relocated++;
-    if (drifted.length < 10) drifted.push(key);
-    let cursor = 0;
-    for (const w of words) {
-      const ids = linkIds(w.ids);
-      if (!ids) { wordsUntagged++; continue; }
-      const found = locateVerbatim(ours.slice(w.s, w.e), clean.text, cursor);
-      if (!found) { wordsMissed++; continue; }
-      cursor = found.e;
-      links.push({ ...found, ids });
-      wordsLinked++;
-    }
-  }
-  if (!links.length) continue;
-  links.sort((a, b) => a.s - b.s);
-  rows.push({
-    book: v.book,
-    chapter: v.chapter,
-    verse: v.verse,
-    links: links.map((l) => `${l.s},${l.e - l.s},${l.ids}`).join(';'),
-  });
-}
-
-const tagged = verses.length - notInPack;
-console.log(`Verses read:            ${verses.length.toLocaleString()}` + (notInPack ? ` (${notInPack} not in the pack)` : ''));
-console.log(`Text matches the pack:  ${verbatim.toLocaleString()} of ${(verbatim + relocated).toLocaleString()} tagged verses (${((verbatim / Math.max(1, verbatim + relocated)) * 100).toFixed(2)}%)`);
-if (relocated) console.log(`Found word by word:     ${relocated} verses, e.g. ${drifted.join(', ')}`);
-console.log(`Tagged words:           ${wordsRead.toLocaleString()}`);
-console.log(`Links written:          ${wordsLinked.toLocaleString()}` +
-  (wordsMissed ? `, ${wordsMissed} not found in the pack text` : '') +
-  (wordsUntagged ? `, ${wordsUntagged} with no usable number` : ''));
-console.log(`Verses with links:      ${rows.length.toLocaleString()} of ${tagged.toLocaleString()}`);
+const rows = source.build(packText).map((r) => ({
+  book: r.book,
+  chapter: r.chapter,
+  verse: r.verse,
+  links: r.links.map((l) => `${l.s},${l.e - l.s},${l.ids}`).join(';'),
+}));
+const linkCount = rows.reduce((n, r) => n + r.links.split(';').length, 0);
+console.log(`\nLinks written:          ${linkCount.toLocaleString()} in ${rows.length.toLocaleString()} verses`);
 
 // ── Original forms ──────────────────────────────────────────────────────────
 
@@ -288,16 +736,10 @@ out.transaction(() => {
 
 // ── Spot checks ─────────────────────────────────────────────────────────────
 
-const CHECKS = [
-  { ref: ['John', 3, 16], id: 'G0025', want: 'loved' },
-  { ref: ['Genesis', 1, 1], id: 'H1254', want: 'created' },
-  { ref: ['Psalms', 23, 1], id: 'H3068', want: 'LORD' },
-  { ref: ['Malachi', 4, 5], id: 'H0452', want: 'Elijah' },
-];
 console.log('\nSpot checks:');
 let failed = 0;
 const getLinks = out.prepare('SELECT links FROM word_links WHERE translation_id = ? AND book = ? AND chapter = ? AND verse = ?');
-for (const { ref, id, want } of CHECKS) {
+for (const { ref, id, want } of source.checks) {
   const stored = packText.get(ref.join('|')) ?? '';
   const { text } = cleanWithIndex(stored);
   const row = getLinks.get(only, ...ref);

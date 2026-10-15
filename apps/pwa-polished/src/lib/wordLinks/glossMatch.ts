@@ -142,9 +142,16 @@ function usable(phrase: string): boolean {
   return phrase.length >= 3 && !FUNCTION_WORDS.has(phrase.toLowerCase());
 }
 
-function vocabularyOf(entry: { kjvUsage?: string; shortDefinition?: string } | null): string[] {
+/** English some translations use that the lexicon doesn't list (WEB's "Yahweh"). */
+const EXTRA_VOCABULARY: Record<string, string[]> = {
+  H3050: ['Yah', 'Yahweh'],
+  H3068: ['Yahweh'],
+  H3069: ['Yahweh'],
+};
+
+function vocabularyOf(entry: { strongs?: string; kjvUsage?: string; shortDefinition?: string } | null): string[] {
   if (!entry) return [];
-  const phrases: string[] = [];
+  const phrases: string[] = [...(EXTRA_VOCABULARY[entry.strongs ?? ''] ?? [])];
   for (const r of parseKjvUsage(entry.kjvUsage ?? '')) {
     // "X" and "+" renderings have no word of their own behind them, and
     // "[idiom]" ones are idioms; none of them is this word's English.

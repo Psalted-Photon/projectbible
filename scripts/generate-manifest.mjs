@@ -154,7 +154,7 @@ const PACK_CONFIGS = {
     type: 'study',
     name: 'Word Links',
     description:
-      'Which English words translate which Greek or Hebrew word, so a Strong’s verse list can mark the English. KJV word tags (public domain).',
+      'Which English words translate which Greek or Hebrew word, so a Strong’s verse list can mark the English. KJV, BSB, WEB and NET.',
     dependencies: []
   },
   'atlas-places.sqlite': {
