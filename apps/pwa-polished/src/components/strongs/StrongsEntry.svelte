@@ -3,6 +3,7 @@
   import { get } from "svelte/store";
   import { getBookColor } from "../../lib/bibleData.js";
   import StrongsVerseList from "../StrongsVerseList.svelte";
+  import EnglishChip from "../EnglishChip.svelte";
   import {
     loadStrongsUsage,
     buildVerseUses,
@@ -43,6 +44,8 @@
   export let onOpenEntry: (id: string) => void;
   /** Reports a tab change, so a window can keep it. */
   export let onTab: ((tab: EntryTab) => void) | null = null;
+  /** The translation a verse tap lands in, which picks the English under each preview. */
+  export let readerTranslation: string | null = null;
 
   function selectTab(tab: EntryTab) {
     activeTab = tab;
@@ -425,9 +428,12 @@
       {:else if formGroups.length === 0}
         <p class="coming-soon">No tagged forms found in the installed texts.</p>
       {:else}
-        <p class="usage-count">
-          {formGroups.length} form{formGroups.length === 1 ? "" : "s"}
-        </p>
+        <div class="usage-head">
+          <p class="usage-count">
+            {formGroups.length} form{formGroups.length === 1 ? "" : "s"}
+          </p>
+          <EnglishChip />
+        </div>
         <div class="forms">
           {#each formGroups as f (f.key)}
             <div class="form-group">
@@ -444,6 +450,7 @@
                     {rtl}
                     variantBaseline={activeBaseline}
                     visited={visitedRefs}
+                    {readerTranslation}
                     onNavigate={handleVerseClick}
                   />
                 </div>
@@ -460,14 +467,18 @@
       {:else if verseUses.length === 0}
         <p class="coming-soon">No occurrences found in the installed texts.</p>
       {:else}
-        <p class="usage-count">
-          {verseUses.length} verse{verseUses.length === 1 ? "" : "s"}
-        </p>
+        <div class="usage-head">
+          <p class="usage-count">
+            {verseUses.length} verse{verseUses.length === 1 ? "" : "s"}
+          </p>
+          <EnglishChip />
+        </div>
         <StrongsVerseList
           uses={verseUses}
           {rtl}
           variantBaseline={activeBaseline}
           visited={visitedRefs}
+          {readerTranslation}
           onNavigate={handleVerseClick}
         />
       {/if}
@@ -855,6 +866,13 @@
     flex-direction: column;
     padding: 20px;
     gap: 12px;
+  }
+
+  .usage-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .usage-count {

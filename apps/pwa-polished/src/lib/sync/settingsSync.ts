@@ -48,6 +48,8 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'connectionsBackground',
   // The strip of arcs under each chapter title: a taste, like the titles' color.
   'connectionsStrip',
+  // English under Greek and Hebrew previews: a reading habit, like the strip.
+  'englishCompanion',
   'timezone',
   'dailyDriverEnglishOT', 'dailyDriverEnglishNT',
   'dailyDriverHebrewOT', 'dailyDriverHebrewNT',

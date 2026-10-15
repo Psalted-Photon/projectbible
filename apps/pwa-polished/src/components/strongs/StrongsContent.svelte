@@ -16,7 +16,7 @@
   import { resolveWorks, EMPTY_WORKS, type WorksResolution, type LibraryRow } from "../../adapters/lexicon-lookup.js";
   import { openWorkSubject, openWorkIndex, carriedWorks, type WorkKey } from "../../lib/openWork";
   import { windowStore } from "../../lib/stores/windowStore";
-  import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../../stores/navigationStore";
+  import { cardJumpToVerse, lookupReader, readerState, navigationStore, MAIN_READER } from "../../stores/navigationStore";
   import { strongsModalStore } from "../../stores/strongsModalStore";
   import { libraryPrefsStore } from "../../stores/libraryPrefsStore";
   import { testamentOf } from "../../lib/strongsUsage";
@@ -74,6 +74,12 @@
   type Snapshot = { strongsId: string; tab: EntryTab; scrollTop: number; trail: TrailStop[] };
 
   $: docked = !!windowId;
+  /** The reader a verse tap goes to, and so the English shown under each preview.
+   *  Read again whenever the main reader moves or another reader takes the lookups. */
+  $: readerTranslation = readerTranslationOf(docked, $lookupReader, $navigationStore);
+  function readerTranslationOf(isDocked: boolean, lookup: string, _main: unknown): string {
+    return readerState(isDocked ? MAIN_READER : lookup).translation;
+  }
 
   let entry: StrongsEntryData | null = null;
   let loading = false;
@@ -441,6 +447,7 @@
           {entry}
           bind:activeTab
           onVerse={goToVerse}
+          {readerTranslation}
           onOpenEntry={followEntry}
           onTab={persistTab}
         />

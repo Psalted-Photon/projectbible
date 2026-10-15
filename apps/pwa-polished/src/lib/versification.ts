@@ -287,7 +287,10 @@ export function convertRef(fromTranslation: string, toTranslation: string, ref: 
       const found = fromEnglish(toTranslation, e);
       // Both sides split a psalm's title from its body: keep to the same part.
       const samePart = e.part === 'whole' ? [] : found.filter((f) => f.part === e.part);
-      return samePart.length ? samePart : found;
+      if (samePart.length) return samePart;
+      // Only the source splits it: the verse found is the merged one, and the
+      // source stands for that part of it (Hebrew Ps 3:1 is NET 3:1's title).
+      return found.map((f) => (f.part === 'whole' ? { ...f, part: e.part } : f));
     }),
   );
 }

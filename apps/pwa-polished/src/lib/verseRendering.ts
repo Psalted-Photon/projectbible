@@ -104,7 +104,7 @@ function findNoteEnd(source: string, j: number): number {
 function isNoteStart(source: string, idx: number): boolean {
   if (source[idx] !== '+') return false;
   let p = idx - 1;
-  while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12\x14-\x1B]/.test(source[p])) p--;
+  while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12\x14-\x1C]/.test(source[p])) p--;
   if (p < 0) return true;
   const prev = source[p];
   return prev === ' ' || prev === '\n' || prev === '\t';
@@ -478,33 +478,98 @@ export function renderVersePreviewHtml(
   text: string,
   opts: { highlight?: RegExp | null; maxLength?: number } = {},
 ): string {
+  return renderPreview(text, opts);
+}
+
+/** Which part of a verse to show; see VersePart in lib/versification.ts. */
+export type PreviewRange = 'whole' | 'title' | 'body';
+
+/**
+ * An English verse shown under a Greek or Hebrew one. `spans` are clean-text
+ * offsets (notes removed, as red-letter measures them) of words to mark.
+ * `range` keeps only a psalm's title (the leading italic run, which English
+ * Bibles fold into verse 1) or only what follows it, for when the original
+ * gives the title a verse of its own.
+ */
+export function renderCompanionHtml(
+  stored: string,
+  spans: { s: number; e: number }[] = [],
+  opts: { range?: PreviewRange; maxLength?: number } = {},
+): string {
+  return renderPreview(stored, { marks: spans, range: opts.range, maxLength: opts.maxLength });
+}
+
+/** Where a psalm's title stops, while the preview is being assembled. */
+const RANGE_CUT = '\x1C';
+
+function renderPreview(
+  text: string,
+  opts: {
+    highlight?: RegExp | null;
+    maxLength?: number;
+    marks?: { s: number; e: number }[];
+    range?: PreviewRange;
+  },
+): string {
   const src = text ?? '';
   if (!src) return '';
 
   // <b>/<i> positions are in stripHtmlTags coordinates, so no mapping needed.
   let work = stripHtmlTags(src);
   const insertions: { pos: number; ch: string }[] = [];
-  for (const f of extractFormattingSpans(src)) {
+  const formatting = extractFormattingSpans(src);
+
+  // Pushed before the formatting so that, at the same spot, the title's own
+  // closing italic lands ahead of the cut and stays with the title.
+  const range = opts.range ?? 'whole';
+  let cut = false;
+  if (range !== 'whole') {
+    const title = formatting.find((f) => f.kind === 'i' && !/[^\s\x10-\x12]/.test(work.slice(0, f.start)));
+    if (title) {
+      insertions.push({ pos: title.end, ch: RANGE_CUT });
+      cut = true;
+    }
+  }
+
+  for (const f of formatting) {
     const [open, close] = f.kind === 'b' ? ['\x04', '\x05'] : ['\x06', '\x07'];
     insertions.push({ pos: f.end, ch: close });
     insertions.push({ pos: f.start, ch: open });
   }
+
+  if (opts.marks?.length) {
+    const map = buildCleanToStoredMap(work);
+    for (const span of opts.marks) {
+      const s = map[Math.min(span.s, map.length - 1)];
+      const e = map[Math.min(span.e, map.length - 1)];
+      if (s !== undefined && e !== undefined && e > s) {
+        insertions.push({ pos: e, ch: '\x0F' });
+        insertions.push({ pos: s, ch: '\x0E' });
+      }
+    }
+  }
+
   insertions.sort((a, b) => b.pos - a.pos);
   for (const { pos, ch } of insertions) work = work.slice(0, pos) + ch + work.slice(pos);
 
   work = dropHebrewPartMarks(dropInlineNotes(work))
     .replace(NOTE_SENTINELS, '')
     .replace(/[\x10\x11\x12]/g, ' ')
-    .replace(/[¶⌃]/g, '')
-    .replace(/[ \t\n]+/g, ' ')
-    .trim();
+    .replace(/[¶⌃]/g, '');
+
+  // With no italic title to cut at, either part shows the whole verse:
+  // better the verse than nothing.
+  const cutAt = cut ? work.indexOf(RANGE_CUT) : -1;
+  if (cutAt >= 0) work = range === 'title' ? work.slice(0, cutAt) : work.slice(cutAt + 1);
+
+  work = work.replace(/[ \t\n]+/g, ' ').trim();
 
   // Trim to a window around the first highlight match, the way search snippets
   // do. Sentinels are one char each and any orphan is cleaned up below, so a
   // cut through a formatting pair loses the bold rather than breaking markup.
   const max = opts.maxLength ?? 0;
   if (max > 0 && work.length > max) {
-    const at = opts.highlight ? work.search(opts.highlight) : -1;
+    const at = opts.marks?.length ? work.indexOf('\x0E') : opts.highlight ? work.search(opts.highlight) : -1;
     if (at < 0) {
       work = work.slice(0, max).replace(/\s\S*$/, '') + '…';
     } else {
@@ -525,7 +590,7 @@ export function renderVersePreviewHtml(
     .replace(/\x0E([\s\S]*?)\x0F/g, '<mark>$1</mark>')
     .replace(/\x04([\s\S]*?)\x05/g, '<b>$1</b>')
     .replace(/\x06([\s\S]*?)\x07/g, '<i>$1</i>')
-    .replace(/[\x02-\x07\x0E\x0F]/g, '');
+    .replace(/[\x02-\x07\x0E\x0F\x1C]/g, '');
 }
 
 /** Preview text with no markup at all — for surfaces that render plain text. */
