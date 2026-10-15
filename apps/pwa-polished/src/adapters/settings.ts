@@ -244,6 +244,10 @@ export interface UserSettings {
   // short fade in place of every movement, or none at all. Per-device like Bar
   // size. See lib/motion.ts.
   motion?: 'system' | 'reduced' | 'off'; // default 'system'
+  // Where the floating Read Aloud player was dragged to, in pixels from the
+  // top-left of the screen. Per-device: a spot on a phone means nothing on a
+  // desktop. Unset puts it bottom-right.
+  ttsPlayerPos?: { x: number; y: number };
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected
@@ -430,6 +434,16 @@ export function getNavBarPinned(): boolean {
 /** Remember whether the navigation bar is pinned down. */
 export function setNavBarPinned(pinned: boolean): void {
   updateSettings({ navBarPinned: pinned });
+}
+
+/** Where the floating Read Aloud player sits, or null for its default spot. */
+export function getTtsPlayerPos(): { x: number; y: number } | null {
+  return getSettings().ttsPlayerPos ?? null;
+}
+
+/** Remember where the floating Read Aloud player was dragged to. */
+export function setTtsPlayerPos(pos: { x: number; y: number }): void {
+  updateSettings({ ttsPlayerPos: pos });
 }
 
 /** Is the shoulder clock showing? Defaults to on. */

@@ -13,6 +13,7 @@
   import UpdateNotice from "./components/UpdateNotice.svelte";
   import AppNotice from "./components/AppNotice.svelte";
   import AppConfirm from "./components/AppConfirm.svelte";
+  import FloatingTtsPlayer from "./components/FloatingTtsPlayer.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
@@ -471,6 +472,10 @@
 
     <!-- In-app yes/no questions in place of confirm() -->
     <AppConfirm />
+
+    <!-- Read Aloud for commentaries and devotionals. Draws nothing while
+         scripture, or nothing, is being read. -->
+    <FloatingTtsPlayer />
 
     <!-- Wake alarm start screen — shown when opened from an alarm notification -->
     <WakeAlarmStart />

@@ -374,12 +374,6 @@ let tailChapter = 0;
 let playlist: Passage[] | null = null;
 /** Index of the passage at the tail of the queue, for keying progress. */
 let tailPassageIndex = 0;
-/**
- * Plain text: where the next passage comes from once this one runs out, or
- * null to stop at the end. Only asked when auto-advance is on — it never falls
- * through into Bible order.
- */
-let textNext: (() => Promise<TextPassage | null>) | null = null;
 /** True while reading plain text rather than scripture. */
 let textMode = false;
 /** Paragraphs numbered so far in this run. */
@@ -400,8 +394,6 @@ let failedInARow = 0;
 const MAX_FAILED_IN_A_ROW = 3;
 /** Set by the sleep timer's "end of chapter": stop once we leave this chapter. */
 let stopAfterChapter: { book: string; chapter: number } | null = null;
-/** The same for plain text, where a "chapter" is one passage. */
-let stopAfterPassage: number | null = null;
 
 function secondsPerChar(): number {
   if (measuredChars < 200) return DEFAULT_SECONDS_PER_CHAR;
@@ -738,20 +730,9 @@ function textUtterances(passage: TextPassage, passageIndex: number, lead: number
  * playback stops at the end of the day instead of rolling onward.
  */
 async function extendQueue(): Promise<boolean> {
-  // Plain text asks its own source for more, and nothing else. Running out of
-  // it ends the reading; it never carries on into a Bible chapter.
-  if (textMode) {
-    if (!textNext) return false;
-    const next = await textNext();
-    if (!next) return false;
-    const utterances = textUtterances(next, tailPassageIndex + 1, GAP_BEFORE);
-    // Nothing speakable in it — try the one after, as a playlist does.
-    if (utterances.length === 0) return extendQueue();
-    tailPassageIndex++;
-    queue = [...queue, ...utterances];
-    console.log(`🔊 Read Aloud queued ${next.title}`);
-    return true;
-  }
+  // Plain text is one passage and ends with it. It never carries on into the
+  // next chapter, and never into Bible order.
+  if (textMode) return false;
 
   if (playlist) {
     const next = playlist.shift();
@@ -1262,13 +1243,6 @@ function updatePositionFromClock(): void {
 function updateTextPositionFromClock(mark: Mark): void {
   const u = mark.utterance;
 
-  if (stopAfterPassage !== null && u.passageIndex !== stopAfterPassage) {
-    stopAfterPassage = null;
-    cancelSleepTimer();
-    stopReading();
-    return;
-  }
-
   const key = `${u.passageIndex}|p${u.paragraph}`;
   if (key !== lastVerseKey) {
     lastVerseKey = key;
@@ -1486,19 +1460,18 @@ export async function startReadingPlaylist(
  * Begin reading plain text — a commentary chapter, a devotional.
  *
  * The same engine and the same voice as scripture: the voice check, the head
- * start, the stitching, pause, stop and the sleep timer all work unchanged.
- * `next` is asked for the following passage when this one runs out, and only
- * while auto-advance is on; leave it out to stop at the end.
+ * start, the stitching, pause and stop all work unchanged. It reads the one
+ * passage and stops: no auto-advance and no sleep timer.
  *
  * Must be called from a user gesture, for the same reason as `startReading`.
  */
-export async function startReadingText(
-  passage: TextPassage,
-  next?: () => Promise<TextPassage | null>
-): Promise<void> {
+export async function startReadingText(passage: TextPassage): Promise<void> {
   unlockTtsAudio();
 
   stopReading();
+  // A timer set for scripture is not this reading's; its controls are hidden
+  // while text plays, so it could not be seen or cancelled.
+  cancelSleepTimer();
   const gen = ++generation;
 
   const settings = getTtsSettings();
@@ -1532,9 +1505,6 @@ export async function startReadingText(
     segments = [];
     segmentIndex = 0;
     tailPassageIndex = 0;
-    // Set last, as with a playlist: nothing may extend the queue before the
-    // first passage is in it.
-    textNext = next ?? null;
     lastVerseKey = '';
     recomputeChapterOffsets(0);
 
@@ -1752,10 +1722,8 @@ export function stopReading(): void {
   tailChapter = 0;
   tailPassageIndex = 0;
   playlist = null;
-  textNext = null;
   textMode = false;
   paragraphCount = 0;
-  stopAfterPassage = null;
   lastVerseKey = '';
   measuredChars = 0;
   measuredSeconds = 0;
@@ -1847,11 +1815,6 @@ sleepStopNonce.subscribe((nonce) => {
 stopAtChapterEnd.subscribe((armed) => {
   if (!armed) {
     stopAfterChapter = null;
-    stopAfterPassage = null;
-    return;
-  }
-  if (textMode) {
-    stopAfterPassage = currentMark()?.utterance.passageIndex ?? null;
     return;
   }
   const position = get(readingPosition);
