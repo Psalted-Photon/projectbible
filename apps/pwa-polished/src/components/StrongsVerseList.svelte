@@ -27,6 +27,8 @@
   import { renderCompanionHtml } from "../lib/verseRendering";
 
   export let uses: VerseUse[] = [];
+  /** The number the list is for; its English is marked under each verse. */
+  export let strongsId: string | null = null;
   /** The translation the reader lands in, which picks the English shown. */
   export let readerTranslation: string | null = null;
   /** Hebrew and Aramaic previews read right-to-left. */
@@ -149,11 +151,12 @@
   }
 
   // --- English under each preview -----------------------------------------
-  // Keyed by the reader's translation too, since that picks which English.
+  // Keyed by the reader's translation too, since that picks which English,
+  // and by the number, since that picks what is marked in it.
   let english: Record<string, CompanionVerse> = {};
 
   function englishKey(u: VerseUse): string {
-    return `${previewKey(u)}|${readerTranslation ?? ""}`;
+    return `${previewKey(u)}|${readerTranslation ?? ""}|${strongsId ?? ""}`;
   }
 
   async function loadEnglish(group: BookGroup) {
@@ -162,7 +165,8 @@
     if (!wanted.length) return;
     const loaded = await Promise.all(
       wanted.map(async (u) => {
-        const en = await loadCompanionVerse(previewSource(u), u.book, u.chapter, u.verse, readerTranslation);
+        const highlight = strongsId ? { strongsId, marked: marksFor(u).length } : undefined;
+        const en = await loadCompanionVerse(previewSource(u), u.book, u.chapter, u.verse, readerTranslation, highlight);
         return [englishKey(u), en] as const;
       }),
     );
@@ -170,8 +174,8 @@
   }
 
   // Switched on, or a different reader translation: fill the open books.
-  $: if ($englishCompanion) fillOpenBooks(corpora, expandedBooks, readerTranslation);
-  function fillOpenBooks(list: Corpus[], open: Set<string>, _reader: string | null) {
+  $: if ($englishCompanion) fillOpenBooks(corpora, expandedBooks, readerTranslation, strongsId);
+  function fillOpenBooks(list: Corpus[], open: Set<string>, _reader: string | null, _id: string | null) {
     for (const c of list) {
       for (const g of c.books) if (open.has(bookKey(c.testament, g.book))) loadEnglish(g);
     }
@@ -180,7 +184,7 @@
   /** Several verses share the room one would have. */
   function englishHtml(pieces: CompanionPiece[]): string {
     const max = Math.max(80, Math.floor(180 / pieces.length));
-    return pieces.map((p) => renderCompanionHtml(p.stored, [], { range: p.ref.part, maxLength: max })).join(" ");
+    return pieces.map((p) => renderCompanionHtml(p.stored, p.spans, { range: p.ref.part, maxLength: max })).join(" ");
   }
 
   /** "NET", plus where the verse sits when its number differs from the original's. */
@@ -482,7 +486,8 @@
 
   /* Same mark treatment as search results and the encyclopedia, so a highlighted
      word means the same thing everywhere in the app. */
-  .vb-ref-text .marked {
+  .vb-ref-text .marked,
+  .vb-en :global(mark) {
     background: rgba(249, 115, 22, 0.35);
     color: #fdba74;
     border-radius: 2px;

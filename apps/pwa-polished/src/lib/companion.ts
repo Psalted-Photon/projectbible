@@ -16,7 +16,8 @@ import { DEFAULT_TRANSLATION } from './bibleData';
 import { defaultTranslationFor, testamentOf } from './testamentDefaults';
 import { isOriginalLanguage } from './translationKind';
 import { convertRef, schemeOf, type MappedRef, type VerseRef } from './versification';
-import { cleanVersePreviewText } from './verseRendering';
+import { cleanVersePreviewText, companionText } from './verseRendering';
+import { glossSpans, type Span } from './wordLinks/glossMatch';
 import { availableTranslations } from '../stores/navigationStore';
 
 /** lxx2012 is English, but only for the Old Testament. */
@@ -36,6 +37,14 @@ export interface CompanionPiece {
   ref: MappedRef;
   /** Stored verse text, notes and all; render with renderCompanionHtml. */
   stored: string;
+  /** Words to mark, as renderCompanionHtml takes them. */
+  spans: Span[];
+}
+
+/** The word to mark: its number, and how many words the original marks. */
+export interface CompanionHighlight {
+  strongsId: string;
+  marked: number;
 }
 
 export interface CompanionVerse {
@@ -80,9 +89,21 @@ async function piecesIn(translation: string, source: string, ref: VerseRef): Pro
   const pieces: CompanionPiece[] = [];
   for (const t of targets) {
     const stored = (await chapterOf(translation, t.book, t.chapter)).get(t.verse);
-    if (!isMissing(stored)) pieces.push({ ref: t, stored: stored! });
+    if (!isMissing(stored)) pieces.push({ ref: t, stored: stored!, spans: [] });
   }
   return pieces.length ? pieces : null;
+}
+
+/** Marks the word across all the pieces at once, since one verse's English can span several. */
+async function markPieces(pieces: CompanionPiece[], highlight: CompanionHighlight | undefined): Promise<void> {
+  if (!highlight) return;
+  try {
+    const texts = pieces.map((p) => companionText(p.stored, p.ref.part));
+    const spans = await glossSpans(highlight.strongsId, texts, highlight.marked);
+    pieces.forEach((p, i) => (p.spans = spans[i]));
+  } catch {
+    // No marks is the safe answer.
+  }
 }
 
 const installed = (id: string) => get(availableTranslations).some((t) => t.toLowerCase() === id);
@@ -97,17 +118,24 @@ export async function loadCompanionVerse(
   chapter: number,
   verse: number,
   readerTranslation: string | null | undefined,
+  highlight?: CompanionHighlight,
 ): Promise<CompanionVerse> {
   const ref = { book, chapter, verse };
   const translation =
     schemeOf(sourceTranslation) === 'lxx' ? 'lxx2012' : companionTranslationFor(readerTranslation, book);
   const pieces = await piecesIn(translation, sourceTranslation, ref);
-  if (pieces) return { translation, pieces, missing: false, fallback: null };
+  if (pieces) {
+    await markPieces(pieces, highlight);
+    return { translation, pieces, missing: false, fallback: null };
+  }
 
   let fallback: CompanionVerse['fallback'] = null;
   if (translation.toLowerCase() !== 'kjv' && installed('kjv')) {
     const kjv = await piecesIn('KJV', sourceTranslation, ref);
-    if (kjv) fallback = { translation: 'KJV', pieces: kjv };
+    if (kjv) {
+      await markPieces(kjv, highlight);
+      fallback = { translation: 'KJV', pieces: kjv };
+    }
   }
   return { translation, pieces: [], missing: true, fallback };
 }

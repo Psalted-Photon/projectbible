@@ -499,6 +499,29 @@ export function renderCompanionHtml(
   return renderPreview(stored, { marks: spans, range: opts.range, maxLength: opts.maxLength });
 }
 
+/**
+ * The clean text renderCompanionHtml's `spans` are measured on, and the
+ * stretch of it `range` shows: [start, end). Words found outside that stretch
+ * would mark something the row never displays.
+ */
+export function companionText(
+  stored: string,
+  range: PreviewRange = 'whole',
+): { text: string; start: number; end: number } {
+  const work = stripHtmlTags(stored ?? '');
+  const map = buildCleanToStoredMap(work);
+  let text = '';
+  for (let k = 0; k < map.length - 1; k++) text += work[map[k]];
+  if (range === 'whole') return { text, start: 0, end: text.length };
+  const title = extractFormattingSpans(stored ?? '').find(
+    (f) => f.kind === 'i' && !/[^\s\x10-\x12]/.test(work.slice(0, f.start)),
+  );
+  if (!title) return { text, start: 0, end: text.length };
+  let cut = 0;
+  while (cut < map.length - 1 && map[cut] < title.end) cut++;
+  return range === 'title' ? { text, start: 0, end: cut } : { text, start: cut, end: text.length };
+}
+
 /** Where a psalm's title stops, while the preview is being assembled. */
 const RANGE_CUT = '\x1C';
 

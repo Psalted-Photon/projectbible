@@ -156,3 +156,51 @@ export function languageName(entry: Pick<StrongEntry, 'language' | 'partOfSpeech
 export function partOfSpeechText(pos: string): string {
   return expandStepBiblePOS(pos).replace(/^(Greek|Hebrew|Aramaic),\s*/, '');
 }
+
+/**
+ * Strong's KJV usage is one long comma-separated string carrying its own
+ * notation, which reads as noise until it is broken apart:
+ *   X    the KJV supplied this word with nothing behind it in the Greek
+ *   +    the word is only ever rendered in combination with another
+ *   ( )  alternative endings, or optional words — "alway(-s)"
+ * Commas inside brackets belong to a rendering rather than separating two,
+ * so "all (manner of, means)" must not split into three.
+ */
+export type Rendering = { text: string; marker: 'supplied' | 'combined' | null };
+
+export function parseKjvUsage(usage: string): Rendering[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let buf = '';
+  for (const ch of usage) {
+    if (ch === '(' || ch === '[') depth++;
+    else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) {
+      parts.push(buf);
+      buf = '';
+      continue;
+    }
+    buf += ch;
+  }
+  parts.push(buf);
+
+  const out: Rendering[] = [];
+  for (const raw of parts) {
+    // Strong's sometimes closes a list with a prose aside riding on the last
+    // rendering — "principal. Compare names in 'Abi-'." Cut at the sentence
+    // boundary so the aside does not become a rendering.
+    let t = raw.replace(/\s+/g, ' ').trim().split(/\.\s+(?=[A-Z])/)[0];
+    t = t.replace(/\.$/, '').trim();
+    if (!t || /^compare\b/i.test(t)) continue;
+    let marker: Rendering['marker'] = null;
+    if (/^X\s+/.test(t)) {
+      marker = 'supplied';
+      t = t.replace(/^X\s+/, '');
+    } else if (/^\+\s*/.test(t)) {
+      marker = 'combined';
+      t = t.replace(/^\+\s*/, '');
+    }
+    if (t) out.push({ text: t, marker });
+  }
+  return out;
+}
