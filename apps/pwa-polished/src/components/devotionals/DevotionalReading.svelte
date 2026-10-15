@@ -25,7 +25,10 @@
   import { navigationStore } from '../../stores/navigationStore';
   import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
   import { devotionalSettings, type DevotionalTarget } from '../../stores/devotionalStore';
-  import { renderVerseHtml, cleanVersePreviewText } from '../../lib/verseRendering';
+  import { renderVerseHtml, cleanVersePreviewText, extractSpeechText } from '../../lib/verseRendering';
+  import { originalLanguageOf } from '../../lib/translationKind';
+  import { htmlToSpeechParagraphs } from '../../lib/tts/speechText';
+  import ReadAloudTextButton from '../ReadAloudTextButton.svelte';
   import { verseAtEnglishRef } from '../../lib/companion';
   import { landingIn } from '../../lib/versification';
   import CompanionLine from '../CompanionLine.svelte';
@@ -277,6 +280,37 @@
   function openShare() {
     shareOpen = true;
   }
+
+  // ── Read Aloud ───────────────────────────────────────────────────────────
+  // The title, the verses and the body, whichever version is showing. Closing
+  // the reading leaves it playing; the floating player carries the controls.
+  $: readTitle = `${work.title} · ${formatMonthDay(target.month, target.day)}${slotLabel ? `, ${slotLabel}` : ''}`;
+
+  /**
+   * A verse as it is read: the reader's translation where it is English and
+   * loaded, the pack's KJV otherwise — an English voice cannot read Greek.
+   */
+  function spokenVerse(k: DevotionalKeyRef): string {
+    const shown = originalLanguageOf(translation) ? '' : verseCache[`${translation}|${k.osis}`];
+    return extractSpeechText(shown || k.kjvText || '');
+  }
+
+  function verseParagraph(k: DevotionalKeyRef): string {
+    const text = spokenVerse(k);
+    return text ? `${text} ${k.label}.` : `${k.label}.`;
+  }
+
+  function readParagraphs(): string[] {
+    if (!reading) return [];
+    if (work.workId === 'daily-light') {
+      return paragraphs.flatMap((para) => para.map(({ k }) => verseParagraph(k)));
+    }
+    const out: string[] = [];
+    if (reading.title && !/^(Morning|Evening),/.test(reading.title)) out.push(reading.title);
+    for (const k of reading.keyRefs) out.push(verseParagraph(k));
+    out.push(...htmlToSpeechParagraphs(bodyHtml));
+    return out;
+  }
 </script>
 
 <svelte:window on:keydown={onKeydown} />
@@ -286,6 +320,11 @@
 <div class="devo-viewer themed">
   <div class="dr-top">
     <div class="dr-top-actions">
+      {#if reading}
+        <span class="dr-read">
+          <ReadAloudTextButton title={readTitle} paragraphs={readParagraphs} label="Read this aloud" />
+        </span>
+      {/if}
       {#if reading && shareRef}
         <button class="dr-icon-btn" on:click={openShare} title="Share this reading" aria-label="Share this reading">
           <ShareNetwork size={16} weight="bold" />
@@ -700,7 +739,24 @@
 
   /* Bar size: the top bar scales with --bar-scale. Its buttons are fixed
      boxes, so the icons inside are scaled in place to match. */
-  .dr-icon-btn :global(svg) {
+  .dr-icon-btn :global(svg),
+  .dr-read :global(.rat-btn svg) {
     transform: scale(var(--bar-scale, 1));
+  }
+
+  /* Read Aloud wears the icon buttons' look. */
+  .dr-read :global(.rat-btn) {
+    width: calc(30px * var(--bar-scale, 1));
+    height: calc(30px * var(--bar-scale, 1));
+    border-radius: calc(7px * var(--bar-scale, 1));
+    border: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.1));
+    color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
+  }
+  .dr-read :global(.rat-btn:hover) {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--reader-text-dim, rgba(255, 255, 255, 0.8));
+  }
+  .dr-read :global(.rat-btn.live) {
+    color: #9d7af5;
   }
 </style>
