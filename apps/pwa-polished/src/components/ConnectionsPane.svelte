@@ -1,7 +1,9 @@
 <script lang="ts">
   /**
-   * The Connections window: every cross-reference in Scripture as an arc over
-   * one line of all 1,189 chapters.
+   * The Connections window: every cross-reference in Scripture, three ways.
+   * Arcs: an arc over one line of all 1,189 chapters. Grid: every book against
+   * every book, each square the links between two of them. Detail: one square
+   * opened up, two books side by side with a line for each link.
    *
    * The drawing, the shapes and the flights are lib/connections — the same
    * modules connections-lab.html tunes, so what was tuned there is what shows
@@ -10,7 +12,9 @@
    * Taps: a book name lights the book, a chapter bar lights the chapter, and an
    * arc out in the field opens a card with both of its verses. Those rows open
    * the verse in the reader. Pan with a drag, zoom with a pinch or the wheel;
-   * Whole Bible puts the picture back.
+   * Whole Bible puts the picture back. On the grid a square opens the detail and
+   * a name picks out its row or column; on the detail a chapter, a heading or a
+   * book name lights its lines, and a line opens its two verses.
    *
    * Never `.themed`: the light and sepia themes are an inverting filter, and a
    * canvas under it would show every book color as its opposite. The canvas
@@ -45,7 +49,10 @@
     MAX_SETS,
     MAX_SHOWN_SETS,
     MAX_VIEWS,
+    cleanGridLook,
     cleanLook,
+    cleanPair,
+    cleanTab,
     itemFromSpan,
     itemLabel,
     layerFor,
@@ -59,13 +66,45 @@
     savedViews,
     type ConnectionSet,
     type ConnectionsLook,
+    type ConnectionsTab,
+    type DetailPair,
+    type GridLook,
     type ConnectionsView,
     type ReadyOffer,
     type SetItem,
     type SetLayer,
   } from '../lib/connections/sets';
   import { getHighlightNames } from '../adapters/settings';
-  import { CREDIT, renderConnectionsImage } from '../lib/connections/image';
+  import { CREDIT, renderConnectionsImage, renderFramedImage } from '../lib/connections/image';
+  import {
+    GRID,
+    BOOK_GROUPS,
+    bandAt,
+    buildGridLayout,
+    cellAt,
+    drawGrid,
+    gridFrame,
+    laneNamed,
+    paintGrid,
+    sortIntoCells,
+    type GridCells,
+    type GridConfig,
+    type GridLayout,
+    type GridView,
+  } from '../lib/connections/grid';
+  import {
+    DETAIL,
+    bookHeadings,
+    buildDetail,
+    detailAxis,
+    detailHit,
+    drawDetail,
+    type DetailConfig,
+    type DetailLit,
+    type DetailModel,
+    type DetailView,
+    type PlacedHeading,
+  } from '../lib/connections/detail';
   import { download } from '../lib/backup/saveFile';
   import { isIOS } from '../lib/device';
   import { askConfirm } from '../stores/confirmStore';
@@ -110,6 +149,8 @@
   function watchTheme() {
     themeObserver = new MutationObserver(() => {
       colors = palette();
+      // The grid's image has the theme's colors baked in.
+      staleGrid('paint');
       schedule();
     });
     themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
@@ -161,6 +202,14 @@
   function frame() {
     frameId = 0;
     if (!data || !ctx || W === 0 || H === 0) return;
+    if (tab === 'grid') {
+      frameGrid(ctx, data);
+      return;
+    }
+    if (tab === 'detail') {
+      frameDetail(ctx, data);
+      return;
+    }
     // The same clock a tap stamps its volley with; the frame's own timestamp
     // can trail it, which would start a flight a moment in the past.
     const now = performance.now();
@@ -235,6 +284,24 @@
    * every arc off the top.
    */
   function zoomAt(sx: number, sy: number, k: number) {
+    if (tab === 'grid') {
+      // About the point; the grid has no rule to anchor on.
+      const frame = gridFrame({ width: W, height: H }, gridConfig);
+      const next = clamp(k, GRID_K[0], GRID_K[1]);
+      const u = (sx - frame.left - gridView.x) / gridView.k;
+      const v = (sy - frame.top - gridView.y) / gridView.k;
+      gridView = { x: sx - frame.left - u * next, y: sy - frame.top - v * next, k: next };
+      schedule();
+      return;
+    }
+    if (tab === 'detail') {
+      // Up and down only: the two axes stay where they are across.
+      const next = clamp(k, DETAIL_K[0], DETAIL_K[1]);
+      const f = (sy - detailConfig.padTop - detailView.y) / detailView.k;
+      detailView = { y: sy - detailConfig.padTop - f * next, k: next };
+      schedule();
+      return;
+    }
     const next = clamp(k, MIN_K, MAX_K);
     const horizontal = config.orientation === 'horizontal';
     const { rule } = rulerAt({ width: W, height: H }, config, true, view);
@@ -257,7 +324,7 @@
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   function rememberView() {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => remember({ view: { ...view } }), 400);
+    saveTimer = setTimeout(() => remember({ view: { ...view }, gridView: { ...gridView } }), 400);
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -268,10 +335,10 @@
     moved = false;
     lastX = e.clientX;
     lastY = e.clientY;
-    if (rangeMode && pointers.size === 1) rangeFrom = positionAt(onScreen(e));
+    if (rangeMode && tab === 'arcs' && pointers.size === 1) rangeFrom = positionAt(onScreen(e));
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
-      pinchStart = { dist: Math.hypot(a.x - b.x, a.y - b.y), k: view.k };
+      pinchStart = { dist: Math.hypot(a.x - b.x, a.y - b.y), k: currentK() };
     }
   }
 
@@ -303,8 +370,12 @@
       return;
     }
 
-    view.x += dx / view.k;
-    view.y += dy / view.k;
+    if (tab === 'grid') gridView = { ...gridView, x: gridView.x + dx, y: gridView.y + dy };
+    else if (tab === 'detail') detailView = { ...detailView, y: detailView.y + dy };
+    else {
+      view.x += dx / view.k;
+      view.y += dy / view.k;
+    }
     schedule();
   }
 
@@ -329,7 +400,7 @@
     if (!data) return;
     e.preventDefault();
     const at = onScreen(e);
-    zoomAt(at.x, at.y, view.k * (e.deltaY < 0 ? WHEEL_STEP : 1 / WHEEL_STEP));
+    zoomAt(at.x, at.y, currentK() * (e.deltaY < 0 ? WHEEL_STEP : 1 / WHEEL_STEP));
     rememberView();
   }
 
@@ -339,17 +410,38 @@
     schedule();
   }
 
+  /** The open tab's zoom. */
+  function currentK(): number {
+    return tab === 'grid' ? gridView.k : tab === 'detail' ? detailView.k : view.k;
+  }
+
+  /** The bar's button: the open tab's picture back to whole. */
+  function fitView() {
+    if (tab === 'grid') {
+      gridView = { x: 0, y: 0, k: 1 };
+      remember({ gridView: { ...gridView } });
+      schedule();
+    } else if (tab === 'detail') {
+      detailView = { y: 0, k: 1 };
+      schedule();
+    } else wholeBible();
+  }
+
   // ===== What a tap lights =====
 
   /** What the card at the foot shows. */
   type Card = (
     | { kind: 'link'; from: ConnectionRef; to: ConnectionRef; toLabel: string; votes: number }
-    | { kind: 'span'; title: string; open: ConnectionRef; out: number; in: number }
+    | { kind: 'span'; title: string; meta: string; open: ConnectionRef; label: string }
   ) & {
     /** What Add to set adds: the passage, or an arc's two ends. */
     items: SetItem[];
   };
   let card: Card | null = null;
+
+  function reachMeta(reach: { out: number; in: number }): string {
+    return `${reach.out.toLocaleString()} out · ${reach.in.toLocaleString()} in`;
+  }
 
   /** The book picker's value, kept in step with a tapped name. */
   let pickedBook = '';
@@ -380,9 +472,9 @@
     card = {
       kind: 'span',
       title: name,
+      meta: reachMeta(reach),
       open: { book: name, chapter: 1, verse: 1 },
-      out: reach.out,
-      in: reach.in,
+      label: name,
       items: itemsOf([span]),
     };
   }
@@ -436,12 +528,20 @@
         : from.book === to.book
           ? `${from.book} ${from.chapter}–${to.chapter}`
           : `${from.book} ${from.chapter} – ${to.book} ${to.chapter}`;
-    card = { kind: 'span', title, open: { ...from, verse: 1 }, out: reach.out, in: reach.in, items: itemsOf(spans) };
+    card = { kind: 'span', title, meta: reachMeta(reach), open: { ...from, verse: 1 }, label: title, items: itemsOf(spans) };
   }
 
   function tap(e: PointerEvent) {
     if (!data) return;
     const at = onScreen(e);
+    if (tab === 'grid') {
+      tapGrid(at);
+      return;
+    }
+    if (tab === 'detail') {
+      tapDetail(at);
+      return;
+    }
     const hit = rulerHit(data, config, { width: W, height: H }, view, true, names, at, AXIS_GRAB_PX);
 
     if (hit?.kind === 'book') {
@@ -459,9 +559,9 @@
         card = {
           kind: 'span',
           title: `${ref.book} ${ref.chapter}`,
+          meta: reachMeta(reach),
           open: ref,
-          out: reach.out,
-          in: reach.in,
+          label: `${ref.book} ${ref.chapter}`,
           items: itemsOf([span]),
         };
       }
@@ -474,17 +574,18 @@
   }
 
   /** A tapped arc: both verses on the card, and both chapters lit. */
-  function showLink(hit: number) {
-    if (!data) return;
+  /** A link's card: both of its verses, and its votes. */
+  function linkCard(hit: number): Card | null {
+    if (!data) return null;
     const from = refAt(data.from[hit]);
     const a = refAt(data.toStart[hit]);
     const b = refAt(data.toEnd[hit]);
-    if (!from || !a) return;
+    if (!from || !a) return null;
     const ranged = b && data.toStart[hit] !== data.toEnd[hit];
     const toLabel = ranged
       ? `${a.book} ${a.chapter}:${a.verse}–${b.chapter === a.chapter ? b.verse : `${b.chapter}:${b.verse}`}`
       : `${a.book} ${a.chapter}:${a.verse}`;
-    card = {
+    return {
       kind: 'link',
       from,
       to: a,
@@ -495,6 +596,14 @@
         { start: data.toStart[hit], end: Math.max(data.toEnd[hit], data.toStart[hit]) + 1 },
       ]),
     };
+  }
+
+  function showLink(hit: number) {
+    if (!data) return;
+    const next = linkCard(hit);
+    if (!next || next.kind !== 'link') return;
+    card = next;
+    const { from, to: a } = next;
 
     // Both ends by their chapters, not the two bare verses: two verses out of
     // 31,102 light almost nothing, which reads as the selection being lost.
@@ -511,6 +620,367 @@
     rangeMode = !rangeMode;
     rangeFrom = null;
   }
+
+  // ===== Tabs =====
+  //
+  // One window, three pictures. Each tab keeps its own pan, what it has lit
+  // and its card, so moving between them loses nothing.
+
+  const TABS: Array<{ id: ConnectionsTab; label: string }> = [
+    { id: 'arcs', label: 'Arcs' },
+    { id: 'grid', label: 'Grid' },
+    { id: 'detail', label: 'Detail' },
+  ];
+  let tab: ConnectionsTab = 'arcs';
+  /** The other tabs' cards, put away while they are hidden. */
+  const stash: Partial<Record<ConnectionsTab, Card | null>> = {};
+
+  function setTab(next: ConnectionsTab) {
+    if (next === tab) return;
+    stash[tab] = card;
+    tab = next;
+    card = stash[next] ?? null;
+    rangeMode = false;
+    rangeFrom = null;
+    remember({ tab });
+    if (next === 'grid') void buildGrid();
+    if (next === 'detail' && !detailModel) void openPair(pair);
+    schedule();
+  }
+
+  // ===== Grid and detail: the look =====
+  //
+  // A grid square is its detail in miniature, so the two share one look: the
+  // colors, the groups, and which links are shown. Their other dials are the
+  // values tuned in connections-grid-lab.html.
+
+  let gridLook: GridLook = {
+    colorBy: DETAIL.colorBy,
+    groups: GRID.groups,
+    voteFloor: GRID.voteFloor,
+    maxLinks: GRID.maxLinks,
+  };
+  /** This window's own copies, as with the arcs' config. */
+  let gridConfig: GridConfig = { ...GRID };
+  let detailConfig: DetailConfig = { ...DETAIL };
+
+  function applyGridConfigs() {
+    gridConfig = { ...gridConfig, groups: gridLook.groups, voteFloor: gridLook.voteFloor, maxLinks: gridLook.maxLinks };
+    detailConfig = {
+      ...detailConfig,
+      colorBy: gridLook.colorBy,
+      voteFloor: gridLook.voteFloor,
+      maxLinks: gridLook.maxLinks,
+    };
+  }
+
+  function applyGridLook(next: GridLook) {
+    const relink = next.voteFloor !== gridLook.voteFloor || next.maxLinks !== gridLook.maxLinks;
+    const recount = relink || next.groups !== gridLook.groups;
+    const repaint = next.colorBy !== gridLook.colorBy;
+    gridLook = next;
+    applyGridConfigs();
+    remember({ grid: gridLook });
+    if (recount) staleGrid('count');
+    else if (repaint) staleGrid('paint');
+    if (relink && detailModel && data) {
+      detailModel = buildDetail(data, detailModel.left, detailModel.right, detailConfig);
+      detailPicked = null;
+      if (tab === 'detail' && card?.kind === 'link') card = null;
+    }
+    schedule();
+  }
+
+  function setGridLook(patch: Partial<GridLook>) {
+    applyGridLook({ ...gridLook, ...patch });
+  }
+
+  const COLOR_ORDER: GridLook['colorBy'][] = ['books', 'rainbow', 'ink'];
+  const COLOR_NAMES: Record<GridLook['colorBy'], string> = {
+    books: 'The two books',
+    rainbow: 'By place',
+    ink: 'One ink',
+  };
+
+  /** The grid's cap choices. Unlike the arcs, every link costs nothing to move once drawn. */
+  const LINK_CAPS = [
+    { value: 10000, label: '10,000' },
+    { value: 20000, label: '20,000' },
+    { value: 50000, label: '50,000' },
+    { value: 100000, label: '100,000' },
+    { value: 0, label: 'All' },
+  ];
+
+  // ===== The grid =====
+  //
+  // Drawn once into an image that pans and zooms, as in the lab. Built the
+  // first time the tab shows, and again when the look or the theme changes.
+
+  const GRID_K = [0.5, 40] as const;
+  let gridLayout: GridLayout | null = null;
+  let gridCells: GridCells | null = null;
+  let gridImage: HTMLCanvasElement | null = null;
+  /** What the grid needs redone: the links sorted into squares (and the painting), or only the painting. */
+  let gridStale: 'count' | 'paint' | null = 'count';
+  let gridBuilding = false;
+  let gridView: GridView = { x: 0, y: 0, k: 1 };
+  /** The hint at the foot goes once the grid (or the detail) has been tapped. */
+  let gridTried = false;
+  let detailTried = false;
+  /** The square last opened, ringed. */
+  let gridPicked: { row: number; col: number } | null = null;
+  /** A row or column picked out by its name. */
+  let gridFocus: { axis: 'row' | 'col'; lane: number } | null = null;
+
+  function staleGrid(level: 'count' | 'paint') {
+    if (gridStale !== 'count') gridStale = level;
+    if (tab === 'grid') void buildGrid();
+  }
+
+  /** A canvas holds its memory until it is shrunk; the grid's is 3,072 pixels square. */
+  function releaseGridImage() {
+    if (!gridImage) return;
+    gridImage.width = 0;
+    gridImage.height = 0;
+    gridImage = null;
+  }
+
+  async function buildGrid() {
+    if (!data || !gridStale || gridBuilding) return;
+    gridBuilding = true;
+    try {
+      // Let "Drawing the grid…" show before the build holds the thread.
+      await tick();
+      await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      // A change made while waiting is folded into this build.
+      const level = gridStale;
+      gridStale = null;
+      if (!data || !level) return;
+      if (level === 'count' || !gridLayout || !gridCells) {
+        gridLayout = buildGridLayout(data, gridConfig);
+        gridCells = sortIntoCells(data, gridConfig, gridLayout);
+        // New lanes: an old pick or card may point anywhere.
+        gridPicked = null;
+        gridFocus = null;
+        if (tab === 'grid') card = null;
+        else stash.grid = null;
+      }
+      releaseGridImage();
+      gridImage = paintGrid(data, gridCells, gridLayout, gridConfig, detailConfig, colors).image;
+    } finally {
+      gridBuilding = false;
+    }
+    schedule();
+  }
+
+  function frameGrid(c: CanvasRenderingContext2D, d: ConnectionsData) {
+    c.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!gridImage || !gridLayout || !gridCells) {
+      c.fillStyle = colors.bg;
+      c.fillRect(0, 0, W, H);
+      return;
+    }
+    drawGrid(c, { data: d, cells: gridCells, layout: gridLayout, image: gridImage }, gridConfig, detailConfig, { width: W, height: H }, {
+      palette: colors,
+      view: gridView,
+      picked: gridPicked,
+      focus: gridFocus,
+      dimTo: 0.25,
+    });
+  }
+
+  /**
+   * A name along the top or left picks out its column or row and dims the
+   * rest (tap it again to let go); a square opens the detail.
+   */
+  function tapGrid(at: { x: number; y: number }) {
+    if (!data || !gridLayout || !gridCells) return;
+    gridTried = true;
+    const frame = gridFrame({ width: W, height: H }, gridConfig);
+    const band = bandAt(gridLayout, frame, gridView, at);
+    if (band) {
+      const same = gridFocus && gridFocus.axis === band.axis && gridFocus.lane === band.lane;
+      if (same) {
+        clearGrid();
+        return;
+      }
+      gridFocus = band;
+      card = laneCard(band.axis, band.lane);
+      schedule();
+      return;
+    }
+    const cell = cellAt(gridLayout, frame, gridView, at);
+    if (!cell) return;
+    gridPicked = cell;
+    void openPair({ from: gridLayout.lanes[cell.row].name, to: gridLayout.lanes[cell.col].name });
+    setTab('detail');
+  }
+
+  /** A picked-out row or column: its links, counted against the books. */
+  function laneCard(axis: 'row' | 'col', index: number): Card | null {
+    if (!gridLayout || !gridCells) return null;
+    const lanes = gridLayout.lanes;
+    const L = lanes.length;
+    const lane = lanes[index];
+    const counts = gridCells.counts;
+    // Book squares only: the group squares count the same links again.
+    let n = 0;
+    lanes.forEach((other, i) => {
+      if (other.kind === 'book') n += counts[axis === 'row' ? index * L + i : i * L + index];
+    });
+    const first = refAt(lane.start);
+    if (!first) return null;
+    const verb = axis === 'row' ? (n === 1 ? 'link leaves' : 'links leave') : n === 1 ? 'link arrives' : 'links arrive';
+    return {
+      kind: 'span',
+      title: lane.name,
+      meta: `${n.toLocaleString()} ${verb}`,
+      open: first,
+      label: lane.name,
+      items: itemsOf([{ start: lane.start, end: lane.end }]),
+    };
+  }
+
+  function clearGrid() {
+    gridFocus = null;
+    card = null;
+    schedule();
+  }
+
+  // ===== The detail =====
+
+  const DETAIL_K = [1, 80] as const;
+  /** The two sides, by name. Psalms against Proverbs until one is picked. */
+  let pair: DetailPair = { from: 'Psalm', to: 'Proverbs' };
+  let detailModel: DetailModel | null = null;
+  let detailView: DetailView = { y: 0, k: 1 };
+  let detailLit: DetailLit | null = null;
+  let detailPicked: number | null = null;
+  /** What is lit, in words, for the saved image's title. */
+  let detailLabel = '';
+  /** Where the headings landed on the last draw, for tapping them. */
+  let placed: PlacedHeading[] = [];
+  let detailToken = 0;
+
+  /** Open two books (or groups) side by side. */
+  async function openPair(next: DetailPair) {
+    if (!data) return;
+    const a = laneNamed(data, next.from);
+    const b = laneNamed(data, next.to);
+    if (!a || !b) return;
+    pair = next;
+    remember({ pair });
+    const token = ++detailToken;
+    const translation = get(navigationStore).translation;
+    const [headA, headB] = await Promise.all([
+      a.kind === 'book' ? bookHeadings(data, a.name, translation) : Promise.resolve([]),
+      b.kind === 'book' ? (a.name === b.name ? null : bookHeadings(data, b.name, translation)) : Promise.resolve([]),
+    ]);
+    // A quicker pick since has already opened; this one is stale.
+    if (token !== detailToken || !data) return;
+    const left = detailAxis(data, a, headA);
+    const right = detailAxis(data, b, headB ?? headA);
+    detailModel = buildDetail(data, left, right, detailConfig);
+    detailView = { y: 0, k: 1 };
+    detailLit = null;
+    detailPicked = null;
+    detailLabel = '';
+    if (tab === 'detail') card = null;
+    else stash.detail = null;
+    schedule();
+  }
+
+  function frameDetail(c: CanvasRenderingContext2D, d: ConnectionsData) {
+    c.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!detailModel) {
+      c.fillStyle = colors.bg;
+      c.fillRect(0, 0, W, H);
+      return;
+    }
+    const stats = drawDetail(c, d, detailModel, detailConfig, { width: W, height: H }, {
+      palette: colors,
+      view: detailView,
+      lit: detailLit,
+      now: performance.now(),
+      motion: motionLevel(),
+      picked: detailPicked,
+    });
+    placed = stats.placed;
+    if (stats.flying) schedule();
+  }
+
+  /**
+   * A chapter, a heading or a book name lights its lines, which draw across
+   * from the side tapped; a line between the axes opens its two verses.
+   */
+  function tapDetail(at: { x: number; y: number }) {
+    if (!data || !detailModel) return;
+    detailTried = true;
+    const hit = detailHit(data, detailModel, detailConfig, { width: W, height: H }, detailView, placed, detailLit, at);
+    if (!hit) return;
+    if (hit.kind === 'line') {
+      detailPicked = hit.link;
+      card = linkCard(hit.link);
+      schedule();
+      return;
+    }
+    const axis = hit.side === 'left' ? detailModel.left : detailModel.right;
+    if (hit.kind === 'title') {
+      lightDetail(hit.side, { start: axis.start, end: axis.end }, axis.name);
+    } else if (hit.kind === 'mark') {
+      // A group's marks are books, in short; the card wants the full name.
+      const title = axis.byBook ? refAt(hit.span.start)?.book ?? hit.label : `${axis.name} ${hit.label}`;
+      lightDetail(hit.side, hit.span, title);
+    } else {
+      lightDetail(hit.side, hit.span, hit.heading.text);
+    }
+  }
+
+  function lightDetail(side: 'left' | 'right', span: Span, title: string) {
+    if (!data || !detailModel) return;
+    detailLit = { side, span, startedAt: performance.now() };
+    detailPicked = null;
+    detailLabel = title;
+    let n = 0;
+    for (const i of detailModel.links) {
+      const on =
+        side === 'left'
+          ? data.from[i] >= span.start && data.from[i] < span.end
+          : data.toStart[i] < span.end && data.toEnd[i] >= span.start;
+      if (on) n++;
+    }
+    const open = refAt(span.start);
+    const item = itemFromSpan(span);
+    const verb = side === 'left' ? (n === 1 ? 'line leaves' : 'lines leave') : n === 1 ? 'line arrives' : 'lines arrive';
+    card = open
+      ? {
+          kind: 'span',
+          title,
+          meta: `${n.toLocaleString()} ${verb}`,
+          open,
+          label: item ? itemLabel(item) : title,
+          items: item ? [item] : [],
+        }
+      : null;
+    schedule();
+  }
+
+  function clearDetail() {
+    detailLit = null;
+    detailPicked = null;
+    detailLabel = '';
+    card = null;
+    schedule();
+  }
+
+  /** Show all, on whichever tab is open. */
+  function clearTab() {
+    if (tab === 'grid') clearGrid();
+    else if (tab === 'detail') clearDetail();
+    else showAll();
+  }
+
+  $: anyLit = tab === 'grid' ? !!gridFocus : tab === 'detail' ? !!detailLit || detailPicked !== null : !!lit;
 
   // ===== Sets and saved views =====
   //
@@ -751,6 +1221,9 @@
       name,
       ...lookOf(),
       shown: shownList().map((s) => s.id),
+      tab,
+      grid: { ...gridLook },
+      pair: { ...pair },
     };
     // The same name again saves over it, rather than making a twin.
     views = same ? views.map((v) => (v.id === same.id ? saved : v)) : [...views, saved];
@@ -761,6 +1234,9 @@
   function openView(v: ConnectionsView) {
     applyLook(v);
     setShown(v.shown.filter((id) => library.some((s) => s.id === id)));
+    if (v.grid) applyGridLook(v.grid);
+    if (v.pair && (v.pair.from !== pair.from || v.pair.to !== pair.to || !detailModel)) void openPair(v.pair);
+    setTab(v.tab ?? 'arcs');
   }
 
   async function deleteView(v: ConnectionsView) {
@@ -775,6 +1251,8 @@
 
   /** What a saved view shows, for its row. */
   function viewSummary(v: ConnectionsView): string {
+    if (v.tab === 'grid') return `Grid · ${COLOR_NAMES[v.grid?.colorBy ?? gridLook.colorBy]}`;
+    if (v.tab === 'detail' && v.pair) return `Detail · ${v.pair.from} → ${v.pair.to}`;
     const names = v.shown.map((id) => library.find((s) => s.id === id)?.name).filter(Boolean);
     return names.length ? names.join(', ') : 'Every arc, book colors';
   }
@@ -796,7 +1274,7 @@
 
   /** What the picture is of, for the image's title. Follows what was lit last. */
   let litTitle = '';
-  $: if (card) {
+  $: if (card && tab === 'arcs') {
     litTitle =
       card.kind === 'span'
         ? card.title
@@ -838,21 +1316,70 @@
 
   async function makeImage() {
     if (!data || imageBusy || W === 0 || H === 0) return;
+    if (tab === 'grid' && (!gridImage || !gridLayout || !gridCells)) return;
+    if (tab === 'detail' && !detailModel) return;
     closeImage();
     imageBusy = true;
     try {
-      const title = litTitle || (shownSets.length ? 'Cross references in Scripture' : 'Every cross reference in Scripture');
-      const blob = await renderConnectionsImage({
-        data,
-        config,
-        viewport: { width: W, height: H },
-        view: { ...view },
-        palette: colors,
-        lit: lit?.spans,
-        sets: layer,
-        title,
-        legend: shownSets.map((s) => ({ name: s.name, color: s.color })),
-      });
+      const viewport = { width: W, height: H };
+      let title: string;
+      let blob: Blob | null;
+      if (tab === 'grid') {
+        const scene = { data, cells: gridCells!, layout: gridLayout!, image: gridImage! };
+        const focus = gridFocus;
+        const lane = focus ? gridLayout!.lanes[focus.lane] : null;
+        title =
+          lane && focus
+            ? `${lane.name}, ${focus.axis === 'row' ? 'where its links land' : 'where its links come from'}`
+            : 'Cross references, book by book';
+        const at = { ...gridView };
+        blob = await renderFramedImage({
+          viewport,
+          palette: colors,
+          title,
+          legend: [],
+          paint: (c) => {
+            drawGrid(c, scene, gridConfig, detailConfig, viewport, { palette: colors, view: at, focus, dimTo: 0.25, everyCell: true });
+          },
+        });
+      } else if (tab === 'detail') {
+        const model = detailModel!;
+        const d = data;
+        title = `${model.left.name} → ${model.right.name}${detailLabel ? `: ${detailLabel}` : ''}`;
+        const at = { ...detailView };
+        const litNow = detailLit;
+        const pickedNow = detailPicked;
+        blob = await renderFramedImage({
+          viewport,
+          palette: colors,
+          title,
+          legend: [],
+          // Drawn landed: a picture taken mid-flight would be a half-drawn one.
+          paint: (c) => {
+            drawDetail(c, d, model, detailConfig, viewport, {
+              palette: colors,
+              view: at,
+              lit: litNow,
+              now: performance.now(),
+              motion: 'off',
+              picked: pickedNow,
+            });
+          },
+        });
+      } else {
+        title = litTitle || (shownSets.length ? 'Cross references in Scripture' : 'Every cross reference in Scripture');
+        blob = await renderConnectionsImage({
+          data,
+          config,
+          viewport,
+          view: { ...view },
+          palette: colors,
+          lit: lit?.spans,
+          sets: layer,
+          title,
+          legend: shownSets.map((s) => ({ name: s.name, color: s.color })),
+        });
+      }
       if (!imageBusy) return; // closed while it was drawing
       if (!blob) throw new Error('The browser couldn’t make the image.');
       const base = title.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'connections';
@@ -959,13 +1486,27 @@
       }
       const look = cleanLook(windowState?.contentState?.look);
       if (look) config = { ...config, ...look };
+      const state = windowState?.contentState;
+      const savedTab = cleanTab(state?.tab);
+      if (savedTab) tab = savedTab;
+      const savedGrid = cleanGridLook(state?.grid);
+      if (savedGrid) {
+        gridLook = savedGrid;
+        applyGridConfigs();
+      }
+      const savedPair = cleanPair(state?.pair);
+      if (savedPair) pair = savedPair;
+      const gv = state?.gridView;
+      if (gv && [gv.x, gv.y, gv.k].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+        gridView = { x: gv.x, y: gv.y, k: clamp(gv.k, GRID_K[0], GRID_K[1]) };
+      }
       const savedShown = windowState?.contentState?.shown;
       if (Array.isArray(savedShown)) {
         shown = savedShown.filter((id): id is string => typeof id === 'string' && library.some((s) => s.id === id));
       }
       await rebuildLayer(false);
       // The opening volley: the whole Bible flies in, Genesis first.
-      if (LIGHTS.openOnLoad && motionLevel() === 'full') opening = { startedAt: performance.now() };
+      if (tab === 'arcs' && LIGHTS.openOnLoad && motionLevel() === 'full') opening = { startedAt: performance.now() };
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -973,6 +1514,8 @@
     }
     await tick();
     measure();
+    if (data && tab === 'grid') void buildGrid();
+    if (data && tab === 'detail') void openPair(pair);
   }
 
   let resizeObserver: ResizeObserver | null = null;
@@ -1007,6 +1550,7 @@
     themeObserver?.disconnect();
     resizeObserver?.disconnect();
     pointers.clear();
+    releaseGridImage();
     releaseConnections();
   });
 </script>
@@ -1036,33 +1580,56 @@
       </div>
     </div>
   {:else}
-    <div class="nav">
+    <div class="nav" class:pairs={tab === 'detail'}>
       <div class="nav-title">Connections</div>
-      <select
-        class="book-pick"
-        aria-label="Light a book"
-        value={pickedBook}
-        on:change={(e) => lightBook(e.currentTarget.value)}
-        disabled={!data}
-      >
-        <option value="">Light a book…</option>
-        {#each data?.books ?? [] as book (book.name)}
-          <option value={book.name}>{book.name}</option>
+      {#if tab === 'arcs'}
+        <select
+          class="book-pick"
+          aria-label="Light a book"
+          value={pickedBook}
+          on:change={(e) => lightBook(e.currentTarget.value)}
+          disabled={!data}
+        >
+          <option value="">Light a book…</option>
+          {#each data?.books ?? [] as book (book.name)}
+            <option value={book.name}>{book.name}</option>
+          {/each}
+        </select>
+      {:else if tab === 'detail'}
+        {#each ['from', 'to'] as side (side)}
+          {#if side === 'to'}<span class="pair-arrow" aria-hidden="true">→</span>{/if}
+          <select
+            class="book-pick pair-pick"
+            aria-label={side === 'from' ? 'Where the links start' : 'Where the links land'}
+            value={side === 'from' ? pair.from : pair.to}
+            on:change={(e) =>
+              openPair(side === 'from' ? { from: e.currentTarget.value, to: pair.to } : { from: pair.from, to: e.currentTarget.value })}
+            disabled={!data}
+          >
+            <optgroup label="Groups">
+              {#each BOOK_GROUPS as g (g.name)}<option value={g.name}>{g.name}</option>{/each}
+            </optgroup>
+            <optgroup label="Books">
+              {#each data?.books ?? [] as book (book.name)}<option value={book.name}>{book.name}</option>{/each}
+            </optgroup>
+          </select>
         {/each}
-      </select>
+      {/if}
       <div class="nav-spacer"></div>
-      <button
-        class="btn"
-        class:on={rangeMode}
-        aria-pressed={rangeMode}
-        title="Drag along the line to light a stretch of chapters"
-        on:click={toggleRange}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18"/><path d="M7 13v8"/><path d="M17 13v8"/><path d="M9.5 10l2.5-3 2.5 3"/></svg>
-        <span class="btn-label">Select range</span>
-      </button>
-      {#if lit}
-        <button class="btn" title="Show every arc again" on:click={showAll}>
+      {#if tab === 'arcs'}
+        <button
+          class="btn"
+          class:on={rangeMode}
+          aria-pressed={rangeMode}
+          title="Drag along the line to light a stretch of chapters"
+          on:click={toggleRange}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18"/><path d="M7 13v8"/><path d="M17 13v8"/><path d="M9.5 10l2.5-3 2.5 3"/></svg>
+          <span class="btn-label">Select range</span>
+        </button>
+      {/if}
+      {#if anyLit}
+        <button class="btn" title={tab === 'arcs' ? 'Show every arc again' : 'Show every line again'} on:click={clearTab}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M5 18a7 7 0 0114 0"/><path d="M8.5 18a3.5 3.5 0 017 0"/></svg>
           <span class="btn-label">Show all</span>
         </button>
@@ -1071,19 +1638,33 @@
         class="btn"
         class:on={panelOpen}
         aria-pressed={panelOpen}
-        title="Sets and saved views"
+        title={tab === 'arcs' ? 'Sets and saved views' : 'How the lines look, and saved views'}
         on:click={togglePanel}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="4.5"/><circle cx="16" cy="9" r="4.5"/><circle cx="12" cy="15.5" r="4.5"/></svg>
-        <span class="btn-label">Sets</span>
+        {#if tab === 'arcs'}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="4.5"/><circle cx="16" cy="9" r="4.5"/><circle cx="12" cy="15.5" r="4.5"/></svg>
+          <span class="btn-label">Sets</span>
+        {:else}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10"/><path d="M18 6h2"/><circle cx="16" cy="6" r="2"/><path d="M4 12h4"/><path d="M12 12h8"/><circle cx="10" cy="12" r="2"/><path d="M4 18h12"/><circle cx="18" cy="18" r="2"/></svg>
+          <span class="btn-label">View</span>
+        {/if}
       </button>
-      <button class="btn" title="Save or share this picture as an image" disabled={!data || imageBusy} on:click={makeImage}>
+      <button
+        class="btn"
+        title="Save or share this picture as an image"
+        disabled={!data || imageBusy || (tab === 'grid' && (!gridImage || gridBuilding)) || (tab === 'detail' && !detailModel)}
+        on:click={makeImage}
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg>
         <span class="btn-label">Image</span>
       </button>
-      <button class="btn" title="Back to the whole Bible" on:click={wholeBible}>
+      <button
+        class="btn"
+        title={tab === 'detail' ? 'Back to both sides whole' : tab === 'grid' ? 'Back to the whole grid' : 'Back to the whole Bible'}
+        on:click={fitView}
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/></svg>
-        <span class="btn-label">Whole Bible</span>
+        <span class="btn-label">{tab === 'detail' ? 'Whole' : 'Whole Bible'}</span>
       </button>
       <button
         class="btn btn-icon"
@@ -1101,6 +1682,18 @@
       </button>
     </div>
 
+    <div class="tabs" role="tablist" aria-label="Connections pictures">
+      {#each TABS as t (t.id)}
+        <button
+          class="tab"
+          class:on={tab === t.id}
+          role="tab"
+          aria-selected={tab === t.id}
+          on:click={() => setTab(t.id)}
+        >{t.label}</button>
+      {/each}
+    </div>
+
     <div class="stage" class:range={rangeMode} bind:this={stageEl}>
       <canvas
         bind:this={canvas}
@@ -1112,13 +1705,19 @@
       ></canvas>
       {#if loading}
         <div class="loading">Reading the connections…</div>
-      {:else if rangeMode && !card}
+      {:else if tab === 'grid' && (gridBuilding || !gridImage)}
+        <div class="loading">Drawing the grid…</div>
+      {:else if tab === 'grid' && !gridTried && !card && !panelOpen}
+        <div class="hint low">Tap a square to open it. Tap a name to pick out its row or column.</div>
+      {:else if tab === 'detail' && !detailTried && !card && !panelOpen && detailModel}
+        <div class="hint low">Tap a chapter, a heading or a book name to light its lines.</div>
+      {:else if tab === 'arcs' && rangeMode && !card}
         <div class="hint">Drag along the line to light a stretch of chapters.</div>
-      {:else if emptyShown && !card && !panelOpen}
+      {:else if tab === 'arcs' && emptyShown && !card && !panelOpen}
         <div class="hint">“{emptyShown.name}” is empty. Tap a book, a chapter or an arc, then Add to set.</div>
       {/if}
 
-      {#if shownSets.length && !panelOpen}
+      {#if tab === 'arcs' && shownSets.length && !panelOpen}
         <button class="legend" title="Sets and saved views" on:click={togglePanel}>
           {#each shownSets as set (set.id)}
             <span class="legend-item"><span class="dot" style="background:{set.color}"></span>{set.name}</span>
@@ -1127,11 +1726,68 @@
       {/if}
 
       {#if panelOpen}
-        <div class="panel" role="dialog" aria-label="Sets and saved views">
+        <div class="panel" role="dialog" aria-label={tab === 'arcs' ? 'Sets and saved views' : 'View and saved views'}>
           <div class="panel-head">
-            <div class="panel-title">Sets</div>
+            <div class="panel-title">{tab === 'arcs' ? 'Sets' : 'View'}</div>
             <CloseX label="Close" on:click={() => (panelOpen = false)} />
           </div>
+          {#if tab !== 'arcs'}
+          <p class="panel-note">
+            The grid puts every book against every book: rows are where a link starts, columns where it lands. A square
+            opened up is the detail. Both follow these.
+          </p>
+          <div class="field">
+            <span>Color</span>
+            <div class="seg">
+              {#each COLOR_ORDER as c (c)}
+                <button class:on={gridLook.colorBy === c} on:click={() => setGridLook({ colorBy: c })}>{COLOR_NAMES[c]}</button>
+              {/each}
+            </div>
+          </div>
+          <p class="panel-note">
+            The two books: each line leaves wearing the other book’s color, as the arcs do. By place: a rainbow down the
+            source book, so a line can be followed across. One ink: every line alike.
+          </p>
+          <div class="field">
+            <span>Groups</span>
+            <div class="seg">
+              <button class:on={gridLook.groups === 'start'} on:click={() => setGridLook({ groups: 'start' })}>Together first</button>
+              <button class:on={gridLook.groups === 'each'} on:click={() => setGridLook({ groups: 'each' })}>Before each</button>
+              <button class:on={gridLook.groups === 'off'} on:click={() => setGridLook({ groups: 'off' })}>None</button>
+            </div>
+          </div>
+          <p class="panel-note">
+            A row and column for each group of books (Law, History, Wisdom/Poetry, Prophets, Gospels, Pauline Epistles,
+            General Epistles), with all its books on one axis.
+          </p>
+          <label class="field">
+            <span>Links shown</span>
+            <select
+              class="pick"
+              value={gridLook.voteFloor}
+              on:change={(e) => setGridLook({ voteFloor: Number(e.currentTarget.value) })}
+            >
+              {#each FLOORS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
+              {#if !FLOORS.some((f) => f.value === gridLook.voteFloor)}
+                <option value={gridLook.voteFloor}>{gridLook.voteFloor} votes or more</option>
+              {/if}
+            </select>
+          </label>
+          <label class="field">
+            <span>Most links</span>
+            <select
+              class="pick"
+              value={gridLook.maxLinks}
+              on:change={(e) => setGridLook({ maxLinks: Number(e.currentTarget.value) })}
+            >
+              {#each LINK_CAPS as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+              {#if !LINK_CAPS.some((c) => c.value === gridLook.maxLinks)}
+                <option value={gridLook.maxLinks}>{gridLook.maxLinks.toLocaleString()}</option>
+              {/if}
+            </select>
+          </label>
+          <p class="panel-note">Readers vote on each link at OpenBible.info. With a cap, the most-voted links are kept.</p>
+          {:else}
           <p class="panel-note">
             Show a set and only the arcs touching it are drawn, in its color. A set higher in the list wins an arc it
             shares with one below.
@@ -1292,6 +1948,7 @@
             </select>
           </label>
           <p class="panel-note">Readers vote on each link at OpenBible.info. With a cap, the most-voted links are kept.</p>
+          {/if}
 
           <div class="panel-sub">Saved views</div>
           {#each views as v (v.id)}
@@ -1306,7 +1963,7 @@
               </button>
             </div>
           {:else}
-            <div class="set-meta">None yet. A saved view keeps the line, the arcs, the links shown and which sets are on.</div>
+            <div class="set-meta">None yet. A saved view keeps the tab you are on and how each picture looks: the arcs’ line, sides, links and sets, the grid’s color, groups and links, and the two sides of the detail.</div>
           {/each}
           <form class="add-row" on:submit|preventDefault={saveView}>
             <input class="text" bind:value={viewName} maxlength="60" placeholder="Name this view" aria-label="View name" />
@@ -1324,7 +1981,7 @@
             <div class="card-meta">{card.votes.toLocaleString()} {card.votes === 1 ? 'vote' : 'votes'}</div>
           {:else}
             <div class="card-title">{card.title}</div>
-            <div class="card-meta">{card.out.toLocaleString()} out · {card.in.toLocaleString()} in</div>
+            <div class="card-meta">{card.meta}</div>
           {/if}
           {#if card.items.length}
             <select
@@ -1351,7 +2008,7 @@
           <VerseRefRow book={link.to.book} chapter={link.to.chapter} verse={link.to.verse} label={link.toLabel} onOpen={() => read(link.to)} />
         {:else}
           {@const span = card}
-          <VerseRefRow book={span.open.book} chapter={span.open.chapter} verse={span.open.verse} label={span.title} onOpen={() => read(span.open)} />
+          <VerseRefRow book={span.open.book} chapter={span.open.chapter} verse={span.open.verse} label={span.label} onOpen={() => read(span.open)} />
         {/if}
       </div>
     {/if}
@@ -1371,7 +2028,7 @@
           {:else if imageError}
             <p class="error">{imageError}</p>
           {:else if imageUrl}
-            <img class="image-preview" src={imageUrl} alt="The Connections arcs as they will be saved" />
+            <img class="image-preview" src={imageUrl} alt="The Connections view as it will be saved" />
             <div class="image-actions">
               {#if canShareFiles}
                 <button class="btn" on:click={shareImage}>Share</button>
@@ -1483,6 +2140,49 @@
   @container (max-width: 330px) {
     .nav-title { display: none; }
   }
+  /* Two pickers want the title's room sooner. */
+  @container (max-width: 560px) {
+    .nav.pairs .nav-title { display: none; }
+  }
+
+  .pair-pick { flex: 0 1 auto; max-width: 130px; }
+  .pair-arrow { color: var(--muted); flex: none; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+
+  /* ---------------- tabs ---------------- */
+  .tabs {
+    --tabs-h: 32px;
+    flex: none;
+    height: var(--tabs-h);
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    padding: 0 calc(8px + var(--grip-r)) 0 calc(8px + var(--grip-l));
+    background: var(--bg);
+    box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--rule) 60%, transparent);
+    position: relative;
+    z-index: 19;
+    /* Bar size, the same as the bar above it. */
+    width: calc(100% / var(--bar-scale, 1));
+    transform: scale(var(--bar-scale, 1));
+    transform-origin: 0 0;
+    margin-bottom: calc(var(--tabs-h) * (var(--bar-scale, 1) - 1));
+  }
+  .tab {
+    flex: 0 1 auto;
+    padding: 0 12px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: var(--muted);
+    font-family: var(--display);
+    font-size: 14px;
+    cursor: pointer;
+    transition: color .12s, border-color .12s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.on { color: var(--text); border-bottom-color: var(--focus); }
+  .tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
   /* ---------------- the picture ---------------- */
   .stage {
@@ -1518,6 +2218,8 @@
     color: var(--muted); font-size: 12px; white-space: nowrap;
     pointer-events: none;
   }
+  /* The grid's names run along the top, so its hints sit at the foot. */
+  .hint.low { top: auto; bottom: 8px; max-width: calc(100% - 16px); white-space: normal; text-align: center; }
 
   /* ---------------- sets ---------------- */
   .legend {

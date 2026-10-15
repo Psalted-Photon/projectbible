@@ -306,3 +306,45 @@ export function linkAt(data: ConnectionsData, index: number): ConnectionLink {
     votes: data.votes[index],
   };
 }
+
+interface MaskCache {
+  floor: number;
+  cap: number;
+  mask: Uint8Array;
+  kept: number;
+}
+const maskCache = new WeakMap<ConnectionsData, MaskCache>();
+
+/**
+ * Which links are shown under a vote floor and a most-links cap: 1 for each
+ * link kept, 0 for each left out.
+ *
+ * The cap keeps the most-voted links, as the arcs' does, and breaks ties the
+ * same way (the earlier link wins), so the grid, the detail and the arcs agree
+ * on which links a cap keeps. 0 is no cap.
+ */
+export function linkMask(data: ConnectionsData, floor: number, cap: number): { mask: Uint8Array; kept: number } {
+  const cached = maskCache.get(data);
+  if (cached && cached.floor === floor && cached.cap === cap) return cached;
+
+  const mask = new Uint8Array(data.count);
+  let kept = 0;
+  if (cap > 0 && cap < data.count) {
+    const passing: number[] = [];
+    for (let i = 0; i < data.count; i++) if (data.votes[i] >= floor) passing.push(i);
+    passing.sort((a, b) => data.votes[b] - data.votes[a] || a - b);
+    kept = Math.min(cap, passing.length);
+    for (let n = 0; n < kept; n++) mask[passing[n]] = 1;
+  } else {
+    for (let i = 0; i < data.count; i++) {
+      if (data.votes[i] >= floor) {
+        mask[i] = 1;
+        kept++;
+      }
+    }
+  }
+
+  const entry = { floor, cap, mask, kept };
+  maskCache.set(data, entry);
+  return entry;
+}

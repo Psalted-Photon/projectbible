@@ -17,7 +17,7 @@
  */
 
 import { openDB, type DBSectionHeading } from '../../adapters/db';
-import type { ConnectionsData } from './data';
+import { linkMask, type ConnectionsData } from './data';
 import type { ConnectionsPalette } from './palette';
 import { BOOK_COLORS, rgbOf } from './palette';
 import { shortBookName } from '../bibleData';
@@ -29,6 +29,8 @@ export type DetailScale = 'fill' | 'true';
 export interface DetailConfig {
   /** Hide links fewer readers voted for. */
   voteFloor: number;
+  /** The most links shown, keeping the most-voted, as on the arcs. 0 shows every one past the floor. */
+  maxLinks: number;
   /** 'fill' stretches both axes the full height; 'true' keeps a short book short. */
   scale: DetailScale;
   /** The room each side keeps for its numbers and headings, as a share of the width. */
@@ -74,6 +76,7 @@ export interface DetailConfig {
 /** What the app ships, and what the lab's Reset puts back. */
 export const DETAIL: DetailConfig = {
   voteFloor: 1,
+  maxLinks: 0,
   scale: 'true',
   sideRoom: 0.23,
   curve: 1,
@@ -239,6 +242,7 @@ export function buildDetail(
   config: DetailConfig,
 ): DetailModel {
   const out: number[] = [];
+  const { mask } = linkMask(data, config.voteFloor, config.maxLinks);
   // Sources are sorted, so the left axis is one binary search and a walk.
   let lo = 0;
   let hi = data.count;
@@ -248,7 +252,7 @@ export function buildDetail(
     else hi = mid;
   }
   for (let i = lo; i < data.count && data.from[i] < left.end; i++) {
-    if (data.votes[i] < config.voteFloor) continue;
+    if (!mask[i]) continue;
     const t = data.toStart[i];
     if (t >= right.start && t < right.end) out.push(i);
   }

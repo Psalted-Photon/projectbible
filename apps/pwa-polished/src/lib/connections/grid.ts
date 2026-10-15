@@ -21,7 +21,7 @@
  * idea as the arcs' ruler.
  */
 
-import type { ConnectionsData } from './data';
+import { linkMask, type ConnectionsData } from './data';
 import { BOOK_RGB, BOOK_COLORS, rgbOf } from './palette';
 import type { ConnectionsPalette } from './palette';
 import type { DetailConfig } from './detail';
@@ -37,6 +37,8 @@ export type GroupPlacement = 'start' | 'each' | 'off';
 export interface GridConfig {
   /** Hide links fewer readers voted for. 0 keeps every one. */
   voteFloor: number;
+  /** The most links shown, keeping the most-voted, as on the arcs. 0 shows every one past the floor. */
+  maxLinks: number;
   /** 0 gives every book the same lane; 1 sizes lanes by verse count. Between bends toward it. */
   bookSize: number;
   /** Where the group rows and columns go. */
@@ -72,6 +74,7 @@ export interface GridConfig {
 /** What the app ships, and what the lab's Reset puts back. */
 export const GRID: GridConfig = {
   voteFloor: 1,
+  maxLinks: 0,
   bookSize: 0,
   groups: 'each',
   groupSize: 2,
@@ -263,6 +266,24 @@ export function laneAt(layout: GridLayout, fraction: number): number {
   return fraction >= lane.at && fraction < lane.at + lane.size ? lo : -1;
 }
 
+/** A book or a group by name, as a detail axis wants it, whatever the grid's layout. */
+export function laneNamed(
+  data: ConnectionsData,
+  name: string,
+): { kind: 'book' | 'group'; name: string; color: string; rgb: [number, number, number]; start: number; end: number } | null {
+  const b = data.books.findIndex((book) => book.name === name);
+  if (b >= 0) {
+    return { kind: 'book', name, color: BOOK_COLORS[b], rgb: BOOK_RGB[b], start: data.books[b].start, end: data.books[b].end };
+  }
+  const g = BOOK_GROUPS.find((group) => group.name === name);
+  if (!g) return null;
+  const first = data.books.find((book) => book.name === g.first);
+  const last = data.books.find((book) => book.name === g.last);
+  if (!first || !last) return null;
+  const color = CATEGORY_COLORS[g.category];
+  return { kind: 'group', name, color, rgb: rgbOf(color), start: first.start, end: last.end };
+}
+
 /* --------------------------------------------------------------------------- *
  * Sorting the links into cells
  * ------------------------------------------------------------------------- */
@@ -302,8 +323,9 @@ export function sortIntoCells(data: ConnectionsData, config: GridConfig, layout:
     rowB[b] = layout.groupLane[layout.groupOfBook[b]];
   }
 
+  const { mask } = linkMask(data, config.voteFloor, config.maxLinks);
   const keep = (i: number) => {
-    if (data.votes[i] < config.voteFloor) return false;
+    if (!mask[i]) return false;
     const f = data.from[i];
     const t = data.toStart[i];
     return f >= 0 && f < total && t >= 0 && t < total;
@@ -383,6 +405,7 @@ function drawCells(
   rows: number[],
   cols: number[],
   width: number,
+  axisWidth: number,
 ): number {
   const lanes = layout.lanes;
   const L = lanes.length;
@@ -431,7 +454,7 @@ function drawCells(
       }
     }
     ctx.strokeStyle = rgba(rgbOf(palette.rule), grid.axisAlpha);
-    ctx.lineWidth = Math.max(0.5, width);
+    ctx.lineWidth = axisWidth;
     ctx.stroke(axes);
   }
 
@@ -497,6 +520,11 @@ function drawCells(
   return drawn;
 }
 
+/** The axes' width in the image: never thinner than half a pixel, or they vanish. */
+function axisWidthOf(grid: GridConfig): number {
+  return Math.max(0.5, grid.lineWidth);
+}
+
 /** The whole grid, drawn once into an image. */
 export function paintGrid(
   data: ConnectionsData,
@@ -515,7 +543,7 @@ export function paintGrid(
   ctx.fillStyle = palette.bg;
   ctx.fillRect(0, 0, S, S);
   const all = layout.lanes.map((_, i) => i);
-  drawCells(ctx, data, cells, layout, grid, detail, palette, { ox: 0, oy: 0, unit: S }, all, all, grid.lineWidth);
+  drawCells(ctx, data, cells, layout, grid, detail, palette, { ox: 0, oy: 0, unit: S }, all, all, grid.lineWidth, axisWidthOf(grid));
   return { image, ms: performance.now() - t0 };
 }
 
@@ -605,6 +633,13 @@ export interface GridDrawOptions {
   focus?: { axis: 'row' | 'col'; lane: number } | null;
   /** How dim the rest goes around a focused row or column, 0 to 1. */
   dimTo?: number;
+  /**
+   * Draw every cell on screen as lines, whatever the zoom or the count, with
+   * lines as fine as the image would show them. For the saved image, which is
+   * drawn far larger than the screen and would otherwise be the cached image
+   * blown up.
+   */
+  everyCell?: boolean;
 }
 
 export interface GridDrawStats {
@@ -649,7 +684,7 @@ export function drawGrid(
 
   let live = false;
   let lines = 0;
-  if (grid.sharpZoom && unit > image.width) {
+  if (opts.everyCell || (grid.sharpZoom && unit > image.width)) {
     // The lanes on screen, and how many lines their cells hold.
     const seen = (axis: 'x' | 'y', lo: number, hi: number) =>
       layout.lanes
@@ -660,9 +695,12 @@ export function drawGrid(
     const rows = seen('y', frame.band, H);
     const L = layout.lanes.length;
     for (const r of rows) for (const c of cols) lines += scene.cells.counts[r * L + c];
-    if (lines <= grid.liveLimit) {
+    if (opts.everyCell || lines <= grid.liveLimit) {
       live = true;
-      lines = drawCells(ctx, scene.data, scene.cells, layout, grid, detail, palette, { ox: gx, oy: gy, unit }, rows, cols, grid.lineWidth);
+      // Lines keep the width the image gives them on screen, so the hand-over
+      // from image to live drawing (or to the saved image) doesn't jump.
+      const f = Math.min(1, unit / image.width);
+      lines = drawCells(ctx, scene.data, scene.cells, layout, grid, detail, palette, { ox: gx, oy: gy, unit }, rows, cols, grid.lineWidth * f, axisWidthOf(grid) * f);
     }
   }
   if (!live) {

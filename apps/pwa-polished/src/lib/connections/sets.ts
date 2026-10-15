@@ -30,6 +30,8 @@ import { syncedUserDataStore } from '../../adapters/SyncedUserDataStore';
 import { bookSpan, chapterSpan, positionOf, refAt, type ConnectionRef, type ConnectionsData } from './data';
 import type { Span } from './lights';
 import type { ArcSide, Orientation } from './layout';
+import type { DetailColorBy } from './detail';
+import type { GroupPlacement } from './grid';
 import { getSettings, updateSettings } from '../../adapters/settings';
 
 /** One passage in a set, first verse to last, both included. */
@@ -427,12 +429,37 @@ export interface ConnectionsLook {
   maxArcs: number;
 }
 
+/** The window's three tabs. */
+export type ConnectionsTab = 'arcs' | 'grid' | 'detail';
+
+/**
+ * The grid's and the detail's look: the only dials a reader gets there. A grid
+ * cell is its detail in miniature, so the two share one.
+ */
+export interface GridLook {
+  colorBy: DetailColorBy;
+  groups: GroupPlacement;
+  voteFloor: number;
+  /** 0 shows every link past the floor. */
+  maxLinks: number;
+}
+
+/** The two sides of the detail, by book or group name. */
+export interface DetailPair {
+  from: string;
+  to: string;
+}
+
 /** A saved view: the look, and which sets were showing. */
 export interface ConnectionsView extends ConnectionsLook {
   id: string;
   name: string;
   /** The ids of the sets shown, in the library's order. */
   shown: string[];
+  /** Views saved before the grid open on the arcs and leave the grid as it is. */
+  tab?: ConnectionsTab;
+  grid?: GridLook;
+  pair?: DetailPair;
 }
 
 export const MAX_SETS = 40;
@@ -496,6 +523,29 @@ export function cleanLook(raw: unknown): ConnectionsLook | null {
   return { orientation: l.orientation!, side: l.side!, voteFloor: l.voteFloor!, maxArcs: Math.max(0, l.maxArcs!) };
 }
 
+const TABS: ConnectionsTab[] = ['arcs', 'grid', 'detail'];
+const COLOR_BYS: DetailColorBy[] = ['books', 'rainbow', 'ink'];
+const PLACEMENTS: GroupPlacement[] = ['start', 'each', 'off'];
+
+export function cleanTab(raw: unknown): ConnectionsTab | null {
+  return TABS.includes(raw as ConnectionsTab) ? (raw as ConnectionsTab) : null;
+}
+
+/** A grid look from a saved view or a window's state, or null if it isn't one. */
+export function cleanGridLook(raw: unknown): GridLook | null {
+  const l = raw as Partial<GridLook> | null;
+  if (!l || typeof l !== 'object') return null;
+  if (!COLOR_BYS.includes(l.colorBy as DetailColorBy) || !PLACEMENTS.includes(l.groups as GroupPlacement)) return null;
+  if (!Number.isFinite(l.voteFloor) || !Number.isFinite(l.maxLinks)) return null;
+  return { colorBy: l.colorBy!, groups: l.groups!, voteFloor: l.voteFloor!, maxLinks: Math.max(0, l.maxLinks!) };
+}
+
+export function cleanPair(raw: unknown): DetailPair | null {
+  const p = raw as Partial<DetailPair> | null;
+  if (!p || typeof p !== 'object' || typeof p.from !== 'string' || typeof p.to !== 'string') return null;
+  return { from: p.from, to: p.to };
+}
+
 export function savedViews(): ConnectionsView[] {
   const list = getSettings().connectionViews;
   if (!Array.isArray(list)) return [];
@@ -505,7 +555,18 @@ export function savedViews(): ConnectionsView[] {
     const look = cleanLook(v);
     if (!look || typeof v.id !== 'string' || typeof v.name !== 'string') continue;
     const shown = Array.isArray(v.shown) ? v.shown.filter((id): id is string => typeof id === 'string') : [];
-    out.push({ id: v.id, name: v.name, ...look, shown });
+    const tab = cleanTab(v.tab);
+    const grid = cleanGridLook(v.grid);
+    const pair = cleanPair(v.pair);
+    out.push({
+      id: v.id,
+      name: v.name,
+      ...look,
+      shown,
+      ...(tab ? { tab } : {}),
+      ...(grid ? { grid } : {}),
+      ...(pair ? { pair } : {}),
+    });
   }
   return out.slice(0, MAX_VIEWS);
 }

@@ -1,5 +1,6 @@
 /**
- * The Connections picture as an image to save or share.
+ * The Connections picture as an image to save or share — the arcs, the grid or
+ * the detail, whichever tab is open.
  *
  * The same draw the window makes, run again off screen at about 4,000 pixels
  * on the long side, so the arcs stay sharp printed or zoomed. It frames
@@ -56,8 +57,43 @@ export interface ImageRequest {
   legend: Array<{ name: string; color: string }>;
 }
 
-/** Draw the image and hand it back as a PNG, or null if the browser refused. */
-export async function renderConnectionsImage(req: ImageRequest): Promise<Blob | null> {
+/** The arcs as an image, as a PNG, or null if the browser refused. */
+export function renderConnectionsImage(req: ImageRequest): Promise<Blob | null> {
+  return renderFramedImage({
+    viewport: req.viewport,
+    palette: req.palette,
+    title: req.title,
+    legend: req.legend,
+    paint: (ctx) =>
+      draw(ctx, req.data, req.config, req.viewport, {
+        palette: req.palette,
+        lit: req.lit,
+        labels: true,
+        view: req.view,
+        sets: req.sets ?? null,
+      }),
+  });
+}
+
+export interface FramedRequest {
+  /** The window's picture area, in CSS pixels. */
+  viewport: Viewport;
+  palette: ConnectionsPalette;
+  title: string;
+  legend: Array<{ name: string; color: string }>;
+  /**
+   * Draws the picture as the window would, in the window's CSS pixels. The
+   * context arrives scaled up and clipped to the picture's box.
+   */
+  paint: (ctx: CanvasRenderingContext2D) => void;
+}
+
+/**
+ * Any of the three pictures in the frame every saved image shares: the title
+ * band above, the irisBible mark and the credit below. PNG, or null if the
+ * browser refused.
+ */
+export async function renderFramedImage(req: FramedRequest): Promise<Blob | null> {
   const mark = await markDrawer();
   const { width: W, height: H } = req.viewport;
   const head = HEAD + (req.legend.length ? LEGEND : 0);
@@ -86,13 +122,7 @@ export async function renderConnectionsImage(req: ImageRequest): Promise<Blob | 
   ctx.rect(0, head, W, H);
   ctx.clip();
   ctx.setTransform(scale, 0, 0, scale, 0, head * scale);
-  draw(ctx, req.data, req.config, req.viewport, {
-    palette,
-    lit: req.lit,
-    labels: true,
-    view: req.view,
-    sets: req.sets ?? null,
-  });
+  req.paint(ctx);
   ctx.restore();
 
   // ── The bands, in the window's CSS pixels scaled up.
