@@ -71,6 +71,24 @@ export function mtToLxxPsalm(chapter: number, verse: number): LxxPsalmRef | null
 }
 
 /**
+ * The reverse of mtToLxxPsalm: a Septuagint psalm reference in Masoretic
+ * (English) numbering. Returns null for LXX Psalm 151, which MT does not have.
+ */
+export function lxxToMtPsalm(chapter: number, verse: number): LxxPsalmRef | null {
+  if (!Number.isInteger(chapter) || chapter < 1 || chapter > 150) return null;
+  if (!Number.isInteger(verse) || verse < 1) return null;
+  if (chapter <= 8 || chapter >= 148) return { chapter, verse };
+  if (chapter === 9) {
+    return verse <= MT_PSALM_9_LENGTH
+      ? { chapter: 9, verse }
+      : { chapter: 10, verse: verse - MT_PSALM_9_LENGTH };
+  }
+  if (chapter <= 145) return { chapter: chapter + 1, verse };
+  if (chapter === 146) return { chapter: 147, verse };
+  return { chapter: 147, verse: verse + LXX_PSALM_146_LENGTH };
+}
+
+/**
  * Chapter-only form, for the build script's assertion against lxx2012's
  * superscription labels. Verse 1 of an MT psalm always sits in the first of the
  * LXX chapters it maps to, so this is well defined even for the split 147.

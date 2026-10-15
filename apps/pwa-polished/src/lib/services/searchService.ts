@@ -7,7 +7,7 @@ import { IndexedDBTextStore } from '../../adapters/TextStore';
 import { syncedJournalStore } from '../../adapters/SyncedJournalStore';
 import { currentLockView } from '../journalLock/lockState';
 import { navigationStore } from '../../stores/navigationStore';
-import { cleanVersePreviewText } from '../verseRendering';
+import { cleanVersePreviewText, dropHebrewPartMarks } from '../verseRendering';
 import { parseRefString } from '../parseRefString';
 import { getAllReadings, listWorks, shortReadingLabel } from '../devotionals/devotionalsData';
 import { patternMatcher, wordMatcher, type TextMatcher } from '../searchWords';
@@ -353,7 +353,7 @@ export class UnifiedSearchService {
       results.push({
         type: 'strongs',
         title: ref,
-        subtitle: [row.text, gloss].filter(Boolean).join('  ·  '),
+        subtitle: [row.text && dropHebrewPartMarks(String(row.text)), gloss].filter(Boolean).join('  ·  '),
         reference: ref,
         group: row.strongsId,
         data: {

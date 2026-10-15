@@ -37,7 +37,7 @@
   export let entry: StrongsEntryData;
   export let activeTab: EntryTab = "definition";
   /** A verse followed out of the entry — the frame decides what happens to the card. */
-  export let onVerse: (target: { book: string; chapter: number; verse: number }) => void;
+  export let onVerse: (target: { book: string; chapter: number; verse: number; fromTranslation?: string }) => void;
   /** Another entry asked for from this one: a related word, a number named
    *  in the text, or another of a split number's meanings. */
   export let onOpenEntry: (id: string) => void;
@@ -160,7 +160,8 @@
 
   function handleVerseClick(use: VerseUse) {
     visitedRefs = new Set(visitedRefs).add(refKey(use));
-    onVerse({ book: use.book, chapter: use.chapter, verse: use.verse });
+    // The verse is numbered the way its text numbers it; the jump converts.
+    onVerse({ book: use.book, chapter: use.chapter, verse: use.verse, fromTranslation: use.sources[0] });
   }
 
   /** Parsing in words. Hebrew and Aramaic are coded differently from Greek. */

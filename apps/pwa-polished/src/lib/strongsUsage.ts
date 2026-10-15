@@ -20,6 +20,7 @@
 
 import { BIBLE_BOOKS, CATEGORY_LABELS, getBookColor, normalizeBookName } from './bibleData.js';
 import { openDB } from '../adapters/db';
+import { dropHebrewPartMarks } from './verseRendering';
 
 /** One morphology row: a single tagged word in a single text. */
 export interface UsageRow {
@@ -157,7 +158,7 @@ export async function loadStrongsUsage(strongsId: string): Promise<StrongsUsage>
         return;
       }
       const m = cursor.value;
-      const form = String(m.text ?? m.word ?? '').trim();
+      const form = dropHebrewPartMarks(String(m.text ?? m.word ?? '')).trim();
       if (form) {
         const rawBook = String(m.book ?? '');
         found.push({
@@ -287,7 +288,7 @@ export async function loadOriginalTokens(
       .getAll(IDBKeyRange.only([translationId, rawBook, chapter, verse]));
     req.onsuccess = () => {
       const tokens: Token[] = (req.result ?? []).map((m: any) => ({
-        text: String(m.text ?? m.word ?? ''),
+        text: dropHebrewPartMarks(String(m.text ?? m.word ?? '')),
         wordIndex: Number(m.word_index ?? (Number(m.wordPosition ?? 1) - 1)),
       }));
       resolve(tokens.filter((t) => t.text).sort((a, b) => a.wordIndex - b.wordIndex));

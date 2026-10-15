@@ -316,7 +316,7 @@
    * passage, which is the whole point of pinning it. The crumb goes in the
    * trail of the reader that opened the card.
    */
-  function goToVerse(target: { book: string; chapter: number; verse: number }) {
+  function goToVerse(target: { book: string; chapter: number; verse: number; fromTranslation?: string }) {
     const snap = docked ? null : viewSnapshot();
     cardJumpToVerse(
       docked ? MAIN_READER : get(lookupReader),
@@ -324,6 +324,7 @@
       target.chapter,
       target.verse,
       snap ? { surface: "strongs", snapshot: snap } : undefined,
+      target.fromTranslation,
     );
     if (!docked) onClose?.();
   }

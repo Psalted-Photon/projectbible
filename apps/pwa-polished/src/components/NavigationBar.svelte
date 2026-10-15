@@ -113,6 +113,7 @@
   import { wallClockIn } from "../lib/alarm/alarmSchedule";
   import type { InterlinearSettings } from "../adapters/settings";
   import InterlinearControls from "./InterlinearControls.svelte";
+  import { isOriginalLanguage } from "../lib/translationKind";
   import { parallelStore } from "../stores/parallelStore";
   import * as parallelSync from "../lib/parallelSync";
 
@@ -246,12 +247,6 @@
   let ilPopTop = 0;
   let ilPopLeft = 0;
   let ilPopEl: HTMLElement | null = null;
-
-  function isOriginalLanguage(translationId: string): boolean {
-    const id = (translationId || "").toLowerCase();
-    return id === "wlc" || id === "lxx" || id === "byz" || id === "tr" ||
-           id === "sblgnt" || id === "hebrew-oshb";
-  }
 
   function toggleInterlinear() {
     const enabled = !interlinearSettings.enabled;

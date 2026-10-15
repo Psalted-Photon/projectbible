@@ -127,7 +127,7 @@ export const PACK_CATALOG: CatalogPack[] = [
     id: "ancient-languages",
     name: "Ancient Languages",
     description: "Hebrew + Greek with morphology",
-    info: "The Hebrew Old Testament and Greek New Testament in their original words, with every word tagged for grammar — tense, case, person and number.\n\nPowers the interlinear view and Greek read-aloud. Turn it on with the interlinear controls in the reader. Public domain.",
+    info: "The Hebrew Old Testament and Greek New Testament in their original words, with every word tagged for grammar — tense, case, person and number.\n\nPowers the interlinear view and Greek read-aloud. Turn it on with the interlinear controls in the reader. Public domain; verse numbering matched to English Bibles with STEPBible TVTMS (CC BY 4.0).",
     size: "105.31 MB",
     icons: [Translate],
     url: `${PACK_BASE_URL}/ancient-languages.sqlite`,

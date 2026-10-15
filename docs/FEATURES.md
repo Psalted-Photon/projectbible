@@ -125,7 +125,7 @@ Tap a Greek or Hebrew word and the Dictionary shows its grammar: the word as wri
 - **KJV usage** — every way the King James Version rendered this word, which shows its range of meaning at a glance.
 - **Derivation** — the root the word comes from.
 - **Inflection forms** — the other forms this word takes across the text.
-- **Occurrences** — every verse in the Bible using this word, so you can see how it's actually used rather than only how it's defined.
+- **Occurrences** — every verse in the Bible using this word, so you can see how it's actually used rather than only how it's defined. Tap a verse to read it. Where the Hebrew or the Septuagint numbers a verse differently from your Bible (Hebrew Malachi 3:19 is English 4:1, and a psalm's title is a verse of its own in Hebrew), the reader still opens on the right verse.
 - **Related words** — synonyms and words sharing a root.
 - **Hear it** — a speaker beside a Greek word says it aloud. Hebrew has no voice yet.
 

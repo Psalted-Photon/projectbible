@@ -46,6 +46,9 @@ import {
 } from '../../adapters/tts';
 import { getMorphologyForChapter } from '../../adapters/db';
 import { originalSpeechText, canSpeakOriginal } from './originalText';
+import { originalLanguageOf } from '../translationKind';
+
+const isGreekTranslation = (id: string) => originalLanguageOf(id) === 'greek';
 import { continuousPlay, ttsCurrentVerse } from '../../stores/audioStore';
 import { showNotice } from '../../stores/noticeStore';
 // One-way dependency on purpose: the timer knows nothing about the engine, so
@@ -549,11 +552,6 @@ async function loadChapterUtterances(
   }
 
   return out;
-}
-
-function isGreekTranslation(translationId: string): boolean {
-  const id = translationId.toLowerCase();
-  return id === 'byz' || id === 'tr' || id === 'sblgnt' || id === 'lxx';
 }
 
 /**

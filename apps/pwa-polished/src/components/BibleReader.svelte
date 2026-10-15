@@ -116,6 +116,7 @@
   import { applyChapterHighlights } from "../lib/highlightRenderer";
   import { isTextEntry } from "../lib/isTextEntry";
   import { openStrongsWord } from "../lib/openWork";
+  import { isOriginalLanguage, isHebrewText as isHebrewTranslation, isEnglishTranslation } from "../lib/translationKind";
   import {
     resolveWordAt,
     comparePos,
@@ -2256,15 +2257,6 @@
     startScrollDetection();
   }
 
-  // Check if translation is original language (Greek/Hebrew)
-  function isOriginalLanguage(translationId: string): boolean {
-    // Case-insensitive: bundled packs use uppercase (WLC, BYZ, TR, LXX) but
-    // the consolidated ancient-languages pack uses lowercase (hebrew-oshb, byz, tr, lxx).
-    const id = translationId.toLowerCase();
-    return id === 'wlc' || id === 'lxx' || id === 'byz' || id === 'tr' ||
-           id === 'sblgnt' || id === 'hebrew-oshb';
-  }
-
   // Fetch morphology data for a verse
   async function getMorphologyForVerse(
     translationId: string,
@@ -2351,11 +2343,6 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
-  }
-
-  function isHebrewTranslation(translationId: string): boolean {
-    const id = (translationId || "").toLowerCase();
-    return id === "wlc" || id === "hebrew-oshb" || id.includes("hebrew");
   }
 
   // Build the stacked per-word interlinear HTML for one verse from its
@@ -5668,8 +5655,7 @@
             }
 
             // Check if this is an English translation
-            const englishTranslations = ['kjv', 'web', 'bsb', 'net', 'lxx2012'];
-            const isEnglish = englishTranslations.includes(currentTranslation.toLowerCase());
+            const isEnglish = isEnglishTranslation(currentTranslation);
             console.log('🌍 Is English translation:', isEnglish);
             
             if (isEnglish) {

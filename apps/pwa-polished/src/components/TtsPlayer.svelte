@@ -24,6 +24,7 @@
   } from '../adapters/tts.js';
   import { getTtsSettings } from '../adapters/settings.js';
   import { canSpeakOriginal } from '../lib/tts/originalText.js';
+  import { originalLanguageOf } from '../lib/translationKind.js';
   import {
     readingState,
     readingPosition,
@@ -49,7 +50,7 @@
   // Greek chapters are voiced by whichever model the pronunciation setting
   // picks, which may not be the voice the user reads English with.
   $: isGreek =
-    /^(byz|tr|sblgnt|lxx)$/i.test(translation) && canSpeakOriginal(translation);
+    originalLanguageOf(translation) === 'greek' && canSpeakOriginal(translation);
   /**
    * The voice this tap reads with or offers. For English that can be Heart
    * rather than the saved voice on a device with no voices yet — see

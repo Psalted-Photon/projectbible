@@ -1,6 +1,7 @@
 import { writable, derived, get, type Readable, type Writable } from 'svelte/store';
 import { getBookChapters, normalizeBookName, DEFAULT_TRANSLATION } from '../lib/bibleData';
 import { translationForJump } from '../lib/testamentDefaults';
+import { convertRef } from '../lib/versification';
 import { getDeviceOwner } from '../lib/sync/deviceOwner';
 import { windowStore, type WindowState } from '../lib/stores/windowStore';
 import { readResume } from '../lib/resume';
@@ -859,6 +860,11 @@ export function switchTranslation(translation: string, readerId: string = MAIN_R
  * that reader's trail first. `origin` is the card's snapshot, so walking the
  * crumb back reopens it. A reader that has gone away hands the jump to the
  * main reader. Returns the crumb's depth in the trail it went on.
+ *
+ * `fromTranslation` is the text the reference was read off. When its verse
+ * numbers differ from the text the reader lands in (Hebrew Malachi 3:19 is
+ * English 4:1), the reference is converted first. Left out, the reference is
+ * taken as it is.
  */
 export function cardJumpToVerse(
   readerId: string,
@@ -866,11 +872,24 @@ export function cardJumpToVerse(
   chapter: number,
   verse: number,
   origin?: unknown,
+  fromTranslation?: string,
 ): number {
   let r = readerFor(readerId);
   if (!r.driver) r = mainReader;
   const state = r.driver!.state();
   const depth = r.api.pushHistory(state, 'library', origin);
+  if (fromTranslation) {
+    // The main reader may land in your default for the other testament.
+    const landIn =
+      r === mainReader
+        ? translationForJump(state.translation, state.book, normalizeBookName(book), get(availableTranslations))
+        : state.translation;
+    const target = convertRef(fromTranslation, landIn, { book, chapter, verse })[0];
+    if (target) {
+      chapter = target.chapter;
+      verse = target.verse;
+    }
+  }
   r.driver!.goToVerse(state.translation, book, chapter, verse);
   return depth;
 }

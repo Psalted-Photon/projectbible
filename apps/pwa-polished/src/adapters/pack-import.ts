@@ -2,6 +2,7 @@ import type { DBPack, DBVerse } from './db.js';
 import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
 import { logInstall, logInstallFlush, logInstallError } from '../lib/install-log';
 import { normalizeBookName } from '../lib/bibleData';
+import { originalLanguageOf } from '../lib/translationKind';
 
 /**
  * The BSB audio packs, retired now that Read Aloud reads every chapter. They
@@ -1214,13 +1215,7 @@ export async function importPackFromBytes(
             const effectiveId = rowTransId || packInfo.translationId || 'unknown';
 
             // Determine language from the effective translation ID (case-insensitive)
-            const idLower = effectiveId.toLowerCase();
-            const language: 'greek' | 'hebrew' | 'aramaic' =
-              idLower.includes('lxx') || idLower === 'byz' || idLower === 'tr' || idLower === 'sblgnt'
-                ? 'greek'
-                : idLower === 'wlc' || idLower.includes('hebrew')
-                ? 'hebrew'
-                : 'greek';
+            const language: 'greek' | 'hebrew' | 'aramaic' = originalLanguageOf(effectiveId) ?? 'greek';
             
             return {
               id: `${effectiveId}:${book}:${chapter}:${verse}:${wordOrder}`,
