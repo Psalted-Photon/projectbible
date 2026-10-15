@@ -16,6 +16,8 @@
   import { fixedOrigin } from "../lib/fixedOrigin";
   import AuthorPill from "./AuthorPill.svelte";
   import CloseX from "./CloseX.svelte";
+  import ReadAloudTextButton from "./ReadAloudTextButton.svelte";
+  import { commentaryParagraphs } from "../lib/tts/speechText";
   import { showOriginalWordAt } from "./OriginalWordPopup.svelte";
 
   export let open = false;
@@ -226,6 +228,16 @@
     return phrase.length > 80 ? phrase.slice(0, 80) + '…' : phrase;
   }
 
+  // ——— Read Aloud ———
+  // Every commentator shown for this verse, in the order shown, then it stops.
+  // Closing the sheet leaves it playing; the floating player has the controls.
+  $: readTitle = `Commentary · ${displayBook} ${displayChapter}:${displayVerse}`;
+
+  function readParagraphs(): string[] {
+    const entries = commentaryByAuthor.flatMap((g) => g.entries);
+    return [`${displayBook} ${displayChapter}:${displayVerse}.`, ...commentaryParagraphs(entries, { verses: false })];
+  }
+
   function verseLabel(): string {
     if (!displayBook) return '';
     return displayVerse
@@ -266,6 +278,11 @@
       </button>
     </div>
     <div class="panel-title">{verseLabel()}</div>
+    {#if activeTab === "commentary" && displayCommentaryEntries.length > 0}
+      <span class="panel-read">
+        <ReadAloudTextButton title={readTitle} paragraphs={readParagraphs} size={17} label="Read this commentary aloud" />
+      </span>
+    {/if}
     <CloseX edge on:click={close} />
   </div>
 
@@ -452,6 +469,20 @@
     font-size: 12px;
     color: #777;
     white-space: nowrap;
+  }
+
+  .panel-read :global(.rat-btn) {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    color: #888;
+  }
+  .panel-read :global(.rat-btn:hover) {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ccc;
+  }
+  .panel-read :global(.rat-btn.live) {
+    color: #9d7af5;
   }
 
   /* ——— Body ——— */
