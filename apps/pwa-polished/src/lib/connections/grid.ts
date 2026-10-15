@@ -539,7 +539,9 @@ export function paintGrid(
   const image = document.createElement('canvas');
   image.width = S;
   image.height = S;
-  const ctx = image.getContext('2d')!;
+  // Kept in ordinary memory, not the graphics chip's: a phone short of the
+  // chip's memory wipes a canvas this size blank, and the grid shows nothing.
+  const ctx = image.getContext('2d', { willReadFrequently: true })!;
   ctx.fillStyle = palette.bg;
   ctx.fillRect(0, 0, S, S);
   const all = layout.lanes.map((_, i) => i);
