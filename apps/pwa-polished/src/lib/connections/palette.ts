@@ -60,6 +60,34 @@ export function palette(): ConnectionsPalette {
   };
 }
 
+/**
+ * What the arcs are drawn on. The picture keeps its own ground whatever the
+ * theme, black or cream, while the window's chrome still follows the theme.
+ */
+export type CanvasGround = 'black' | 'cream';
+
+const GROUNDS: Record<CanvasGround, { text: string; bg: string }> = {
+  black: { text: '#e0e0e0', bg: '#000000' },
+  cream: { text: '#1a1a1a', bg: '#fffaed' },
+};
+
+/** The reader's choice of ground, black unless they picked cream. */
+export function canvasGround(): CanvasGround {
+  return getSettings().connectionsBackground === 'cream' ? 'cream' : 'black';
+}
+
+/** The picture's colors on a ground, in the same shape as the theme's. */
+export function canvasPalette(ground: CanvasGround): ConnectionsPalette {
+  const { text, bg } = GROUNDS[ground];
+  return {
+    bg,
+    text,
+    muted: mix(text, bg, 0.45),
+    rule: mix(text, bg, 0.7),
+    pale: luminance(bg) > 0.45,
+  };
+}
+
 /* --------------------------------------------------------------------------- *
  * Book colors
  * ------------------------------------------------------------------------- */

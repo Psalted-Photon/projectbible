@@ -41,8 +41,14 @@
     type ConnectionRef,
   } from '../lib/connections/data';
   import { CONFIG, frameFor, type ConnectionsConfig } from '../lib/connections/layout';
-  import { axisDepth, chapterAtScreen, draw, pick, rulerAt, rulerHit, type PlacedName } from '../lib/connections/render';
-  import { palette, type ConnectionsPalette } from '../lib/connections/palette';
+  import { arcPeak, axisDepth, chapterAtScreen, draw, pick, rulerAt, rulerHit, type PlacedName } from '../lib/connections/render';
+  import {
+    canvasGround,
+    canvasPalette,
+    palette,
+    type CanvasGround,
+    type ConnectionsPalette,
+  } from '../lib/connections/palette';
   import { LIGHTS, countReach, flightFrame, litSetFor, type LitSet, type Span } from '../lib/connections/lights';
   import {
     MAX_ITEMS,
@@ -74,7 +80,7 @@
     type SetItem,
     type SetLayer,
   } from '../lib/connections/sets';
-  import { getHighlightNames } from '../adapters/settings';
+  import { getHighlightNames, updateSettings } from '../adapters/settings';
   import { CREDIT, renderConnectionsImage, renderFramedImage } from '../lib/connections/image';
   import {
     GRID,
@@ -144,11 +150,26 @@
     `--rule:${colors.rule}`,
   ].join(';');
 
+  /**
+   * The arcs are drawn on black or cream, the reader's pick, whatever the
+   * theme; the bar, the card and the panel keep the theme's colors.
+   */
+  let ground: CanvasGround = canvasGround();
+  $: arcColors = canvasPalette(ground);
+  $: stageBg = tab === 'arcs' ? arcColors.bg : colors.bg;
+
+  function toggleGround() {
+    ground = ground === 'black' ? 'cream' : 'black';
+    updateSettings({ connectionsBackground: ground });
+    schedule();
+  }
+
   /** The theme changes by a class on <body>, and a custom theme by its style. */
   let themeObserver: MutationObserver | null = null;
   function watchTheme() {
     themeObserver = new MutationObserver(() => {
       colors = palette();
+      ground = canvasGround();
       // The grid's image has the theme's colors baked in.
       staleGrid('paint');
       schedule();
@@ -223,14 +244,17 @@
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     const stats = draw(ctx, data, config, { width: W, height: H }, {
-      palette: colors,
+      palette: arcColors,
       lit: lit?.spans,
       flight,
       labels: true,
       view,
       sets: layer,
+      selected,
+      hovered,
     });
     names = stats.names;
+    if (selected !== null) placePopup(selected);
     if (!flight.settled) schedule();
   }
 
@@ -242,11 +266,15 @@
   /** One wheel notch, as tuned in the lab. */
   const WHEEL_STEP = 1.12 ** 2;
   /**
-   * How far above the rule a tap still counts as aimed at the ruler. Every arc
-   * has a foot on the rule, so near it a tap hits an arc every time; the
-   * ruler wins there, and only a tap out in the field means an arc.
+   * How far above the rule a wheel or pinch still zooms about the rule rather
+   * than the pointer.
    */
   const AXIS_GRAB_PX = 44;
+  /**
+   * How far above the rule a tap still counts as the ruler. Only a sliver: the
+   * arcs are what a tap there is after, and the bars hang below the rule.
+   */
+  const RULER_TAP_PX = 4;
 
   const pointers = new Map<number, { x: number; y: number }>();
   let dragging = false;
@@ -343,7 +371,10 @@
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (!pointers.has(e.pointerId)) return;
+    if (!pointers.has(e.pointerId)) {
+      onHover(e);
+      return;
+    }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointers.size === 2 && pinchStart) {
@@ -431,7 +462,7 @@
 
   /** What the card at the foot shows. */
   type Card = (
-    | { kind: 'link'; from: ConnectionRef; to: ConnectionRef; toLabel: string; votes: number }
+    | { kind: 'link'; index: number; from: ConnectionRef; to: ConnectionRef; toLabel: string; votes: number }
     | { kind: 'span'; title: string; meta: string; open: ConnectionRef; label: string }
   ) & {
     /** What Add to set adds: the passage, or an arc's two ends. */
@@ -542,7 +573,7 @@
       tapDetail(at);
       return;
     }
-    const hit = rulerHit(data, config, { width: W, height: H }, view, true, names, at, AXIS_GRAB_PX);
+    const hit = rulerHit(data, config, { width: W, height: H }, view, true, names, at, RULER_TAP_PX);
 
     if (hit?.kind === 'book') {
       lightBook(data.books[hit.book].name);
@@ -571,9 +602,9 @@
     // Out among the arcs: only the ones on show can be picked.
     const arc = pick(data, config, { width: W, height: H }, toPicture(at), 7 / view.k, lit?.spans, layer);
     if (arc !== null) showLink(arc);
+    else if (card?.kind === 'link') card = null;
   }
 
-  /** A tapped arc: both verses on the card, and both chapters lit. */
   /** A link's card: both of its verses, and its votes. */
   function linkCard(hit: number): Card | null {
     if (!data) return null;
@@ -587,6 +618,7 @@
       : `${a.book} ${a.chapter}:${a.verse}`;
     return {
       kind: 'link',
+      index: hit,
       from,
       to: a,
       toLabel,
@@ -598,22 +630,79 @@
     };
   }
 
+  /**
+   * A tapped arc: picked, glowing over the rest, with its two verses in a
+   * small card beside it. Nothing else is hidden, so the arc is seen among
+   * its neighbors.
+   */
   function showLink(hit: number) {
     if (!data) return;
     const next = linkCard(hit);
     if (!next || next.kind !== 'link') return;
     card = next;
-    const { from, to: a } = next;
+  }
 
-    // Both ends by their chapters, not the two bare verses: two verses out of
-    // 31,102 light almost nothing, which reads as the selection being lost.
-    const spans: Span[] = [];
-    const fromSpan = chapterSpan(from.book, from.chapter);
-    if (fromSpan) spans.push(fromSpan);
-    const toSpan = chapterSpan(a.book, a.chapter);
-    if (toSpan) spans.push(toSpan);
-    pickedBook = '';
-    light(spans);
+  // ===== The picked arc and its card =====
+
+  /** The picked arc on the Arcs tab, drawn glowing. Follows the card. */
+  $: selected = tab === 'arcs' && card?.kind === 'link' ? card.index : null;
+  /** The arc under the mouse, glowing faintly. Never set by touch. */
+  let hovered: number | null = null;
+  $: selected, hovered, schedule();
+
+  let popupEl: HTMLDivElement | undefined;
+  /** Where the card sits in the stage, pinned to the top of its arc. */
+  let popupStyle = '';
+
+  /**
+   * Pin the card beside the top of the arc, on whichever side has more room,
+   * kept inside the stage. Called each frame, so it rides along with a pan.
+   */
+  function placePopup(link: number) {
+    if (!data) return;
+    const peak = arcPeak(data, config, { width: W, height: H }, view, link);
+    const PAD = 8;
+    const GAP = 14;
+    const w = popupEl?.offsetWidth ?? 320;
+    const h = popupEl?.offsetHeight ?? 160;
+    const x = clamp(peak.x - w / 2, PAD, Math.max(PAD, W - w - PAD));
+    const below = peak.y < H / 2;
+    const y = below
+      ? clamp(peak.y + GAP, PAD, Math.max(PAD, H - h - PAD))
+      : clamp(peak.y - GAP - h, PAD, Math.max(PAD, H - h - PAD));
+    const next = `left:${Math.round(x)}px;top:${Math.round(y)}px`;
+    if (next !== popupStyle) popupStyle = next;
+  }
+
+  /** Once the card has its real size, place it again with that size. */
+  $: if (popupEl && selected !== null) void tick().then(() => selected !== null && placePopup(selected));
+
+  // Hover: on a mouse, the pointer shows what a click would get. Checked at
+  // most once a frame, and never mid-drag.
+  let hoverAt: { x: number; y: number } | null = null;
+  let hoverFrame = 0;
+  let overTarget = false;
+
+  function onHover(e: PointerEvent) {
+    if (e.pointerType !== 'mouse' || pointers.size > 0 || tab !== 'arcs' || rangeMode) return;
+    hoverAt = onScreen(e);
+    if (!hoverFrame) hoverFrame = requestAnimationFrame(checkHover);
+  }
+
+  function checkHover() {
+    hoverFrame = 0;
+    if (!data || !hoverAt || pointers.size > 0) return;
+    const at = hoverAt;
+    const ruler = rulerHit(data, config, { width: W, height: H }, view, true, names, at, RULER_TAP_PX);
+    const arc = ruler ? null : pick(data, config, { width: W, height: H }, toPicture(at), 7 / view.k, lit?.spans, layer);
+    if (arc !== hovered) hovered = arc;
+    overTarget = ruler !== null || arc !== null;
+  }
+
+  function endHover() {
+    hoverAt = null;
+    if (hovered !== null) hovered = null;
+    overTarget = false;
   }
 
   function toggleRange() {
@@ -1373,7 +1462,7 @@
           config,
           viewport,
           view: { ...view },
-          palette: colors,
+          palette: arcColors,
           lit: lit?.spans,
           sets: layer,
           title,
@@ -1463,6 +1552,10 @@
       closeImage();
       return;
     }
+    if (e.key === 'Escape' && selected !== null && !get(lookupStore)) {
+      card = null;
+      return;
+    }
     if (!fullscreen || e.key !== 'Escape' || get(lookupStore)) return;
     void setFullscreen(false);
   }
@@ -1545,6 +1638,7 @@
 
   onDestroy(() => {
     if (frameId) cancelAnimationFrame(frameId);
+    if (hoverFrame) cancelAnimationFrame(hoverFrame);
     if (saveTimer) clearTimeout(saveTimer);
     if (imageUrl) URL.revokeObjectURL(imageUrl);
     themeObserver?.disconnect();
@@ -1628,6 +1722,16 @@
           <span class="btn-label">Select range</span>
         </button>
       {/if}
+      {#if tab === 'arcs'}
+        <button
+          class="btn"
+          title={ground === 'black' ? 'Draw the arcs on cream' : 'Draw the arcs on black'}
+          on:click={toggleGround}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 010 17z" fill="currentColor"/></svg>
+          <span class="btn-label">{ground === 'black' ? 'Black' : 'Cream'}</span>
+        </button>
+      {/if}
       {#if anyLit}
         <button class="btn" title={tab === 'arcs' ? 'Show every arc again' : 'Show every line again'} on:click={clearTab}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M5 18a7 7 0 0114 0"/><path d="M8.5 18a3.5 3.5 0 017 0"/></svg>
@@ -1694,13 +1798,15 @@
       {/each}
     </div>
 
-    <div class="stage" class:range={rangeMode} bind:this={stageEl}>
+    <div class="stage" class:range={rangeMode} style="--stage-bg:{stageBg}" bind:this={stageEl}>
       <canvas
         bind:this={canvas}
+        class:target={overTarget && tab === 'arcs'}
         on:pointerdown={onPointerDown}
         on:pointermove={onPointerMove}
         on:pointerup={onPointerUp}
         on:pointercancel={onPointerUp}
+        on:pointerleave={endHover}
         on:wheel|nonpassive={onWheel}
       ></canvas>
       {#if loading}
@@ -1971,9 +2077,37 @@
           </form>
         </div>
       {/if}
+
+      {#if selected !== null && card?.kind === 'link' && !panelOpen}
+        {@const link = card}
+        <div class="card popup" role="dialog" aria-label="Linked verses" bind:this={popupEl} style={popupStyle}>
+          <div class="card-head">
+            <div class="card-title">Linked verses</div>
+            <div class="card-meta">{link.votes.toLocaleString()} {link.votes === 1 ? 'vote' : 'votes'}</div>
+            <select
+              class="pick add-pick"
+              aria-label="Add to a set"
+              value=""
+              on:change={(e) => {
+                addCardTo(e.currentTarget.value);
+                e.currentTarget.value = '';
+              }}
+            >
+              <option value="">Add both to set…</option>
+              {#each ownSets as set (set.id)}
+                <option value={set.id} disabled={set.items.length >= MAX_ITEMS}>{set.name}</option>
+              {/each}
+              {#if library.length < MAX_SETS}<option value="new">New set</option>{/if}
+            </select>
+            <CloseX label="Close" on:click={() => (card = null)} />
+          </div>
+          <VerseRefRow book={link.from.book} chapter={link.from.chapter} verse={link.from.verse} onOpen={() => read(link.from)} />
+          <VerseRefRow book={link.to.book} chapter={link.to.chapter} verse={link.to.verse} label={link.toLabel} onOpen={() => read(link.to)} />
+        </div>
+      {/if}
     </div>
 
-    {#if card}
+    {#if card && selected === null}
       <div class="card">
         <div class="card-head">
           {#if card.kind === 'link'}
@@ -2190,7 +2324,7 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
-    background: var(--bg);
+    background: var(--stage-bg, var(--bg));
   }
   canvas {
     display: block;
@@ -2202,6 +2336,7 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
+  canvas.target { cursor: pointer; }
   canvas:active { cursor: grabbing; }
   .stage.range canvas { cursor: col-resize; }
 
@@ -2346,6 +2481,21 @@
     background: color-mix(in srgb, var(--text) 4%, var(--bg));
     border-top: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
   }
+  /* An arc's card: small, floating beside the arc it belongs to. */
+  .card.popup {
+    position: absolute;
+    z-index: 5;
+    width: min(340px, calc(100% - 16px));
+    max-height: min(60%, 260px);
+    box-sizing: border-box;
+    padding: 6px 10px 8px;
+    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
+  }
+  .card.popup .add-pick { max-width: 120px; }
   .card-head {
     display: flex;
     align-items: center;

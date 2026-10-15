@@ -47,7 +47,7 @@ import {
   type Frame,
   type Viewport,
 } from './layout';
-import { BOOK_RGB, bookIndexAt, type ConnectionsPalette } from './palette';
+import { BOOK_RGB, bookIndexAt, rgbOf, type ConnectionsPalette } from './palette';
 import { inSpans, type FlightFrame, type Span } from './lights';
 import type { SetLayer } from './sets';
 
@@ -81,6 +81,13 @@ export interface DrawOptions {
    * its set's color instead of the book colors. Null or absent draws as usual.
    */
   sets?: SetLayer | null;
+  /**
+   * The picked link, drawn again over everything with a halo so it stands out.
+   * Nothing else is hidden or dimmed for it. A saved image never passes one.
+   */
+  selected?: number | null;
+  /** The link under the mouse, drawn with a fainter halo than a picked one. */
+  hovered?: number | null;
 }
 
 /** A book name as it was placed on screen, so a tap on it can find its book. */
@@ -549,12 +556,103 @@ export function draw(
     }
   }
 
+  // The hovered and picked arcs, last so they sit on top of every other arc.
+  if (options.hovered != null && options.hovered !== options.selected) {
+    glowArc(ctx, data, axis, frame, config, palette, sets, options.hovered, k, false);
+  }
+  if (options.selected != null) {
+    glowArc(ctx, data, axis, frame, config, palette, sets, options.selected, k, true);
+  }
+
   ctx.restore();
 
   // The ruler is drawn at screen size, after the zoom is undone: see drawRuler.
   const names = drawRuler(ctx, data, axis, frame, config, palette, view, options.view, options.labels !== false);
 
   return { drawn, skipped, flying, batches: sorted.length, ms: performance.now() - t0, names };
+}
+
+/**
+ * One arc drawn over the rest: a soft halo in the picture's ink, then the arc
+ * itself, thicker, in the colors it already wears — crossed book colors, or
+ * its set's one color. `strong` is a picked arc; otherwise a hovered one.
+ */
+function glowArc(
+  ctx: CanvasRenderingContext2D,
+  data: ConnectionsData,
+  axis: Axis,
+  frame: Frame,
+  config: ConnectionsConfig,
+  palette: ConnectionsPalette,
+  sets: SetLayer | null,
+  link: number,
+  k: number,
+  strong: boolean,
+): void {
+  if (link < 0 || link >= data.count) return;
+  const from = data.from[link];
+  const to = data.toStart[link];
+  const shape = arcShape(axis, frame, config, from, to);
+  const a = pointAt(frame, shape.fromAlong, 0);
+  const b = pointAt(frame, shape.toAlong, 0);
+  const c = pointAt(frame, (shape.fromAlong + shape.toAlong) / 2, shape.height * 2 * shape.direction);
+  const trace = () => {
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
+  };
+
+  ctx.lineCap = 'round';
+  const [ir, ig, ib] = rgbOf(palette.text);
+  trace();
+  ctx.strokeStyle = `rgba(${ir}, ${ig}, ${ib}, ${strong ? 0.45 : 0.3})`;
+  ctx.lineWidth = (strong ? 9 : 6) / k;
+  ctx.stroke();
+
+  let core: CanvasGradient | string;
+  const mask = sets?.mask;
+  if (sets && mask) {
+    const fa = mask[from] ?? -1;
+    const fb = mask[to] ?? -1;
+    const set = fa < 0 ? fb : fb < 0 ? fa : Math.min(fa, fb);
+    const [r, g, bl] = sets.colors[set] ?? [255, 255, 255];
+    core = `rgb(${r}, ${g}, ${bl})`;
+  } else {
+    // Crossed, like every arc: the target's color at the source end.
+    const starts = bookStarts(data);
+    const [r1, g1, b1] = BOOK_RGB[bookIndexAt(starts, to)] ?? [138, 143, 152];
+    const [r2, g2, b2] = BOOK_RGB[bookIndexAt(starts, from)] ?? [138, 143, 152];
+    const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+    grad.addColorStop(0, `rgb(${r1}, ${g1}, ${b1})`);
+    grad.addColorStop(1, `rgb(${r2}, ${g2}, ${b2})`);
+    core = grad;
+  }
+  trace();
+  ctx.strokeStyle = core;
+  ctx.lineWidth = (strong ? 3 : 2) / k;
+  ctx.stroke();
+}
+
+/**
+ * The top of a link's arc, in screen pixels under the given pan and zoom —
+ * where a card about that arc is pinned.
+ */
+export function arcPeak(
+  data: ConnectionsData,
+  config: ConnectionsConfig,
+  view: Viewport,
+  pan: Pan | undefined,
+  link: number,
+): { x: number; y: number } {
+  const axis = axisFor(data, config.width);
+  const frame = frameFor(view, config);
+  const shape = arcShape(axis, frame, config, data.from[link], data.toStart[link]);
+  const p = pointAt(frame, (shape.fromAlong + shape.toAlong) / 2, shape.height * shape.direction);
+  const k = pan?.k ?? 1;
+  return {
+    x: (p.x - view.width / 2 + (pan?.x ?? 0)) * k + view.width / 2,
+    y: (p.y - view.height / 2 + (pan?.y ?? 0)) * k + view.height / 2,
+  };
 }
 
 /**
@@ -638,6 +736,22 @@ const BAR_CURVE = 0.5;
 const BAR_MIN = 2;
 /** How strongly a chapter bar wears its book's color. */
 const BAR_ALPHA = 0.7;
+
+/** The most verses in any chapter (Psalm 119), kept per axis. */
+const longestCache = new WeakMap<Axis, number>();
+
+/** How long a chapter's bar is drawn, in screen pixels off the rule. */
+function barLengthOf(axis: Axis, chapter: number): number {
+  let longest = longestCache.get(axis);
+  if (longest === undefined) {
+    longest = 1;
+    for (let i = 0; i < axis.chapterVerses.length; i++) {
+      if (axis.chapterVerses[i] > longest) longest = axis.chapterVerses[i];
+    }
+    longestCache.set(axis, longest);
+  }
+  return BAR_MIN + (BAR_MAX - BAR_MIN) * Math.pow(axis.chapterVerses[chapter] / longest, BAR_CURVE);
+}
 /** The gap between the bars and the book names. */
 const NAME_GAP = 8;
 /**
@@ -801,12 +915,7 @@ function drawRuler(
   const firstVisible = chapterAtFraction(offsets, Math.max(startF, 0));
   const lastVisible = Math.min(chapters - 1, chapterAtFraction(offsets, Math.min(endF, 1)));
 
-  let longest = 1;
-  for (let i = 0; i < axis.chapterVerses.length; i++) {
-    if (axis.chapterVerses[i] > longest) longest = axis.chapterVerses[i];
-  }
-  const barLength = (c: number) =>
-    BAR_MIN + (BAR_MAX - BAR_MIN) * Math.pow(axis.chapterVerses[c] / longest, BAR_CURVE);
+  const barLength = (c: number) => barLengthOf(axis, c);
   const fill = Math.min(Math.max(config.barFill, 0.05), 1);
 
   const bookOf = (c: number) => {
@@ -1035,11 +1144,12 @@ function drawRuler(
 /**
  * What a tap on the ruler landed on: a book name, a chapter, or nothing.
  *
- * `at` is in screen pixels. A tap a little above the rule still counts as the
- * ruler (`grab` pixels of it): every arc has a foot on the rule, so right
- * above it they are packed shoulder to shoulder — measured over the real set,
- * a tap within 40px of the rule hits some arc every time — and a tap there is
- * aimed at the chapter, never at one hairline among thousands.
+ * `at` is in screen pixels, and `grab` is how far above the rule a tap still
+ * counts as the ruler. Below the rule the ruler only claims what it draws: a
+ * chapter's own bar, as long as that bar is, and a book's name. When arcs
+ * also hang below the rule ('split' or 'bottom'), a tap in the room around
+ * the bars and between the names is theirs — the ruler once claimed its whole
+ * depth there, and that swallowed two of every three taps on a visible arc.
  */
 export function rulerHit(
   data: ConnectionsData,
@@ -1057,14 +1167,19 @@ export function rulerHit(
   const across = (horizontal ? at.y : at.x) - rule;
   const along = horizontal ? at.x : at.y;
   if (across < -grab || across > depth) return null;
+  const arcsBelow = config.side !== 'top';
 
   if (labels && across >= BAR_MAX + NAME_GAP / 2) {
     const name = names.find((n) => along >= n.from - 4 && along <= n.to + 4);
     if (name) return { kind: 'book', book: name.book };
+    if (arcsBelow) return null;
   }
 
   const chapter = chapterAtScreen(data, config, view, pan, at);
-  return chapter === null ? null : { kind: 'chapter', chapter };
+  if (chapter === null) return null;
+  // Past the tip of a short bar is open field when arcs are drawn there.
+  if (arcsBelow && across > barLengthOf(axisFor(data, config.width), chapter) + 3) return null;
+  return { kind: 'chapter', chapter };
 }
 
 /**

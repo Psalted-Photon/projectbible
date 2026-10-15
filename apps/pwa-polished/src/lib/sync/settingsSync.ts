@@ -44,6 +44,8 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   // never verse text, so they are small.
   'connectionSets',
   'connectionViews',
+  // Black or cream behind the arcs: a taste, so it follows the account.
+  'connectionsBackground',
   'timezone',
   'dailyDriverEnglishOT', 'dailyDriverEnglishNT',
   'dailyDriverHebrewOT', 'dailyDriverHebrewNT',

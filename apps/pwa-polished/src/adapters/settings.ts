@@ -198,6 +198,7 @@ export interface UserSettings {
   // checked by lib/connections/sets.ts on read, like cardLooks.
   connectionSets?: Array<Record<string, unknown>>;
   connectionViews?: Array<Record<string, unknown>>;
+  connectionsBackground?: 'black' | 'cream'; // The Connections picture's own background, whatever the theme (synced, default black)
   highlightMeanings?: boolean; // Highlight popup shows what each color and line means (per-device, default false)
   // Whether each surface's formatting toolbar is slid up out of the way.
   // Per-device on purpose (not in SYNCED_KEYS) — an ergonomic choice like font
