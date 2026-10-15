@@ -60,16 +60,20 @@
    * In light and sepia the reader is drawn inverted by the theme's filter, so
    * the canvas cancels it, as .emoji does, and paints in the theme's real
    * colors from palette(). The book colors then come out right in every theme.
+   *
+   * Tapping it opens the Connections window on the Arcs tab with this chapter
+   * lit: the same picture, full size and interactive.
    */
   import { onMount, onDestroy } from 'svelte';
   import { chapterSpan, holdConnections, loadConnections } from '../lib/connections/data';
   import { drawStrip } from '../lib/connections/strip';
   import { palette } from '../lib/connections/palette';
+  import { openConnectionsWindow } from '../lib/openConnectionsWindow';
 
   export let book: string;
   export let chapter: number;
 
-  let host: HTMLDivElement;
+  let host: HTMLButtonElement;
   let canvas: HTMLCanvasElement;
   let data: ConnectionsData | null = null;
   /** Off screen, nothing is worked out; the reader may have many chapters up. */
@@ -118,7 +122,7 @@
   let sizeObserver: ResizeObserver | null = null;
   let viewObserver: IntersectionObserver | null = null;
   /** The box is rebuilt when the setting goes off and on, so it is watched afresh. */
-  let observed: HTMLDivElement | null = null;
+  let observed: HTMLButtonElement | null = null;
   $: if (host !== observed) {
     sizeObserver?.disconnect();
     viewObserver?.disconnect();
@@ -147,14 +151,29 @@
 </script>
 
 {#if show && span}
-  <div class="connections-strip" bind:this={host} style="height:{STRIP.height}px">
+  <button
+    type="button"
+    class="connections-strip"
+    bind:this={host}
+    style="height:{STRIP.height}px"
+    title="See {book} {chapter}'s cross references in Connections"
+    aria-label="See {book} {chapter}'s cross references in Connections"
+    on:click|stopPropagation={() => openConnectionsWindow(book, chapter)}
+  >
     <canvas bind:this={canvas} aria-hidden="true"></canvas>
-  </div>
+  </button>
 {/if}
 
 <style>
   .connections-strip {
+    display: block;
     width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 
   canvas {

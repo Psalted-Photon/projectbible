@@ -556,6 +556,26 @@
     };
   }
 
+  /**
+   * Light one chapter, with its card. A tapped chapter on the ruler and a
+   * chapter sent from the reader strip both come here, so they behave the same.
+   */
+  function lightChapter(book: string, chapter: number) {
+    const span = chapterSpan(book, chapter);
+    if (!span || !data) return;
+    pickedBook = '';
+    light([span]);
+    const reach = countReach(data, span);
+    card = {
+      kind: 'span',
+      title: `${book} ${chapter}`,
+      meta: reachMeta(reach),
+      open: { book, chapter, verse: 1 },
+      label: `${book} ${chapter}`,
+      items: itemsOf([span]),
+    };
+  }
+
   /** The first verse of the chapter under a screen point, or null off the line. */
   function positionAt(at: { x: number; y: number }): number | null {
     if (!data) return null;
@@ -632,20 +652,7 @@
 
     if (hit?.kind === 'chapter') {
       const ref = refAt(data.chapterStarts[hit.chapter]);
-      const span = ref ? chapterSpan(ref.book, ref.chapter) : null;
-      if (span && ref) {
-        pickedBook = '';
-        light([span]);
-        const reach = countReach(data, span);
-        card = {
-          kind: 'span',
-          title: `${ref.book} ${ref.chapter}`,
-          meta: reachMeta(reach),
-          open: ref,
-          label: `${ref.book} ${ref.chapter}`,
-          items: itemsOf([span]),
-        };
-      }
+      if (ref) lightChapter(ref.book, ref.chapter);
       return;
     }
 
@@ -1813,6 +1820,29 @@
     }
     if (!fullscreen || e.key !== 'Escape' || get(lookupStore)) return;
     void setFullscreen(false);
+  }
+
+  // ===== A chapter sent from the reader strip =====
+
+  /**
+   * openConnectionsWindow drops a chapter here. It is taken once the data is
+   * in and the saved view restored: the Arcs tab, the whole Bible in view, no
+   * opening volley, and the chapter lit with its card, the same as a tap on
+   * its bar. Then it is cleared, so a reload does not send it again.
+   */
+  $: handoff = windowState?.contentState?.target as { seq?: unknown; book?: unknown; chapter?: unknown } | null | undefined;
+  $: if (handoff && data && !loading) takeHandoff(handoff);
+
+  function takeHandoff(target: { book?: unknown; chapter?: unknown }) {
+    remember({ target: null });
+    if (typeof target.book !== 'string' || typeof target.chapter !== 'number') return;
+    if (tab !== 'arcs') setTab('arcs');
+    opening = null;
+    rangeMode = false;
+    rangeFrom = null;
+    view = { x: 0, y: 0, k: 1 };
+    remember({ view: { ...view } });
+    lightChapter(target.book, target.chapter);
   }
 
   // ===== Loading =====
