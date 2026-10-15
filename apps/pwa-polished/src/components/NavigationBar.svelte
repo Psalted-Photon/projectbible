@@ -2913,6 +2913,7 @@
         rows={[
           { packId: 'translations', label: 'English', contents: 'KJV, WEB, BSB, LXX2012' },
           { packId: 'ancient-languages', label: 'Ancient Languages', contents: 'Hebrew, Greek NT, LXX' },
+          { packId: 'greek-critical', label: 'Greek Critical Text', contents: 'SBLGNT' },
           // Only ever as an update: once TSK is in, its own dropdown never opens.
           { packId: 'tsk-references', label: 'TSK references', contents: 'Cross-references', updateOnly: true },
         ]}

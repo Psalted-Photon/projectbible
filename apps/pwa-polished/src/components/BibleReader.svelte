@@ -2526,11 +2526,13 @@
     //   U+0591–05C7  Hebrew cantillation marks + vowel points
     // and the marks between a Hebrew word's parts: "/" in the morphology
     // entries, the word joiner (U+2060) the reader shows in its place.
+    // Punctuation goes too: a tapped word never carries it, the Greek
+    // morphology entries do ("ἐγένετο,", "δι᾽").
     // Then lowercase and recompose NFC.
     // This lets "αβρααμ" match "Ἀβραὰμ" and "ב" match "בְּ".
     return text
       .normalize("NFD")
-      .replace(/[\u0300-\u036F\u0591-\u05C7\/\u2060]/g, "")
+      .replace(/[\u0300-\u036F\u0591-\u05C7\/\u2060]|[\p{P}\p{S}]/gu, "")
       .toLowerCase()
       .normalize("NFC");
   }

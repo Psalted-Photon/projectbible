@@ -42,3 +42,21 @@ export function isHebrewText(translationId: string | null | undefined): boolean 
 export function isEnglishTranslation(translationId: string | null | undefined): boolean {
   return ENGLISH.has(norm(translationId));
 }
+
+/**
+ * The Greek text an English translation was made from, so a Strong's study
+ * opened beside it compares like with like: KJV from the Textus Receptus, WEB
+ * from the Majority Text, NET and BSB from a critical text. Anything else
+ * gets the Byzantine.
+ */
+export function greekPartnerFor(englishId: string | null | undefined): string {
+  switch (norm(englishId)) {
+    case 'kjv':
+      return 'tr';
+    case 'net':
+    case 'bsb':
+      return 'sblgnt';
+    default:
+      return 'byz';
+  }
+}

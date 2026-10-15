@@ -16,6 +16,7 @@
     type VerseUse,
   } from "../../lib/strongsUsage";
   import { navigationStore } from "../../stores/navigationStore";
+  import { isOriginalLanguage, greekPartnerFor } from "../../lib/translationKind";
   import { parseOsisRef } from "../../lib/parseRefString";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../../lib/morphologyExpander";
   import {
@@ -154,11 +155,13 @@
   $: if (needsUsage && usageEntry) loadUsage(usageEntry);
 
   /** Open on the text you are already reading when that is one of the originals,
-   *  so the study agrees with the passage beside it. */
+   *  so the study agrees with the passage beside it. Reading in English, open on
+   *  the Greek that translation was made from (NET → SBLGNT). */
   function defaultSource(sources: string[]): string | null {
     if (sources.length < 2) return null;
-    const reading = get(navigationStore).translation?.toLowerCase();
-    const match = sources.find((s) => s.toLowerCase() === reading);
+    const reading = (readerTranslation ?? get(navigationStore).translation)?.toLowerCase();
+    const want = isOriginalLanguage(reading) ? reading : greekPartnerFor(reading);
+    const match = sources.find((s) => s.toLowerCase() === want);
     return match ?? null;
   }
 

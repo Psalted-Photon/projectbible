@@ -38,6 +38,13 @@ const PACK_CONFIGS = {
     description: 'Hebrew, Greek NT (Byzantine, TR), LXX with morphology',
     dependencies: []
   },
+  'greek-critical.sqlite': {
+    id: 'greek-critical',
+    type: 'translation',
+    name: 'Greek Critical Text',
+    description: 'SBL Greek New Testament (SBLGNT) with morphology',
+    dependencies: []
+  },
   'lexical.sqlite': {
     id: 'lexical',
     type: 'lexicon',

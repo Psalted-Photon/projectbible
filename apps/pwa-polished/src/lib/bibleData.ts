@@ -267,6 +267,7 @@ export const TRANSLATION_ORDER = [
   'LXX2012',
   'TR',
   'BYZ',
+  'SBLGNT',
   'LXX',
   'HEBREW-OSHB'
 ];
@@ -277,6 +278,7 @@ const TRANSLATION_LABELS: Record<string, string> = {
   'HEBREW-OSHB': 'OSHB-HEBREW',
   'TR': 'TR-GREEK',
   'BYZ': 'BYZ-GREEK',
+  'SBLGNT': 'SBL-GREEK',
   // Not the Septuagint. What ships under this id is the Open Scriptures lemma
   // analysis — every word in its dictionary form, so Gen 1:1 reads
   // "ἐν ἀρχή ποιέω ὁ θεός" rather than "ἐν ἀρχῇ ἐποίησεν ὁ θεὸς". Useful for

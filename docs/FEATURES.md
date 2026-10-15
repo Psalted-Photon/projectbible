@@ -86,6 +86,7 @@ Two complete English editions are included and read like any other book:
 
 - **Translation picker** — switch between every translation you have installed from the toolbar.
 - **Switching keeps your place** — you stay on the same book and chapter. If that book doesn't exist in the translation you picked (switching to a Greek New Testament while in Genesis, say), the app moves you to the nearest book that does.
+- **Greek Critical Text** — a small pack of its own with the SBL Greek New Testament (SBL-GREEK in the picker), the kind of Greek the NET and BSB were translated from, every word tagged like the other Greek texts. It sits beside the Byzantine (BYZ-GREEK) and the Textus Receptus behind the KJV (TR-GREEK).
 - **Daily drivers** — set a preferred translation for each combination of language and testament: English Old Testament, English New Testament, Hebrew Old Testament, Greek Old Testament, Greek New Testament, and Hebrew New Testament. Cross-references, search, and other features then open in the right translation for the passage automatically, rather than always defaulting to one.
 
 ## 4. Interlinear (Greek & Hebrew)
@@ -126,6 +127,7 @@ Tap a Greek or Hebrew word and the Dictionary shows its grammar: the word as wri
 - **Derivation** — the root the word comes from.
 - **Inflection forms** — the other forms this word takes across the text.
 - **Occurrences** — every verse in the Bible using this word, so you can see how it's actually used rather than only how it's defined. Tap a verse to read it. Where the Hebrew or the Septuagint numbers a verse differently from your Bible (Hebrew Malachi 3:19 is English 4:1, and a psalm's title is a verse of its own in Hebrew), the reader still opens on the right verse.
+- **The Greek your English came from** — when a word appears in more than one Greek text, the list opens on the one your translation was made from: SBLGNT for NET and BSB, the Textus Receptus for the KJV, the Byzantine for the rest. Reading a Greek text, it opens on that one.
 - **English under each verse** — on the Forms and Occurrences tabs, each Greek or Hebrew verse has the same verse in English beneath it: the translation you're reading, or your Settings default when you're reading Greek or Hebrew, or NET. Its own verse number shows when it differs (Hebrew Malachi 3:19 shows NET 4:1), and a Hebrew psalm title shows only the English title. The word you looked up is marked in the English too, in the same orange, whenever the verse leaves no doubt which English word it is; when it's unclear, nothing is marked. Where a translation leaves a verse out (Matthew 17:21 in NET), it says so and shows the KJV instead. The **English** button beside the count turns this off or on everywhere at once, and the choice follows your account.
 - **Related words** — synonyms and words sharing a root.
 - **Hear it** — a speaker beside a Greek word says it aloud. Hebrew has no voice yet.

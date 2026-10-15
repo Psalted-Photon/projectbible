@@ -133,6 +133,15 @@ export const PACK_CATALOG: CatalogPack[] = [
     url: `${PACK_BASE_URL}/ancient-languages.sqlite`,
   },
   {
+    id: "greek-critical",
+    name: "Greek Critical Text",
+    description: "SBL Greek New Testament",
+    info: "The SBL Greek New Testament (SBLGNT), a critical text: the kind of Greek the NET and BSB were translated from. Every word is tagged for grammar and Strong’s number, like the other Greek texts.\n\nPick SBL-GREEK in the translation list to read it. In a Strong’s entry, reading NET or BSB opens the verse list on SBLGNT, so the Greek and the English beside it agree. SBL Greek New Testament, © 2010 Society of Biblical Literature and Logos Bible Software, CC BY 4.0 (creativecommons.org/licenses/by/4.0). Word tagging from STEPBible TAGNT (CC BY 4.0).",
+    size: "16.26 MB",
+    icons: [Translate],
+    url: `${PACK_BASE_URL}/greek-critical.sqlite`,
+  },
+  {
     id: "lexical",
     name: "Lexical Resources",
     description: "Strong’s + English dictionaries",
@@ -229,6 +238,7 @@ export const INSTALL_ALL_ORDER: string[] = [
   'tsk-references',
   'study-tools',
   'translations',
+  'greek-critical',
   'atlas-map',
   'dictionary-en',
   'encyclotopical',

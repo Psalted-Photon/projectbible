@@ -1198,8 +1198,22 @@ export async function importPackFromBytes(
           // has. When an edition's word count for a verse drops — which it does
           // whenever the tagging is corrected — the trailing rows from the old
           // import survive and attach themselves to the end of that verse.
+          // Only this pack's editions are cleared: the critical Greek ships in
+          // its own pack, and installing it must not wipe the Hebrew and BYZ.
+          const packEditions = hasRowTranslationId
+            ? (db.exec('SELECT DISTINCT translation_id FROM words')[0]?.values ?? []).map((r) => r[0] as string)
+            : [packInfo.translationId || 'unknown'];
           await batchWriteTransaction('morphology', (store) => {
-            store.clear();
+            const byVerse = store.index('verse_ref');
+            for (const edition of packEditions) {
+              const req = byVerse.openKeyCursor(IDBKeyRange.bound([edition], [edition, []]));
+              req.onsuccess = () => {
+                const cursor = req.result;
+                if (!cursor) return;
+                store.delete(cursor.primaryKey);
+                cursor.continue();
+              };
+            }
           });
 
           // Streamed: ~584k rows held at once is what killed the Ancient
