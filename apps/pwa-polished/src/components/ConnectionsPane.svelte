@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
-   * The Connections window: every cross-reference in Scripture, three ways.
+   * The Connections window: every cross-reference in Scripture, four ways.
    * Arcs: an arc over one line of all 1,189 chapters. Grid: every book against
    * every book, each square the links between two of them. Detail: one square
-   * opened up, two books side by side with a line for each link.
+   * opened up, two books side by side with a line for each link. Chord: the 66
+   * books around a ring, a ribbon between each pair as wide as their links.
    *
    * The drawing, the shapes and the flights are lib/connections — the same
    * modules connections-lab.html tunes, so what was tuned there is what shows
@@ -14,7 +15,8 @@
    * the verse in the reader. Pan with a drag, zoom with a pinch or the wheel;
    * Whole Bible puts the picture back. On the grid a square opens the detail and
    * a name picks out its row or column; on the detail a chapter, a heading or a
-   * book name lights its lines, and a line opens its two verses.
+   * book name lights its lines, and a line opens its two verses. On the ring a
+   * book keeps only its own ribbons, and a ribbon opens that pair on the detail.
    *
    * Never `.themed`: the light and sepia themes are an inverting filter, and a
    * canvas under it would show every book color as its opposite. The chrome
@@ -56,6 +58,7 @@
     MAX_SETS,
     MAX_SHOWN_SETS,
     MAX_VIEWS,
+    cleanChordLook,
     cleanGridLook,
     cleanLook,
     cleanPair,
@@ -71,6 +74,7 @@
     saveViews,
     savedSets,
     savedViews,
+    type ChordLook,
     type ConnectionSet,
     type ConnectionsLook,
     type ConnectionsTab,
@@ -112,6 +116,22 @@
     type DetailView,
     type PlacedHeading,
   } from '../lib/connections/detail';
+  import {
+    CHORD,
+    buildChordLayout,
+    busierWay,
+    chordHit,
+    chordScene,
+    countChords,
+    drawChord,
+    partnersOf,
+    type ChordConfig,
+    type ChordCounts,
+    type ChordLayout,
+    type ChordPick,
+    type ChordScene,
+    type ChordView,
+  } from '../lib/connections/chord';
   import { download } from '../lib/backup/saveFile';
   import { isIOS } from '../lib/device';
   import { askConfirm } from '../stores/confirmStore';
@@ -217,6 +237,8 @@
     canvas.width = Math.round(W * DPR);
     canvas.height = Math.round(H * DPR);
     ctx = canvas.getContext('2d');
+    // The ring's ribbons are paths in pixels, laid out for this size.
+    if (chordLayout) chordSceneNow = chordScene(chordLayout, chordConfig, { width: W, height: H });
     schedule();
   }
 
@@ -235,6 +257,10 @@
     }
     if (tab === 'detail') {
       frameDetail(ctx, data);
+      return;
+    }
+    if (tab === 'chord') {
+      frameChord(ctx);
       return;
     }
     // The same clock a tap stamps its volley with; the frame's own timestamp
@@ -336,6 +362,15 @@
       schedule();
       return;
     }
+    if (tab === 'chord') {
+      // About the point, around the ring's middle.
+      const next = clamp(k, CHORD_K[0], CHORD_K[1]);
+      const u = (sx - W / 2 - chordView.x) / chordView.k;
+      const v = (sy - H / 2 - chordView.y) / chordView.k;
+      chordView = { x: sx - W / 2 - u * next, y: sy - H / 2 - v * next, k: next };
+      schedule();
+      return;
+    }
     const next = clamp(k, MIN_K, MAX_K);
     const horizontal = config.orientation === 'horizontal';
     const { rule } = rulerAt({ width: W, height: H }, config, true, view);
@@ -358,7 +393,7 @@
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   function rememberView() {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => remember({ view: { ...view }, gridView: { ...gridView } }), 400);
+    saveTimer = setTimeout(() => remember({ view: { ...view }, gridView: { ...gridView }, chordView: { ...chordView } }), 400);
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -409,6 +444,7 @@
 
     if (tab === 'grid') gridView = { ...gridView, x: gridView.x + dx, y: gridView.y + dy };
     else if (tab === 'detail') detailView = { ...detailView, y: detailView.y + dy };
+    else if (tab === 'chord') chordView = { ...chordView, x: chordView.x + dx, y: chordView.y + dy };
     else {
       view.x += dx / view.k;
       view.y += dy / view.k;
@@ -449,7 +485,7 @@
 
   /** The open tab's zoom. */
   function currentK(): number {
-    return tab === 'grid' ? gridView.k : tab === 'detail' ? detailView.k : view.k;
+    return tab === 'grid' ? gridView.k : tab === 'detail' ? detailView.k : tab === 'chord' ? chordView.k : view.k;
   }
 
   /** The bar's button: the open tab's picture back to whole. */
@@ -460,6 +496,10 @@
       schedule();
     } else if (tab === 'detail') {
       detailView = { y: 0, k: 1 };
+      schedule();
+    } else if (tab === 'chord') {
+      chordView = { x: 0, y: 0, k: 1 };
+      remember({ chordView: { ...chordView } });
       schedule();
     } else wholeBible();
   }
@@ -577,6 +617,10 @@
     }
     if (tab === 'detail') {
       tapDetail(at);
+      return;
+    }
+    if (tab === 'chord') {
+      tapChord(at);
       return;
     }
     const hit = rulerHit(data, config, { width: W, height: H }, view, true, names, at, RULER_TAP_PX);
@@ -720,6 +764,10 @@
       overTarget = hit !== null;
       return;
     }
+    if (tab === 'chord') {
+      overTarget = !!chordSceneNow && chordHit(chordSceneNow, chordConfig, chordView, at) !== null;
+      return;
+    }
     const ruler = rulerHit(data, config, { width: W, height: H }, view, true, names, at, RULER_TAP_PX);
     const arc = ruler ? null : pick(data, config, { width: W, height: H }, toPicture(at), 7 / view.k, lit?.spans, layer);
     if (arc !== hovered) hovered = arc;
@@ -741,13 +789,14 @@
 
   // ===== Tabs =====
   //
-  // One window, three pictures. Each tab keeps its own pan, what it has lit
+  // One window, four pictures. Each tab keeps its own pan, what it has lit
   // and its card, so moving between them loses nothing.
 
   const TABS: Array<{ id: ConnectionsTab; label: string }> = [
     { id: 'arcs', label: 'Arcs' },
     { id: 'grid', label: 'Grid' },
     { id: 'detail', label: 'Detail' },
+    { id: 'chord', label: 'Chord' },
   ];
   let tab: ConnectionsTab = 'arcs';
   /** The other tabs' cards, put away while they are hidden. */
@@ -764,6 +813,7 @@
     remember({ tab });
     if (next === 'grid') void buildGrid();
     if (next === 'detail' && !detailModel) void openPair(pair);
+    if (next === 'chord') buildChord();
     schedule();
   }
 
@@ -1094,14 +1144,152 @@
     schedule();
   }
 
+  // ===== The chord ring =====
+  //
+  // Drawn live, not from an image like the grid: at most 2,145 ribbons, so it
+  // stays sharp at any zoom and a picked book dims the rest without a rebuild.
+  // Counted the first time the tab shows, and again when its links change.
+
+  const CHORD_K = [0.6, 12] as const;
+  let chordLook: ChordLook = { voteFloor: CHORD.voteFloor, maxLinks: CHORD.maxLinks };
+  /** This window's own copy, as with the arcs' config. */
+  let chordConfig: ChordConfig = { ...CHORD };
+  let chordCounts: ChordCounts | null = null;
+  let chordLayout: ChordLayout | null = null;
+  let chordSceneNow: ChordScene | null = null;
+  let chordView: ChordView = { x: 0, y: 0, k: 1 };
+  let chordPick: ChordPick = null;
+  /** The pick before, which fades out as the new one fades in. */
+  let chordPrevious: ChordPick = null;
+  let chordPickedAt = 0;
+  let chordTried = false;
+  /** The book picker's value, kept in step with a tapped book. */
+  let chordBook = '';
+
+  /** Count and lay out the ring, if it isn't already. */
+  function buildChord() {
+    if (!data || chordLayout) return;
+    chordCounts = countChords(data, chordConfig);
+    chordLayout = buildChordLayout(chordCounts, chordConfig);
+    if (W && H) chordSceneNow = chordScene(chordLayout, chordConfig, { width: W, height: H });
+    schedule();
+  }
+
+  function applyChordLook(next: ChordLook) {
+    const changed = next.voteFloor !== chordLook.voteFloor || next.maxLinks !== chordLook.maxLinks;
+    chordLook = next;
+    chordConfig = { ...chordConfig, voteFloor: next.voteFloor, maxLinks: next.maxLinks };
+    remember({ chord: chordLook });
+    if (!changed) return;
+    // New counts move every book, so an old pick may point at nothing.
+    chordCounts = null;
+    chordLayout = null;
+    chordSceneNow = null;
+    clearChord();
+    if (tab === 'chord') buildChord();
+    else stash.chord = null;
+  }
+
+  function setChordLook(patch: Partial<ChordLook>) {
+    applyChordLook({ ...chordLook, ...patch });
+  }
+
+  function frameChord(c: CanvasRenderingContext2D) {
+    c.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!chordSceneNow || !chordCounts) {
+      c.fillStyle = canvasColors.bg;
+      c.fillRect(0, 0, W, H);
+      return;
+    }
+    const stats = drawChord(c, chordSceneNow, chordConfig, {
+      palette: canvasColors,
+      view: chordView,
+      pick: chordPick,
+      previous: chordPrevious,
+      pickedAt: chordPickedAt,
+      now: performance.now(),
+      motion: motionLevel(),
+      max: chordCounts.max,
+    });
+    if (stats.fading) schedule();
+  }
+
+  function setChordPick(next: ChordPick) {
+    chordPrevious = chordPick;
+    chordPick = next;
+    chordPickedAt = performance.now();
+    schedule();
+  }
+
+  /**
+   * A book keeps only its own ribbons and shows its busiest partners (tap it
+   * again to let go). A ribbon opens that pair on the Detail tab, the way
+   * round more of its links run.
+   */
+  function tapChord(at: { x: number; y: number }) {
+    if (!data || !chordSceneNow || !chordCounts) return;
+    chordTried = true;
+    const hit = chordHit(chordSceneNow, chordConfig, chordView, at);
+    if (!hit) {
+      if (chordPick) clearChord();
+      return;
+    }
+    if (hit.kind === 'book') {
+      if (chordPick?.kind === 'book' && chordPick.book === hit.book) clearChord();
+      else pickChordBook(hit.book);
+      return;
+    }
+    const way = busierWay(chordCounts, hit.a, hit.b);
+    void openPair({ from: data.books[way.from].name, to: data.books[way.to].name });
+    setTab('detail');
+  }
+
+  function pickChordBook(index: number) {
+    if (!data || !chordCounts) return;
+    const book = data.books[index];
+    chordBook = book.name;
+    setChordPick({ kind: 'book', book: index });
+    const total = chordCounts.totals[index];
+    const most = partnersOf(chordCounts, index, 3).map((p) => data!.books[p.book].name);
+    card = {
+      kind: 'span',
+      title: book.name,
+      meta: `${total.toLocaleString()} ${total === 1 ? 'link' : 'links'}${most.length ? ` · most with ${most.join(', ')}` : ''}`,
+      open: { book: book.name, chapter: 1, verse: 1 },
+      label: book.name,
+      items: itemsOf([{ start: book.start, end: book.end }]),
+    };
+  }
+
+  /** The nav's book picker on the ring. */
+  function chooseChordBook(name: string) {
+    const index = data?.books.findIndex((b) => b.name === name) ?? -1;
+    if (index < 0) clearChord();
+    else pickChordBook(index);
+  }
+
+  function clearChord() {
+    if (chordPick) setChordPick(null);
+    chordBook = '';
+    if (tab === 'chord') card = null;
+  }
+
   /** Show all, on whichever tab is open. */
   function clearTab() {
     if (tab === 'grid') clearGrid();
     else if (tab === 'detail') clearDetail();
+    else if (tab === 'chord') clearChord();
     else showAll();
   }
 
-  $: anyLit = tab === 'grid' ? !!gridFocus : tab === 'detail' ? !!detailLit || detailPicked !== null : !!lit;
+  $: anyLit =
+    tab === 'grid'
+      ? !!gridFocus
+      : tab === 'detail'
+        ? !!detailLit || detailPicked !== null
+        : tab === 'chord'
+          ? !!chordPick
+          : !!lit;
 
   // ===== Sets and saved views =====
   //
@@ -1322,6 +1510,9 @@
     { value: 50, label: '50 votes or more' },
     { value: 100, label: '100 votes or more' },
   ];
+  function floorLabel(value: number): string {
+    return FLOORS.find((f) => f.value === value)?.label ?? `${value} votes or more`;
+  }
   /** The cap choices. The whole set is slow to pan, so it says so. */
   const CAPS = [
     { value: 10000, label: '10,000' },
@@ -1345,6 +1536,7 @@
       tab,
       grid: { ...gridLook },
       pair: { ...pair },
+      chord: { ...chordLook },
     };
     // The same name again saves over it, rather than making a twin.
     views = same ? views.map((v) => (v.id === same.id ? saved : v)) : [...views, saved];
@@ -1356,6 +1548,7 @@
     applyLook(v);
     setShown(v.shown.filter((id) => library.some((s) => s.id === id)));
     if (v.grid) applyGridLook(v.grid);
+    if (v.chord) applyChordLook(v.chord);
     if (v.pair && (v.pair.from !== pair.from || v.pair.to !== pair.to || !detailModel)) void openPair(v.pair);
     setTab(v.tab ?? 'arcs');
   }
@@ -1374,6 +1567,7 @@
   function viewSummary(v: ConnectionsView): string {
     if (v.tab === 'grid') return `Grid · ${COLOR_NAMES[v.grid?.colorBy ?? gridLook.colorBy]}`;
     if (v.tab === 'detail' && v.pair) return `Detail · ${v.pair.from} → ${v.pair.to}`;
+    if (v.tab === 'chord') return `Chord · ${floorLabel(v.chord?.voteFloor ?? chordLook.voteFloor)}`;
     const names = v.shown.map((id) => library.find((s) => s.id === id)?.name).filter(Boolean);
     return names.length ? names.join(', ') : 'Every arc, book colors';
   }
@@ -1439,6 +1633,7 @@
     if (!data || imageBusy || W === 0 || H === 0) return;
     if (tab === 'grid' && (!gridImage || !gridLayout || !gridCells)) return;
     if (tab === 'detail' && !detailModel) return;
+    if (tab === 'chord' && (!chordSceneNow || !chordCounts)) return;
     closeImage();
     imageBusy = true;
     try {
@@ -1484,6 +1679,34 @@
               now: performance.now(),
               motion: 'off',
               picked: pickedNow,
+            });
+          },
+        });
+      } else if (tab === 'chord') {
+        const scene = chordSceneNow!;
+        const max = chordCounts!.max;
+        const pickNow = chordPick;
+        const at = { ...chordView };
+        title =
+          pickNow?.kind === 'book'
+            ? `${data.books[pickNow.book].name} and the books it links to`
+            : 'Cross references between the books';
+        blob = await renderFramedImage({
+          viewport,
+          palette: canvasColors,
+          title,
+          legend: [],
+          // Drawn settled: a picture taken mid-fade would catch the old pick too.
+          paint: (c) => {
+            drawChord(c, scene, chordConfig, {
+              palette: canvasColors,
+              view: at,
+              pick: pickNow,
+              previous: pickNow,
+              pickedAt: 0,
+              now: 0,
+              motion: 'off',
+              max,
             });
           },
         });
@@ -1621,6 +1844,15 @@
       }
       const savedPair = cleanPair(state?.pair);
       if (savedPair) pair = savedPair;
+      const savedChord = cleanChordLook(state?.chord);
+      if (savedChord) {
+        chordLook = savedChord;
+        chordConfig = { ...chordConfig, voteFloor: savedChord.voteFloor, maxLinks: savedChord.maxLinks };
+      }
+      const cv = state?.chordView;
+      if (cv && [cv.x, cv.y, cv.k].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+        chordView = { x: cv.x, y: cv.y, k: clamp(cv.k, CHORD_K[0], CHORD_K[1]) };
+      }
       const gv = state?.gridView;
       if (gv && [gv.x, gv.y, gv.k].every((n) => typeof n === 'number' && Number.isFinite(n))) {
         gridView = { x: gv.x, y: gv.y, k: clamp(gv.k, GRID_K[0], GRID_K[1]) };
@@ -1641,6 +1873,7 @@
     measure();
     if (data && tab === 'grid') void buildGrid();
     if (data && tab === 'detail') void openPair(pair);
+    if (data && tab === 'chord') buildChord();
   }
 
   let resizeObserver: ResizeObserver | null = null;
@@ -1721,6 +1954,19 @@
             <option value={book.name}>{book.name}</option>
           {/each}
         </select>
+      {:else if tab === 'chord'}
+        <select
+          class="book-pick"
+          aria-label="Pick out a book"
+          value={chordBook}
+          on:change={(e) => chooseChordBook(e.currentTarget.value)}
+          disabled={!chordLayout}
+        >
+          <option value="">Pick out a book…</option>
+          {#each data?.books ?? [] as book (book.name)}
+            <option value={book.name}>{book.name}</option>
+          {/each}
+        </select>
       {:else if tab === 'detail'}
         {#each ['from', 'to'] as side (side)}
           {#if side === 'to'}<span class="pair-arrow" aria-hidden="true">→</span>{/if}
@@ -1763,7 +2009,11 @@
         <span class="btn-label">{ground === 'black' ? 'Black' : 'Cream'}</span>
       </button>
       {#if anyLit}
-        <button class="btn" title={tab === 'arcs' ? 'Show every arc again' : 'Show every line again'} on:click={clearTab}>
+        <button
+          class="btn"
+          title={tab === 'arcs' ? 'Show every arc again' : tab === 'chord' ? 'Show every ribbon again' : 'Show every line again'}
+          on:click={clearTab}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M5 18a7 7 0 0114 0"/><path d="M8.5 18a3.5 3.5 0 017 0"/></svg>
           <span class="btn-label">Show all</span>
         </button>
@@ -1786,7 +2036,11 @@
       <button
         class="btn"
         title="Save or share this picture as an image"
-        disabled={!data || imageBusy || (tab === 'grid' && (!gridImage || gridBuilding)) || (tab === 'detail' && !detailModel)}
+        disabled={!data ||
+          imageBusy ||
+          (tab === 'grid' && (!gridImage || gridBuilding)) ||
+          (tab === 'detail' && !detailModel) ||
+          (tab === 'chord' && !chordSceneNow)}
         on:click={makeImage}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg>
@@ -1794,7 +2048,13 @@
       </button>
       <button
         class="btn"
-        title={tab === 'detail' ? 'Back to both sides whole' : tab === 'grid' ? 'Back to the whole grid' : 'Back to the whole Bible'}
+        title={tab === 'detail'
+          ? 'Back to both sides whole'
+          : tab === 'grid'
+            ? 'Back to the whole grid'
+            : tab === 'chord'
+              ? 'Back to the whole ring'
+              : 'Back to the whole Bible'}
         on:click={fitView}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/></svg>
@@ -1845,6 +2105,8 @@
         <div class="loading">Drawing the grid…</div>
       {:else if tab === 'grid' && !gridTried && !card && !panelOpen}
         <div class="hint low">Tap a square to open it. Tap a name to pick out its row or column.</div>
+      {:else if tab === 'chord' && !chordTried && !card && !panelOpen && chordSceneNow}
+        <div class="hint low">Tap a book to pick out its ribbons. Tap a ribbon to open that pair.</div>
       {:else if tab === 'detail' && !detailTried && !card && !panelOpen && detailModel}
         <div class="hint low">Tap a chapter, a heading or a book name to light its lines.</div>
       {:else if tab === 'arcs' && rangeMode && !card}
@@ -1867,7 +2129,39 @@
             <div class="panel-title">{tab === 'arcs' ? 'Sets' : 'View'}</div>
             <CloseX label="Close" on:click={() => (panelOpen = false)} />
           </div>
-          {#if tab !== 'arcs'}
+          {#if tab === 'chord'}
+          <p class="panel-note">
+            Each book’s stretch of the ring is sized by its links with the other books, and a ribbon is as wide as the
+            links between two of them. Links within one book are on the grid’s diagonal instead.
+          </p>
+          <label class="field">
+            <span>Links shown</span>
+            <select
+              class="pick"
+              value={chordLook.voteFloor}
+              on:change={(e) => setChordLook({ voteFloor: Number(e.currentTarget.value) })}
+            >
+              {#each FLOORS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
+              {#if !FLOORS.some((f) => f.value === chordLook.voteFloor)}
+                <option value={chordLook.voteFloor}>{chordLook.voteFloor} votes or more</option>
+              {/if}
+            </select>
+          </label>
+          <label class="field">
+            <span>Most links</span>
+            <select
+              class="pick"
+              value={chordLook.maxLinks}
+              on:change={(e) => setChordLook({ maxLinks: Number(e.currentTarget.value) })}
+            >
+              {#each LINK_CAPS as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+              {#if !LINK_CAPS.some((c) => c.value === chordLook.maxLinks)}
+                <option value={chordLook.maxLinks}>{chordLook.maxLinks.toLocaleString()}</option>
+              {/if}
+            </select>
+          </label>
+          <p class="panel-note">Readers vote on each link at OpenBible.info. With a cap, the most-voted links are kept.</p>
+          {:else if tab !== 'arcs'}
           <p class="panel-note">
             The grid puts every book against every book: rows are where a link starts, columns where it lands. A square
             opened up is the detail. Both follow these.
@@ -2099,7 +2393,7 @@
               </button>
             </div>
           {:else}
-            <div class="set-meta">None yet. A saved view keeps the tab you are on and how each picture looks: the arcs’ line, sides, links and sets, the grid’s color, groups and links, and the two sides of the detail.</div>
+            <div class="set-meta">None yet. A saved view keeps the tab you are on and how each picture looks: the arcs’ line, sides, links and sets, the grid’s color, groups and links, the two sides of the detail, and the ring’s links.</div>
           {/each}
           <form class="add-row" on:submit|preventDefault={saveView}>
             <input class="text" bind:value={viewName} maxlength="60" placeholder="Name this view" aria-label="View name" />

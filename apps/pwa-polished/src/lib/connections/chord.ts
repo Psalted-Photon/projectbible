@@ -70,19 +70,19 @@ export interface ChordConfig {
 
 /** What the app ships, and what the lab's Reset puts back. */
 export const CHORD: ChordConfig = {
-  ringSize: 0.72,
-  bandWidth: 9,
-  gap: 0.0015,
-  groupGap: 4,
-  bookSize: 0.8,
+  ringSize: 0.83,
+  bandWidth: 2,
+  gap: 0.0007,
+  groupGap: 1,
+  bookSize: 1,
   pairs: 400,
-  opacity: 0.8,
-  opacityFloor: 0.15,
-  pinch: 0.15,
+  opacity: 0.9,
+  opacityFloor: 0.45,
+  pinch: 0.13,
   inset: 3,
   voteFloor: 1,
   maxLinks: 0,
-  labelSize: 10,
+  labelSize: 9.5,
   labelNames: 'short',
   dimFloor: 0.08,
   fadeMs: 260,
@@ -106,6 +106,8 @@ export const SHORT_NAMES: string[] = [
 export interface ChordCounts {
   /** 66 × 66, symmetric, zero on the diagonal. `counts[a * 66 + b]`. */
   counts: Float64Array;
+  /** The same one way only: links written in book a that land in book b. */
+  directed: Float64Array;
   /** Each book's links with the other 65. */
   totals: Float64Array;
   /** The busiest pair's count. */
@@ -123,6 +125,7 @@ export function countChords(data: ConnectionsData, config: Pick<ChordConfig, 'vo
   const { mask } = linkMask(data, config.voteFloor, config.maxLinks);
   const starts = new Int32Array(data.books.map((b) => b.start));
   const counts = new Float64Array(BOOKS * BOOKS);
+  const directed = new Float64Array(BOOKS * BOOKS);
   let links = 0;
   for (let i = 0; i < data.count; i++) {
     if (!mask[i]) continue;
@@ -131,6 +134,7 @@ export function countChords(data: ConnectionsData, config: Pick<ChordConfig, 'vo
     if (a === b) continue;
     counts[a * BOOKS + b]++;
     counts[b * BOOKS + a]++;
+    directed[a * BOOKS + b]++;
     links++;
   }
   const totals = new Float64Array(BOOKS);
@@ -142,7 +146,7 @@ export function countChords(data: ConnectionsData, config: Pick<ChordConfig, 'vo
       if (b > a && n > max) max = n;
     }
   }
-  return { counts, totals, max, links, ms: performance.now() - t0 };
+  return { counts, directed, totals, max, links, ms: performance.now() - t0 };
 }
 
 /* --------------------------------------------------------------------------- *
@@ -469,6 +473,15 @@ export function chordHit(
     }
   }
   return null;
+}
+
+/**
+ * A pair the way round more of its links run, for opening it on the Detail
+ * tab, which shows one direction: where links start on the left, where they
+ * land on the right.
+ */
+export function busierWay(counts: ChordCounts, a: number, b: number): { from: number; to: number } {
+  return counts.directed[a * BOOKS + b] >= counts.directed[b * BOOKS + a] ? { from: a, to: b } : { from: b, to: a };
 }
 
 /** A book's busiest partners, for the card a tapped book shows. */

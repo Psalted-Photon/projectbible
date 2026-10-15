@@ -429,8 +429,8 @@ export interface ConnectionsLook {
   maxArcs: number;
 }
 
-/** The window's three tabs. */
-export type ConnectionsTab = 'arcs' | 'grid' | 'detail';
+/** The window's four tabs. */
+export type ConnectionsTab = 'arcs' | 'grid' | 'detail' | 'chord';
 
 /**
  * The grid's and the detail's look: the only dials a reader gets there. A grid
@@ -441,6 +441,13 @@ export interface GridLook {
   groups: GroupPlacement;
   voteFloor: number;
   /** 0 shows every link past the floor. */
+  maxLinks: number;
+}
+
+/** The chord ring's look: which links it counts. */
+export interface ChordLook {
+  voteFloor: number;
+  /** 0 counts every link past the floor. */
   maxLinks: number;
 }
 
@@ -460,6 +467,7 @@ export interface ConnectionsView extends ConnectionsLook {
   tab?: ConnectionsTab;
   grid?: GridLook;
   pair?: DetailPair;
+  chord?: ChordLook;
 }
 
 export const MAX_SETS = 40;
@@ -523,7 +531,7 @@ export function cleanLook(raw: unknown): ConnectionsLook | null {
   return { orientation: l.orientation!, side: l.side!, voteFloor: l.voteFloor!, maxArcs: Math.max(0, l.maxArcs!) };
 }
 
-const TABS: ConnectionsTab[] = ['arcs', 'grid', 'detail'];
+const TABS: ConnectionsTab[] = ['arcs', 'grid', 'detail', 'chord'];
 const COLOR_BYS: DetailColorBy[] = ['books', 'rainbow', 'ink'];
 const PLACEMENTS: GroupPlacement[] = ['start', 'each', 'off'];
 
@@ -538,6 +546,14 @@ export function cleanGridLook(raw: unknown): GridLook | null {
   if (!COLOR_BYS.includes(l.colorBy as DetailColorBy) || !PLACEMENTS.includes(l.groups as GroupPlacement)) return null;
   if (!Number.isFinite(l.voteFloor) || !Number.isFinite(l.maxLinks)) return null;
   return { colorBy: l.colorBy!, groups: l.groups!, voteFloor: l.voteFloor!, maxLinks: Math.max(0, l.maxLinks!) };
+}
+
+/** A chord look from a saved view or a window's state, or null if it isn't one. */
+export function cleanChordLook(raw: unknown): ChordLook | null {
+  const l = raw as Partial<ChordLook> | null;
+  if (!l || typeof l !== 'object') return null;
+  if (!Number.isFinite(l.voteFloor) || !Number.isFinite(l.maxLinks)) return null;
+  return { voteFloor: l.voteFloor!, maxLinks: Math.max(0, l.maxLinks!) };
 }
 
 export function cleanPair(raw: unknown): DetailPair | null {
@@ -558,6 +574,7 @@ export function savedViews(): ConnectionsView[] {
     const tab = cleanTab(v.tab);
     const grid = cleanGridLook(v.grid);
     const pair = cleanPair(v.pair);
+    const chord = cleanChordLook(v.chord);
     out.push({
       id: v.id,
       name: v.name,
@@ -566,6 +583,7 @@ export function savedViews(): ConnectionsView[] {
       ...(tab ? { tab } : {}),
       ...(grid ? { grid } : {}),
       ...(pair ? { pair } : {}),
+      ...(chord ? { chord } : {}),
     });
   }
   return out.slice(0, MAX_VIEWS);

@@ -57,22 +57,22 @@ export interface StripConfig {
 
 /** What the app ships, and what the lab's Reset puts back. */
 export const STRIP: StripConfig = {
-  height: 46,
-  sidePad: 14,
-  lineWidth: 3,
+  height: 56,
+  sidePad: 6,
+  lineWidth: 2.5,
   side: 'above',
   width: 'equal',
-  lift: 0.92,
-  heightCurve: 0.6,
-  heightMin: 6,
-  thickness: 1,
-  opacity: 0.9,
-  opacityFloor: 0.25,
-  voteFloor: 5,
-  maxArcs: 300,
-  colorBy: 'both',
+  lift: 0.68,
+  heightCurve: 1,
+  heightMin: 4.5,
+  thickness: 0.9,
+  opacity: 0.78,
+  opacityFloor: 0.44,
+  voteFloor: 10,
+  maxArcs: 200,
+  colorBy: 'far',
   marker: true,
-  ends: true,
+  ends: false,
 };
 
 /* --------------------------------------------------------------------------- *
