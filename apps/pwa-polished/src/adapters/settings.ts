@@ -199,6 +199,7 @@ export interface UserSettings {
   connectionSets?: Array<Record<string, unknown>>;
   connectionViews?: Array<Record<string, unknown>>;
   connectionsBackground?: 'black' | 'cream'; // The Connections picture's own background, whatever the theme (synced, default black)
+  connectionsStrip?: boolean; // The whole-Bible line of arcs under each chapter title, when the Connections pack is installed (synced, default true)
   highlightMeanings?: boolean; // Highlight popup shows what each color and line means (per-device, default false)
   // Whether each surface's formatting toolbar is slid up out of the way.
   // Per-device on purpose (not in SYNCED_KEYS) — an ergonomic choice like font

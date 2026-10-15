@@ -142,6 +142,7 @@
   let motionSetting: MotionSetting = "system";
   let showRedLetter: boolean = true;
   let themedTitles: boolean = true;
+  let connectionsStrip: boolean = true;
   let showArt: boolean = true;
   let showPlaceMarkers: boolean = false;
   let showSoloMarking: boolean = true;
@@ -245,6 +246,7 @@
       motion: motionSetting,
       showRedLetter,
       themedTitles,
+      connectionsStrip,
       showArt,
       showPlaceMarkers,
       showSoloMarking,
@@ -501,6 +503,7 @@
     motionSetting = settings.motion ?? "system";
     showRedLetter = settings.showRedLetter !== false;
     themedTitles = settings.themedTitles !== false;
+    connectionsStrip = settings.connectionsStrip !== false;
     showArt = settings.showArt !== false;
     showPlaceMarkers = settings.showPlaceMarkers === true;
     showSoloMarking = settings.showSoloMarking !== false;
@@ -810,6 +813,7 @@
     motionSetting;
     showRedLetter;
     themedTitles;
+    connectionsStrip;
     showArt;
     showPlaceMarkers;
     showSoloMarking;
@@ -1089,6 +1093,13 @@
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={themedTitles} />
         <span class="label-text">Color chapter titles by book</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={connectionsStrip} />
+        <span class="label-text">Connections strip under chapter titles (needs Connections pack)</span>
       </label>
     </div>
 

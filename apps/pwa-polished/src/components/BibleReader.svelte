@@ -221,6 +221,7 @@
   import { readingProgressStore } from "../stores/ReadingProgressStore";
   import type { HarmonyPassage, HarmonySection } from "@projectbible/core";
   import CloseX from "./CloseX.svelte";
+  import ReaderConnectionsStrip from "./ReaderConnectionsStrip.svelte";
 
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
 
@@ -6634,6 +6635,7 @@
         <div class="chapter-section" class:flat-titles={!themedTitles} data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
             <h1 style="--title-shadow:{getBookColor(chapterData.book)}">{chapterData.book} {chapterData.chapter}</h1>
+            <ReaderConnectionsStrip book={chapterData.book} chapter={chapterData.chapter} />
             {#if chapterData.chapter === 1}
               <div class="intro-row">
               <button

@@ -36,7 +36,7 @@
   import {
     connectionsInstalled,
     loadConnections,
-    releaseConnections,
+    holdConnections,
     refAt,
     bookSpan,
     chapterSpan,
@@ -1887,6 +1887,9 @@
     }
   }
 
+  /** Lets go of the data when the window closes. The strip may still hold it. */
+  const letGo = holdConnections();
+
   onMount(() => {
     void load(true);
     watchTheme();
@@ -1910,7 +1913,7 @@
     resizeObserver?.disconnect();
     pointers.clear();
     releaseGridImage();
-    releaseConnections();
+    letGo();
   });
 </script>
 

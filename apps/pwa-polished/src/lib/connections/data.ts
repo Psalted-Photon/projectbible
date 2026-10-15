@@ -13,9 +13,11 @@
  * and the other way when the window is asked about a book or a chapter.
  *
  * Four gzipped blobs inflate to about 4.6 MB of typed arrays, read once when
- * the window opens and dropped when it closes — the same discipline as
- * lib/timeline/data.ts and lib/atlas/place-index.ts. A reader who never opens
- * the window never pays for it.
+ * something first needs them and dropped when the last thing holding them lets
+ * go — the same discipline as lib/timeline/data.ts and
+ * lib/atlas/place-index.ts. The window and the reader strip each hold them
+ * while they are up, so closing the window does not pull the data out from
+ * under the strip.
  */
 
 import { readTransaction } from '../../adapters/db';
@@ -180,23 +182,35 @@ export function chapterSpan(book: string, chapter: number): { start: number; end
  * ------------------------------------------------------------------------- */
 
 let dataPromise: Promise<ConnectionsData> | null = null;
+/** How many windows and strips are holding the data right now. */
+let holders = 0;
 
 /**
- * Drop what is held in memory.
+ * Say the data is in use, and get back the call that lets it go.
  *
- * Called when the pane closes: four and a half megabytes of arrays should not
- * be carried for the rest of the session because the window was opened once.
+ * When the last holder lets go, what is in memory is dropped: four and a half
+ * megabytes of arrays should not be carried for the rest of the session
+ * because the window was opened once. Letting go twice counts once.
  */
-export function releaseConnections(): void {
-  dataPromise = null;
+export function holdConnections(): () => void {
+  holders++;
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    holders = Math.max(0, holders - 1);
+    if (holders === 0) dataPromise = null;
+  };
 }
 
 /** Is the Connections pack installed? */
 export async function connectionsInstalled(): Promise<boolean> {
   try {
-    const rows = await readTransaction<unknown[]>(STORE, (store) => store.getAll() as IDBRequest<unknown[]>);
+    // A count, not a read: the reader strip asks this on every launch, and the
+    // rows are megabytes of compressed columns.
+    const rows = await readTransaction<number>(STORE, (store) => store.count());
     // Four columns, or the install did not finish.
-    return (rows?.length ?? 0) >= 4;
+    return (rows ?? 0) >= 4;
   } catch {
     return false;
   }

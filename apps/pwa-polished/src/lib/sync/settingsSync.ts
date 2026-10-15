@@ -46,6 +46,8 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'connectionViews',
   // Black or cream behind the arcs: a taste, so it follows the account.
   'connectionsBackground',
+  // The strip of arcs under each chapter title: a taste, like the titles' color.
+  'connectionsStrip',
   'timezone',
   'dailyDriverEnglishOT', 'dailyDriverEnglishNT',
   'dailyDriverHebrewOT', 'dailyDriverHebrewNT',
