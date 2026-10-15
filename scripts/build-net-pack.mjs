@@ -18,7 +18,7 @@
 
 import Database from 'better-sqlite3';
 import { existsSync, readdirSync, readFileSync, unlinkSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import {
   parseUSFM,
@@ -141,7 +141,12 @@ const NET_OPTIONS = {
   smallCapsMarkers: new Set(['nd']),
 };
 
-function readBooks() {
+/**
+ * The pack's verses, book by book: [{ name, verses: [{ chapter, verse, text }] }].
+ * `parseOptions` is added to NET_OPTIONS (scripts/build-word-links.mjs asks for
+ * `strongsSentinels`).
+ */
+export function readBooks(parseOptions = {}, { quiet = false } = {}) {
   if (!existsSync(USFM_DIR)) {
     console.error(`❌ NET USFM not found: ${USFM_DIR}`);
     process.exit(1);
@@ -161,14 +166,14 @@ function readBooks() {
     const content = unmarkFootnoteReferences(
       repairDoubledQuotes(readFileSync(join(USFM_DIR, file), 'utf8'))
     );
-    const verses = processVerses(parseUSFM(content, NET_OPTIONS)).map((v) => ({
+    const verses = processVerses(parseUSFM(content, { ...NET_OPTIONS, ...parseOptions })).map((v) => ({
       chapter: v.chapter,
       verse: v.verse,
       text: applyRepair(name, { ...v, text: cleanUSFMMarkup(v.text) }),
     }));
 
     books.push({ name, verses });
-    process.stdout.write(`  ${name.padEnd(16)} ${String(verses.length).padStart(5)} verses\n`);
+    if (!quiet) process.stdout.write(`  ${name.padEnd(16)} ${String(verses.length).padStart(5)} verses\n`);
   }
 
   return books;
@@ -240,5 +245,8 @@ function buildPack(books) {
   console.log(`\n✅ NET pack built: ${OUTPUT_PATH}`);
 }
 
-console.log('📖 Building NET Bible pack from USFM\n');
-buildPack(readBooks());
+// Run only as a script: build-word-links.mjs imports readBooks.
+if (process.argv[1] && resolve(process.argv[1]) === __filename) {
+  console.log('📖 Building NET Bible pack from USFM\n');
+  buildPack(readBooks());
+}

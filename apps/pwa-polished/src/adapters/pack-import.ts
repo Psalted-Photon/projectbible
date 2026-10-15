@@ -476,7 +476,7 @@ export async function importPackFromBytes(
       // stored ID always matches the canonical manifest IDs used by the UI.
       id: rawId?.replace(/\.v\d+$/, '') ?? rawId,
       version: metadata.pack_version || metadata.version || metadata.packVersion || '1.0',
-      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map' | 'devotionals' | 'timeline' | 'connections',
+      type: packType as 'text' | 'lexicon' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'commentary' | 'references' | 'people' | 'isbe' | 'art' | 'atlas-map' | 'devotionals' | 'timeline' | 'connections' | 'word-links',
       translationId: metadata.translation_id || metadata.translationId,
       translationName: metadata.translation_name || metadata.translationName,
       license: metadata.license,
@@ -2020,6 +2020,32 @@ export async function importPackFromBytes(
 
       await logInstallFlush('connections-done', { columns });
       console.log(`✅ Connections pack ${packInfo.id} imported (${columns} columns)`);
+    } else if (packInfo.type === 'word-links') {
+      // Which English words render which Greek or Hebrew word, a row per verse
+      // per translation, plus the Greek and Hebrew spellings. Cleared first so
+      // a translation dropped from a rebuilt pack leaves nothing stale.
+      console.log('Importing word links pack...');
+      await clearStores(['word_links', 'original_forms']);
+
+      const links = await streamTable(
+        db,
+        'SELECT translation_id, book, chapter, verse, links FROM word_links',
+        'word_links',
+        ([translationId, book, chapter, verse, links]) => ({
+          translationId: String(translationId).toLowerCase(),
+          book, chapter, verse, links,
+        }),
+        { batchSize: 2000, label: 'word links' },
+      );
+      const forms = await streamTable(
+        db,
+        'SELECT key, lang, strongs FROM original_forms',
+        'original_forms',
+        ([key, lang, strongs]) => ({ key, lang, strongs }),
+        { batchSize: 2000, label: 'original forms' },
+      );
+
+      console.log(`✅ Word links pack ${packInfo.id} imported (${links} verses, ${forms} spellings)`);
     } else if (packInfo.type === 'map') {
       // Import map/places data
       console.log('Importing map pack...');

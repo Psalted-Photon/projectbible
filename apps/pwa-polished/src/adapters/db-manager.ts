@@ -101,6 +101,7 @@ const REQUIRED_STORES_BY_TYPE: Record<string, string[]> = {
   devotionals: DEVOTIONAL_STORES,
   timeline: ['timeline_items'],
   connections: ['connection_columns'],
+  'word-links': ['word_links', 'original_forms'],
 };
 
 /**

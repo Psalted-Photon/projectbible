@@ -1,10 +1,11 @@
 /**
  * Finding a Greek or Hebrew word's English in a verse by what it means.
  *
- * No English pack links its words to the Greek or Hebrew yet, so this works
- * from the lexicon instead: every way the KJV rendered the number ("love",
- * "beloved") plus its short definition, with English endings added ("loved",
- * "loveth"). It runs on any translation, so it is cautious. It marks only when
+ * The fallback for English the Word Links pack (index.ts) doesn't cover, or
+ * doesn't link to this number. It works from the lexicon: every way the KJV
+ * rendered the number ("love", "beloved") plus its short definition, with
+ * English endings added ("loved", "loveth"). It runs on any translation, so it
+ * is cautious. It marks only when
  * the verse leaves no doubt: one match, or exactly as many matches as the
  * Greek or Hebrew has marked words. Anything else marks nothing, because a
  * missing highlight is better than a wrong one.
@@ -23,6 +24,11 @@ const NEVER_MARKED = new Set([
   'G3588', 'G2532', 'G1161', 'G0846',
   'H0853', 'H3588', 'H0834', 'H5921', 'H0413', 'H3605',
 ]);
+
+/** True for a classic number whose English is never marked, linked or not. */
+export function isNeverMarked(classicNumber: string): boolean {
+  return NEVER_MARKED.has(classicNumber);
+}
 
 /** English too common to mean anything on its own. */
 const FUNCTION_WORDS = new Set(
@@ -175,7 +181,7 @@ function patternOf(strongsId: string): Promise<RegExp | null> {
   let found = patterns.get(strongsId);
   if (!found) {
     found = (async () => {
-      if (NEVER_MARKED.has(id)) return null;
+      if (isNeverMarked(id)) return null;
       // A split meaning (G2424G) has its own row; its number's row adds the
       // renderings it shares.
       const ids = strongsId === id ? [id] : [strongsId, id];

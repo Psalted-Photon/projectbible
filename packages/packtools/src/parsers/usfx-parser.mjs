@@ -13,6 +13,7 @@
  *   <p>                     a paragraph
  *   <c id="N"/> <v id="N"/> chapter and verse milestones, not containers
  *   <w s="H1234">word</w>   a word carrying a Strong's tag, kept for its text
+ *                           (with `strongsSentinels`, also its tag; see below)
  *   <f><fr>ref</fr><ft>…</ft></f>   a footnote
  *   <x><xo>ref</xo><xt>…</xt></x>   a cross-reference
  *   <s>…</s>                a section heading, returned alongside the verses
@@ -27,7 +28,7 @@ import sax from 'sax';
 import {
   STANZA, LINE_1, LINE_2,
   NOTE_END, XREF_END, ANCHOR_SEP, REF_OPEN, REF_SEP, REF_CLOSE,
-  NOTE_I_OPEN, NOTE_I_CLOSE,
+  NOTE_I_OPEN, NOTE_I_CLOSE, WORD_OPEN, WORD_SEP, WORD_CLOSE,
 } from './usfm-scanner.mjs';
 
 /**
@@ -68,8 +69,10 @@ function poetryLevelFor(node) {
  *
  * Returns { books: [{ code, verses: [{chapter, verse, text}], headings: [...] }] }
  * -- a USFX file holds the whole Bible, not one book per file as USFM does.
+ * With `strongsSentinels`, each tagged word keeps its tag as the WORD_*
+ * sentinels from usfm-scanner.mjs.
  */
-export function parseUSFX(filePath) {
+export function parseUSFX(filePath, { strongsSentinels = false } = {}) {
   const parser = sax.parser(true, { trim: false, normalize: false });
   const books = [];
 
@@ -96,6 +99,7 @@ export function parseUSFX(filePath) {
   let titleDepth = 0;     // inside <d>, a psalm superscription
   let titleText = '';
   let pendingTitle = '';
+  let wordOpen = false;   // a <w> whose sentinel was written, waiting to close
 
   function flushVerse() {
     if (book && verse !== null && text.trim()) {
@@ -234,6 +238,15 @@ export function parseUSFX(filePath) {
     if (SMALL_CAPS_ELEMENTS.has(name)) { smallCaps++; return; }
     if (ITALIC_ELEMENTS.has(name)) { append('<i>'); return; }
     if (BOLD_ELEMENTS.has(name)) { append('<b>'); return; }
+    // A tagged word in verse text or a psalm title, never a heading.
+    if (name === 'w' && strongsSentinels && node.attributes?.s && headingDepth === 0 &&
+        (verse !== null || titleDepth > 0)) {
+      const id = String(node.attributes.s).trim().split(/\s+/).join('+');
+      if (titleDepth > 0) titleText += WORD_OPEN + id + WORD_SEP;
+      else text += WORD_OPEN + id + WORD_SEP;
+      wordOpen = true;
+      return;
+    }
     // <w> and anything else unrecognized: keep the text, drop the wrapper.
   };
 
@@ -280,6 +293,12 @@ export function parseUSFX(filePath) {
     if (SMALL_CAPS_ELEMENTS.has(name)) { smallCaps = Math.max(0, smallCaps - 1); return; }
     if (ITALIC_ELEMENTS.has(name)) { append('</i>'); return; }
     if (BOLD_ELEMENTS.has(name)) { append('</b>'); return; }
+    if (name === 'w' && wordOpen) {
+      if (titleDepth > 0) titleText += WORD_CLOSE;
+      else text += WORD_CLOSE;
+      wordOpen = false;
+      return;
+    }
     if (name === 'book') { flushVerse(); return; }
   };
 

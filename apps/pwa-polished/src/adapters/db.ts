@@ -15,7 +15,7 @@ import { getDeviceOwner } from '../lib/sync/deviceOwner';
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 43; // Migration 43: connection_columns (the Connections pack)
+const DB_VERSION = 44; // Migration 44: word_links + original_forms (the Word Links pack)
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -183,7 +183,7 @@ export interface DBAtlasPlaceColumn {
 export interface DBPack {
   id: string;
   version: string;
-  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map' | 'study' | 'devotionals' | 'timeline' | 'connections';
+  type: 'text' | 'lexicon' | 'dictionary' | 'places' | 'geonames' | 'map' | 'cross-references' | 'morphology' | 'audio' | 'original-language' | 'commentary' | 'references' | 'headings' | 'people' | 'isbe' | 'encyclotopical' | 'art' | 'atlas-map' | 'study' | 'devotionals' | 'timeline' | 'connections' | 'word-links';
   translationId?: string;
   translationName?: string;
   language?: string;
@@ -547,6 +547,26 @@ export interface DBTskReference {
   verse: number;
   keyword: string | null;
   references_json: string; // JSON array of ref strings
+}
+
+/**
+ * One verse's word links: which English words render which Greek or Hebrew
+ * word. `links` is "start,len,ids;…", offsets into the verse's clean text
+ * (lib/wordLinks/index.ts reads it) and ids "+"-joined classic Strong's numbers.
+ */
+export interface DBWordLinks {
+  translationId: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  links: string;
+}
+
+/** A Greek or Hebrew spelling, folded as lib/strongs/collate.ts folds it, and its usual number. */
+export interface DBOriginalForm {
+  key: string;
+  lang: 'greek' | 'hebrew';
+  strongs: string;
 }
 
 export interface DBWordOccurrence {
@@ -1063,6 +1083,15 @@ export function openDB(): Promise<IDBDatabase> {
       // the same shape as atlas_place_index below.
       if (!db.objectStoreNames.contains('connection_columns')) {
         db.createObjectStore('connection_columns', { keyPath: 'name' });
+      }
+
+      // The Word Links pack: a row per verse per translation, read one verse
+      // at a time, and the Greek and Hebrew spellings the gloss popup looks up.
+      if (!db.objectStoreNames.contains('word_links')) {
+        db.createObjectStore('word_links', { keyPath: ['translationId', 'book', 'chapter', 'verse'] });
+      }
+      if (!db.objectStoreNames.contains('original_forms')) {
+        db.createObjectStore('original_forms', { keyPath: 'key' });
       }
       
       // Word occurrences store

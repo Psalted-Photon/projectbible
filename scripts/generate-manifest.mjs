@@ -147,6 +147,16 @@ const PACK_CONFIGS = {
       'Every cross-reference in Scripture — 344,799 links between verses, each with the votes readers gave it — drawn as one picture of how the whole Bible ties to itself. Cross references: OpenBible.info (CC BY)',
     dependencies: []
   },
+  // The pack's own metadata says 'word-links', and that routes the import;
+  // 'study' here because older builds reject a manifest type they don't know.
+  'word-links.sqlite': {
+    id: 'word-links',
+    type: 'study',
+    name: 'Word Links',
+    description:
+      'Which English words translate which Greek or Hebrew word, so a Strong’s verse list can mark the English. KJV word tags (public domain).',
+    dependencies: []
+  },
   'atlas-places.sqlite': {
     id: 'atlas-map-places',
     type: 'study',

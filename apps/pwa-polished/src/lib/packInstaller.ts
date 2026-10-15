@@ -32,6 +32,7 @@ import {
   Hourglass,
   UsersThree,
   Rainbow,
+  LinkSimple,
 } from 'phosphor-svelte';
 import {
   importPackFromBytes,
@@ -142,6 +143,15 @@ export const PACK_CATALOG: CatalogPack[] = [
     url: `${PACK_BASE_URL}/greek-critical.sqlite`,
   },
   {
+    id: "word-links",
+    name: "Word Links",
+    description: "Which English word is which Greek or Hebrew word",
+    info: "Ties the English words of a verse to the Greek or Hebrew words they translate. In a Strong’s entry, the English line under each verse marks the word you looked up, phrase and all, from word-by-word Strong’s tagging instead of a guess.\n\nKJV for now; more translations to come. KJV word tags from eBible.org (public domain); Hebrew spellings from the Open Scriptures Hebrew Bible (CC BY 4.0).",
+    size: "6.17 MB",
+    icons: [LinkSimple],
+    url: `${PACK_BASE_URL}/word-links.sqlite`,
+  },
+  {
     id: "lexical",
     name: "Lexical Resources",
     description: "Strong’s + English dictionaries",
@@ -234,6 +244,7 @@ export const INSTALL_ALL_ORDER: string[] = [
   'timeline',
   'connections',
   'people-biblical-v1',
+  'word-links',
   'devotionals',
   'tsk-references',
   'study-tools',

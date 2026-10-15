@@ -28,6 +28,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
+import { stripFootnotes, stripHtml, locateVerbatim } from './lib/clean-text.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
@@ -68,45 +69,7 @@ for (const [code, names] of Object.entries(USFM_TO_BOOK_NAMES)) {
   for (const n of names) BOOK_NAME_TO_USFM[n.toUpperCase()] = code;
 }
 
-/** Note terminators, matching packages/packtools/src/parsers/usfm-scanner.mjs. */
-const NOTE_ENDERS = '\x01\x14\x15';
-
 // ── Utilities ─────────────────────────────────────────────────────────────────
-
-/**
- * Reduce stored text to the "clean" form the spans are measured against.
- * Must stay identical to buildCleanToStoredMap() in the PWA's verseRendering.ts,
- * or the red-letter offsets land in the wrong place.
- */
-function stripFootnotes(text) {
-  let out = '';
-  let i = 0;
-  while (i < text.length) {
-    const ch = text[i];
-    // Poetic line / stanza markers are structure, not text
-    if (ch === '\x10' || ch === '\x11' || ch === '\x12') { i++; continue; }
-    let p = i - 1;
-    while (p >= 0 && /[\x01-\x07\x0E\x0F\x10-\x12\x14-\x1B]/.test(text[p])) p--;
-    const prev = p >= 0 ? text[p] : ' ';
-    if (ch === '+' && (prev === ' ' || prev === '\n' || prev === '\t' || p < 0)) {
-      // Any of the three note terminators: which one closes a note says
-      // what kind it is, and all three end it.
-      const end = NOTE_ENDERS.split('').reduce((best, ender) => {
-        const at = text.indexOf(ender, i + 1);
-        return at >= 0 && (best < 0 || at < best) ? at : best;
-      }, -1);
-      if (end >= 0) { i = end + 1; continue; }
-    }
-    out += ch;
-    i++;
-  }
-  return out;
-}
-
-/** Strip HTML tags (e.g. <b>...</b> in NET sqlite text). */
-function stripHtml(text) {
-  return text.replace(/<[^>]+>/g, '');
-}
 
 /** Length-preserving quote normalization (curly → straight). */
 function normalizeQuotes(text) {
@@ -189,23 +152,6 @@ function wordOverlap(text1, text2) {
 }
 
 // ── Core alignment ─────────────────────────────────────────────────────────────
-
-/**
- * Find a span word for word in the translation it was marked in, ignoring only
- * spacing — the span extractors and the pack builders disagree about spaces
- * around dashes and closing quotes ("heaven— the" / "heaven—the"). This is the
- * answer whenever it exists: the fuzzy strategies below are for carrying WEB's
- * spans into NET, and run on a text that has its own spans they would stretch
- * past a closing quote into narration or stop short of the last word.
- */
-function locateVerbatim(spanText, text, from) {
-  const chars = [...spanText.replace(/\s+/g, '')];
-  if (chars.length === 0) return null;
-  const re = new RegExp(chars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'), 'g');
-  re.lastIndex = from;
-  const m = re.exec(text);
-  return m ? { s: m.index, e: m.index + m[0].length } : null;
-}
 
 function alignSpan(spanText, webVerseText, targetText) {
   const span = spanText.trim();

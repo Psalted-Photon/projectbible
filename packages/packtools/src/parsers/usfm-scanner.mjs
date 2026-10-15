@@ -64,6 +64,17 @@ export const NOTE_I_CLOSE = '\x1B';
 /** Every terminator, for scanning to the end of a note of unknown kind. */
 export const NOTE_ENDERS = NOTE_END + XREF_END + PARALLEL_END;
 
+/**
+ * Word-tag sentinels, written only when a parser's `strongsSentinels` option is
+ * on: a tagged word becomes WORD_OPEN id WORD_SEP word WORD_CLOSE, the id being
+ * its Strong's numbers joined with "+". No pack stores them;
+ * scripts/build-word-links.mjs reads them and strips them back out, leaving
+ * the exact text the pack holds.
+ */
+export const WORD_OPEN = '\x1C';
+export const WORD_SEP = '\x1D';
+export const WORD_CLOSE = '\x1E';
+
 const POETRY_LEVEL = {
   q: LINE_1, q1: LINE_1, pi: LINE_1, pi1: LINE_1,
   q2: LINE_2, q3: LINE_2, q4: LINE_2, qr: LINE_2, qm: LINE_2, pi2: LINE_2
@@ -128,6 +139,9 @@ export function parseUSFM(content, options = {}) {
     // this has to be a state the enclosed text is written through rather than
     // a span of raw text to grab.
     smallCapsMarkers = new Set(),
+    // Keep each \w word's Strong's tag as the WORD_* sentinels above, for
+    // scripts/build-word-links.mjs. Off for every pack build.
+    strongsSentinels = false,
   } = options;
   let smallCaps = 0;
   const verses = [];
@@ -428,7 +442,8 @@ export function parseUSFM(content, options = {}) {
       }
 
       // Kept for their content, not their wrapper. \w carries a Strong's tag
-      // after a pipe -- "word|strong=..." -- which is dropped with it.
+      // after a pipe -- "word|strong=..." -- which is dropped with it, unless
+      // strongsSentinels asks for it.
       if (PLAIN_CHAR_MARKERS.has(marker)) {
         if (currentVerse === null) continue;
         if (closingMarker) {
@@ -440,7 +455,13 @@ export function parseUSFM(content, options = {}) {
         const inner = content.slice(i, stop);
         const pipe = inner.indexOf('|');
         const word = pipe === -1 ? inner : inner.slice(0, pipe);
-        verseText += smallCaps > 0 ? word.toUpperCase() : word;
+        const shown = smallCaps > 0 ? word.toUpperCase() : word;
+        const strong = strongsSentinels && marker === 'w' && pipe !== -1
+          ? /strong="([^"]*)"/.exec(inner.slice(pipe))?.[1].trim()
+          : '';
+        verseText += strong
+          ? WORD_OPEN + strong.split(/[\s,]+/).join('+') + WORD_SEP + shown + WORD_CLOSE
+          : shown;
         i = stop;
         continue;
       }
