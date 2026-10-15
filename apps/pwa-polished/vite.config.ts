@@ -299,6 +299,8 @@ export default defineConfig({
         //                     entry chunk is kept out as well as the page.
         //   connections-grid-lab  tunes the book-by-book grid and its detail
         //                     view. Built from the app's source, the same way.
+        //   connections-chord-lab  tunes the chord ring and the reader strip.
+        //                     Built from the app's source, the same way.
         //   reset.html       the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -321,6 +323,8 @@ export default defineConfig({
           '**/assets/connections-lab-*.js',
           '**/connections-grid-lab.html',
           '**/assets/connections-grid-lab-*.js',
+          '**/connections-chord-lab.html',
+          '**/assets/connections-chord-lab-*.js',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
@@ -331,6 +335,7 @@ export default defineConfig({
           /^\/motion-lab\.html$/,
           /^\/connections-lab\.html$/,
           /^\/connections-grid-lab\.html$/,
+          /^\/connections-chord-lab\.html$/,
         ],
         runtimeCaching: [
           {
@@ -444,7 +449,8 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         'tree-motion-lab': resolve(__dirname, 'tree-motion-lab.html'),
         'connections-lab': resolve(__dirname, 'connections-lab.html'),
-        'connections-grid-lab': resolve(__dirname, 'connections-grid-lab.html')
+        'connections-grid-lab': resolve(__dirname, 'connections-grid-lab.html'),
+        'connections-chord-lab': resolve(__dirname, 'connections-chord-lab.html')
       }
     }
   }
