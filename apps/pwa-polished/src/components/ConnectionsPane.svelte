@@ -17,9 +17,10 @@
    * book name lights its lines, and a line opens its two verses.
    *
    * Never `.themed`: the light and sepia themes are an inverting filter, and a
-   * canvas under it would show every book color as its opposite. The canvas
-   * and the chrome both take real colors from lib/connections/palette.ts
-   * instead, so the window still follows the reader's theme.
+   * canvas under it would show every book color as its opposite. The chrome
+   * takes the theme's real colors from lib/connections/palette.ts instead, so
+   * it still follows the reader's theme; the pictures are drawn on black or
+   * cream, the reader's pick (canvasPalette).
    */
   import { onMount, onDestroy, tick } from 'svelte';
   import { get } from 'svelte/store';
@@ -151,16 +152,18 @@
   ].join(';');
 
   /**
-   * The arcs are drawn on black or cream, the reader's pick, whatever the
-   * theme; the bar, the card and the panel keep the theme's colors.
+   * Every picture — arcs, grid and detail — is drawn on black or cream, the
+   * reader's pick, whatever the theme; the bar, the cards and the panel keep
+   * the theme's colors.
    */
   let ground: CanvasGround = canvasGround();
-  $: arcColors = canvasPalette(ground);
-  $: stageBg = tab === 'arcs' ? arcColors.bg : colors.bg;
+  $: canvasColors = canvasPalette(ground);
 
   function toggleGround() {
     ground = ground === 'black' ? 'cream' : 'black';
     updateSettings({ connectionsBackground: ground });
+    // The grid's image has the ground baked in.
+    staleGrid('paint');
     schedule();
   }
 
@@ -169,9 +172,12 @@
   function watchTheme() {
     themeObserver = new MutationObserver(() => {
       colors = palette();
-      ground = canvasGround();
-      // The grid's image has the theme's colors baked in.
-      staleGrid('paint');
+      const next = canvasGround();
+      if (next !== ground) {
+        ground = next;
+        // The grid's image has the ground baked in.
+        staleGrid('paint');
+      }
       schedule();
     });
     themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
@@ -244,7 +250,7 @@
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     const stats = draw(ctx, data, config, { width: W, height: H }, {
-      palette: arcColors,
+      palette: canvasColors,
       lit: lit?.spans,
       flight,
       labels: true,
@@ -648,7 +654,10 @@
   $: selected = tab === 'arcs' && card?.kind === 'link' ? card.index : null;
   /** The arc under the mouse, glowing faintly. Never set by touch. */
   let hovered: number | null = null;
-  $: selected, hovered, schedule();
+  /** The same on the other tabs: a grid square, a detail line. */
+  let hoveredCell: { row: number; col: number } | null = null;
+  let hoveredLine: number | null = null;
+  $: selected, hovered, hoveredCell, hoveredLine, schedule();
 
   let popupEl: HTMLDivElement | undefined;
   /** Where the card sits in the stage, pinned to the top of its arc. */
@@ -677,14 +686,15 @@
   /** Once the card has its real size, place it again with that size. */
   $: if (popupEl && selected !== null) void tick().then(() => selected !== null && placePopup(selected));
 
-  // Hover: on a mouse, the pointer shows what a click would get. Checked at
-  // most once a frame, and never mid-drag.
+  // Hover: on a mouse, the pointer shows what a click would get — an arc, a
+  // grid square or name, a detail line, chapter or heading. Checked at most
+  // once a frame, and never mid-drag.
   let hoverAt: { x: number; y: number } | null = null;
   let hoverFrame = 0;
   let overTarget = false;
 
   function onHover(e: PointerEvent) {
-    if (e.pointerType !== 'mouse' || pointers.size > 0 || tab !== 'arcs' || rangeMode) return;
+    if (e.pointerType !== 'mouse' || pointers.size > 0 || rangeMode) return;
     hoverAt = onScreen(e);
     if (!hoverFrame) hoverFrame = requestAnimationFrame(checkHover);
   }
@@ -693,6 +703,23 @@
     hoverFrame = 0;
     if (!data || !hoverAt || pointers.size > 0) return;
     const at = hoverAt;
+    if (tab === 'grid') {
+      if (!gridLayout) return;
+      const frame = gridFrame({ width: W, height: H }, gridConfig);
+      const band = bandAt(gridLayout, frame, gridView, at);
+      const cell = band ? null : cellAt(gridLayout, frame, gridView, at);
+      if (cell?.row !== hoveredCell?.row || cell?.col !== hoveredCell?.col) hoveredCell = cell;
+      overTarget = band !== null || cell !== null;
+      return;
+    }
+    if (tab === 'detail') {
+      if (!detailModel) return;
+      const hit = detailHit(data, detailModel, detailConfig, { width: W, height: H }, detailView, placed, detailLit, at);
+      const line = hit?.kind === 'line' ? hit.link : null;
+      if (line !== hoveredLine) hoveredLine = line;
+      overTarget = hit !== null;
+      return;
+    }
     const ruler = rulerHit(data, config, { width: W, height: H }, view, true, names, at, RULER_TAP_PX);
     const arc = ruler ? null : pick(data, config, { width: W, height: H }, toPicture(at), 7 / view.k, lit?.spans, layer);
     if (arc !== hovered) hovered = arc;
@@ -702,6 +729,8 @@
   function endHover() {
     hoverAt = null;
     if (hovered !== null) hovered = null;
+    if (hoveredCell !== null) hoveredCell = null;
+    if (hoveredLine !== null) hoveredLine = null;
     overTarget = false;
   }
 
@@ -726,6 +755,7 @@
 
   function setTab(next: ConnectionsTab) {
     if (next === tab) return;
+    endHover();
     stash[tab] = card;
     tab = next;
     card = stash[next] ?? null;
@@ -855,7 +885,7 @@
         else stash.grid = null;
       }
       releaseGridImage();
-      gridImage = paintGrid(data, gridCells, gridLayout, gridConfig, detailConfig, colors).image;
+      gridImage = paintGrid(data, gridCells, gridLayout, gridConfig, detailConfig, canvasColors).image;
     } finally {
       gridBuilding = false;
     }
@@ -865,14 +895,15 @@
   function frameGrid(c: CanvasRenderingContext2D, d: ConnectionsData) {
     c.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (!gridImage || !gridLayout || !gridCells) {
-      c.fillStyle = colors.bg;
+      c.fillStyle = canvasColors.bg;
       c.fillRect(0, 0, W, H);
       return;
     }
     drawGrid(c, { data: d, cells: gridCells, layout: gridLayout, image: gridImage }, gridConfig, detailConfig, { width: W, height: H }, {
-      palette: colors,
+      palette: canvasColors,
       view: gridView,
       picked: gridPicked,
+      hovered: hoveredCell,
       focus: gridFocus,
       dimTo: 0.25,
     });
@@ -982,17 +1013,18 @@
   function frameDetail(c: CanvasRenderingContext2D, d: ConnectionsData) {
     c.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (!detailModel) {
-      c.fillStyle = colors.bg;
+      c.fillStyle = canvasColors.bg;
       c.fillRect(0, 0, W, H);
       return;
     }
     const stats = drawDetail(c, d, detailModel, detailConfig, { width: W, height: H }, {
-      palette: colors,
+      palette: canvasColors,
       view: detailView,
       lit: detailLit,
       now: performance.now(),
       motion: motionLevel(),
       picked: detailPicked,
+      hovered: hoveredLine,
     });
     placed = stats.placed;
     if (stats.flying) schedule();
@@ -1424,11 +1456,11 @@
         const at = { ...gridView };
         blob = await renderFramedImage({
           viewport,
-          palette: colors,
+          palette: canvasColors,
           title,
           legend: [],
           paint: (c) => {
-            drawGrid(c, scene, gridConfig, detailConfig, viewport, { palette: colors, view: at, focus, dimTo: 0.25, everyCell: true });
+            drawGrid(c, scene, gridConfig, detailConfig, viewport, { palette: canvasColors, view: at, focus, dimTo: 0.25, everyCell: true });
           },
         });
       } else if (tab === 'detail') {
@@ -1440,13 +1472,13 @@
         const pickedNow = detailPicked;
         blob = await renderFramedImage({
           viewport,
-          palette: colors,
+          palette: canvasColors,
           title,
           legend: [],
           // Drawn landed: a picture taken mid-flight would be a half-drawn one.
           paint: (c) => {
             drawDetail(c, d, model, detailConfig, viewport, {
-              palette: colors,
+              palette: canvasColors,
               view: at,
               lit: litNow,
               now: performance.now(),
@@ -1462,7 +1494,7 @@
           config,
           viewport,
           view: { ...view },
-          palette: arcColors,
+          palette: canvasColors,
           lit: lit?.spans,
           sets: layer,
           title,
@@ -1722,16 +1754,14 @@
           <span class="btn-label">Select range</span>
         </button>
       {/if}
-      {#if tab === 'arcs'}
-        <button
-          class="btn"
-          title={ground === 'black' ? 'Draw the arcs on cream' : 'Draw the arcs on black'}
-          on:click={toggleGround}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 010 17z" fill="currentColor"/></svg>
-          <span class="btn-label">{ground === 'black' ? 'Black' : 'Cream'}</span>
-        </button>
-      {/if}
+      <button
+        class="btn"
+        title={ground === 'black' ? 'Draw the picture on cream' : 'Draw the picture on black'}
+        on:click={toggleGround}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 010 17z" fill="currentColor"/></svg>
+        <span class="btn-label">{ground === 'black' ? 'Black' : 'Cream'}</span>
+      </button>
       {#if anyLit}
         <button class="btn" title={tab === 'arcs' ? 'Show every arc again' : 'Show every line again'} on:click={clearTab}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M5 18a7 7 0 0114 0"/><path d="M8.5 18a3.5 3.5 0 017 0"/></svg>
@@ -1798,10 +1828,10 @@
       {/each}
     </div>
 
-    <div class="stage" class:range={rangeMode} style="--stage-bg:{stageBg}" bind:this={stageEl}>
+    <div class="stage" class:range={rangeMode} style="--stage-bg:{canvasColors.bg}" bind:this={stageEl}>
       <canvas
         bind:this={canvas}
-        class:target={overTarget && tab === 'arcs'}
+        class:target={overTarget}
         on:pointerdown={onPointerDown}
         on:pointermove={onPointerMove}
         on:pointerup={onPointerUp}

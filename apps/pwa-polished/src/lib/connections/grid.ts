@@ -629,6 +629,8 @@ export interface GridDrawOptions {
   view: GridView;
   /** The cell to ring, if one is picked. */
   picked?: { row: number; col: number } | null;
+  /** The cell under the mouse, ringed more softly. */
+  hovered?: { row: number; col: number } | null;
   /** A row or column to keep bright while the rest dims. */
   focus?: { axis: 'row' | 'col'; lane: number } | null;
   /** How dim the rest goes around a focused row or column, 0 to 1. */
@@ -721,13 +723,22 @@ export function drawGrid(
     }
   }
 
-  if (opts.picked) {
-    const [x0, x1] = laneOnScreen(layout.lanes[opts.picked.col], frame, view, 'x');
-    const [y0, y1] = laneOnScreen(layout.lanes[opts.picked.row], frame, view, 'y');
-    ctx.strokeStyle = palette.text;
-    ctx.lineWidth = 1.5;
+  // The hovered and picked squares: a soft halo in the ink, then the ring —
+  // the same glow the Arcs tab gives an arc.
+  const ring = (cell: { row: number; col: number }, strong: boolean) => {
+    const [x0, x1] = laneOnScreen(layout.lanes[cell.col], frame, view, 'x');
+    const [y0, y1] = laneOnScreen(layout.lanes[cell.row], frame, view, 'y');
+    const ink = rgbOf(palette.text);
+    ctx.strokeStyle = rgba(ink, strong ? 0.45 : 0.3);
+    ctx.lineWidth = strong ? 7 : 5;
     ctx.strokeRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
-  }
+    ctx.strokeStyle = strong ? palette.text : rgba(ink, 0.8);
+    ctx.lineWidth = strong ? 1.5 : 1;
+    ctx.strokeRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
+  };
+  const hov = opts.hovered;
+  if (hov && !(opts.picked && opts.picked.row === hov.row && opts.picked.col === hov.col)) ring(hov, false);
+  if (opts.picked) ring(opts.picked, true);
   ctx.restore();
 
   drawBands(ctx, layout, grid, frame, view, viewport, palette, opts.focus ?? null);

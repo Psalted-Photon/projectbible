@@ -376,8 +376,10 @@ export interface DetailDrawOptions {
   /** The clock, and the Motion level: lines only fly at 'full'. */
   now: number;
   motion: 'full' | 'reduced' | 'off';
-  /** A picked link to draw on top, solid. */
+  /** A picked link to draw on top, solid, with a halo like a picked arc's. */
   picked?: number | null;
+  /** The link under the mouse, with a fainter halo. */
+  hovered?: number | null;
 }
 
 export interface DetailStats {
@@ -513,16 +515,31 @@ export function drawDetail(
     ctx.fill();
   }
 
-  if (opts.picked != null && opts.picked >= 0) {
-    const [ya, yb] = ends(data, frame, opts.picked);
+  // The hovered and picked lines, over the rest: a soft halo in the ink, then
+  // the line itself — the same glow the Arcs tab gives an arc.
+  const glow = (link: number, strong: boolean) => {
+    const [ya, yb] = ends(data, frame, link);
     const pts = linePoints(frame, config, ya, yb);
-    ctx.lineWidth = Math.max(2, config.thickness * 3);
-    ctx.strokeStyle = palette.text;
-    ctx.beginPath();
-    ctx.moveTo(pts[0], pts[1]);
-    ctx.bezierCurveTo(pts[2], pts[3], pts[4], pts[5], pts[6], pts[7]);
+    const trace = () => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0], pts[1]);
+      ctx.bezierCurveTo(pts[2], pts[3], pts[4], pts[5], pts[6], pts[7]);
+    };
+    const ink = rgbOf(palette.text);
+    ctx.save();
+    ctx.lineCap = 'round';
+    trace();
+    ctx.strokeStyle = rgba(ink, strong ? 0.45 : 0.3);
+    ctx.lineWidth = strong ? 9 : 6;
     ctx.stroke();
-  }
+    trace();
+    ctx.strokeStyle = strong ? palette.text : rgba(ink, 0.8);
+    ctx.lineWidth = strong ? Math.max(2, config.thickness * 3) : Math.max(1.5, config.thickness * 2);
+    ctx.stroke();
+    ctx.restore();
+  };
+  if (opts.hovered != null && opts.hovered >= 0 && opts.hovered !== opts.picked) glow(opts.hovered, false);
+  if (opts.picked != null && opts.picked >= 0) glow(opts.picked, true);
 
   // ── Axes ──
   const placed: PlacedHeading[] = [];
