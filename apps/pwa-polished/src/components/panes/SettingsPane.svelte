@@ -41,6 +41,7 @@
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
   import PacksCheckup from "../PacksCheckup.svelte";
+  import { checkupDot } from "../../lib/packCheckup";
   import { getInterlinearSettings } from "../../adapters/settings";
   import { closeDB } from "../../adapters/db";
   import { getReaderFont } from "../../lib/readerFonts";
@@ -1398,6 +1399,7 @@
   <SettingsSection
     title="Storage &amp; updates"
     summary={storageSummary}
+    dot={$checkupDot}
     bind:open={openSections.storage}
     on:toggle={storageHeaderTapped}
   >

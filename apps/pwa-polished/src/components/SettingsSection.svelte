@@ -13,12 +13,15 @@
   import { createEventDispatcher } from "svelte";
   import { CaretRight } from "phosphor-svelte";
   import { reveal } from "../lib/motion";
+  import NotifyDot from "./NotifyDot.svelte";
 
   export let title: string;
   /** Short live description of the current values, shown when closed. */
   export let summary = "";
   export let open = false;
   export let sub = false;
+  /** The notification dot beside the title: something inside is waiting. */
+  export let dot = false;
 
   /** Fired on every tap of the header, with the new open state. */
   const dispatch = createEventDispatcher<{ toggle: boolean }>();
@@ -41,6 +44,7 @@
       <span class="sec-icon"><slot name="icon" /></span>
     {/if}
     <span class="sec-title">{title}</span>
+    <NotifyDot show={dot} inline />
     {#if summary && !open}
       <span class="sec-summary">{summary}</span>
     {/if}

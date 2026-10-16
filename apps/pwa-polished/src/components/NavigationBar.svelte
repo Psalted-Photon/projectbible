@@ -60,6 +60,8 @@
     jumpToVerse,
   } from "../lib/tts/readingEngine";
   import BrandSpinner from "./BrandSpinner.svelte";
+  import NotifyDot from "./NotifyDot.svelte";
+  import { checkupDot } from "../lib/packCheckup";
   import WindowTypeMenu from "./WindowTypeMenu.svelte";
   import HarmonyPicker from "./HarmonyPicker.svelte";
   import { openWindowOfType, openHarmonyView, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
@@ -2817,10 +2819,10 @@
       <button
         class="pill-btn pill-settings"
         on:click={openSettings}
-        title="Settings"
-        aria-label="Open settings"
+        title={$checkupDot ? "Settings · packs waiting" : "Settings"}
+        aria-label={$checkupDot ? "Open settings. Packs or updates are waiting." : "Open settings"}
       >
-        <span class="icon-badge icon-badge-settings"><Gear size={18} weight="bold" /><span class="icon-overlay"><Gear size={18} weight="thin" /></span></span>
+        <span class="icon-badge icon-badge-settings"><Gear size={18} weight="bold" /><span class="icon-overlay"><Gear size={18} weight="thin" /></span><NotifyDot show={$checkupDot} /></span>
       </button>
 
       <!-- Profile -->

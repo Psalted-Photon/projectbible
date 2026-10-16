@@ -30,10 +30,11 @@
     type CatalogPack,
     type PackSizes,
   } from '../lib/packInstaller';
-  import { checkup, checkupNotNow, refreshCheckup } from '../lib/packCheckup';
+  import { checkup, checkupDot, checkupNotNow, refreshCheckup } from '../lib/packCheckup';
   import { showNotice } from '../stores/noticeStore';
   import PackIcon from './icons/PackIcon.svelte';
   import BrandSpinner from './BrandSpinner.svelte';
+  import NotifyDot from './NotifyDot.svelte';
 
   const MB = 1024 * 1024;
 
@@ -103,6 +104,7 @@
   disabled={running || $installBusy || !$checkup.counted || waiting === 0}
   aria-expanded={open}
 >
+  <NotifyDot show={$checkupDot && !running} />
   <span class="icon">
     {#if running}
       <BrandSpinner size={22} title="Getting packs…" />
@@ -179,6 +181,7 @@
 <style>
   /* Check for updates' button, to the pixel. */
   .checkup-button {
+    position: relative;
     width: 100%;
     display: flex;
     align-items: center;
