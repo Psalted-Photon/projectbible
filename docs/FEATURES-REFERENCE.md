@@ -924,7 +924,18 @@ Files: `src/components/panes/PacksPane.svelte` (1,238), `src/adapters/PackManage
 
 `PacksPane.svelte`: Database Statistics, Installed Packs, Quick Install, Voices (Read Aloud), Advanced Install, About Packs.
 
-Entry point from Settings: "Manage Packs" button, `SettingsPane.svelte`.
+Entry point from Settings: "Manage Packs" button, `SettingsPane.svelte` (inside Dev Options, hidden by default).
+
+### 19.4a Packs check-up and the notification dot
+
+`src/lib/packCheckup.ts` keeps one count of what the device is missing: catalog packs never installed (`packsStillToInstall`), installed packs with a newer manifest hash that were not ignored (`unignoredUpdates` in `packUpdates.ts`), and Read Aloud voices the device can run (`voicesStillToInstall`). `startCheckup()` runs from `main.ts`: the first count waits 4 s, then recounts on `packsUpdated` and `voicesUpdated` (fired by `downloadVoice` and `removeVoice` in `adapters/tts.ts`).
+
+- `checkupDot` is true once the manifest has been read (`packCheckReached`) and at least one waiting item is not in the Not now list. Not now (`checkupNotNow()`) saves the keys waiting at that moment to `projectbible_checkup_not_now`. Keys are `pack:<id>`, `update:<id>:<sha>`, `voice:<id>`, so a newer version of the same pack brings the dot back.
+- `PacksCheckup.svelte` is the button under Check for updates in Settings → Storage & updates, styled like it. Tapping it opens a list of what will download, with sizes, plus Get everything and Not now.
+- Get everything runs `installAll()` in `packInstaller.ts`, which does updates first (old copy kept until the new one is in, as in `updatePack`), then missing packs in `INSTALL_ALL_ORDER`, then voices. Manage Packs → Install all and the tutorial's Install everything run the same function.
+- `NotifyDot.svelte` draws the dot on the gear (`NavigationBar.svelte`), on the Storage & updates header (`SettingsSection` `dot` prop) and on the button. Size and color come from `--notify-dot-size` and `--notify-dot-color`, set by `applyNotifyDot()` in `lib/notifyDot.ts`.
+
+**Study Tools retired 2026-10-16.** Nothing read its map layers, places or chronological order any more: the Historical Map, Timeline and the built-in reading plan order replaced them. It is out of the catalog and the manifest, the importer refuses it, and `removeRetiredPacks()` in `db-manager.ts` removes it from devices that have it on launch.
 
 Pack `type` values, from `src/adapters/db.ts`: `text`, `lexicon`, `dictionary`, `places`, `geonames`, `map`, `cross-references`, `morphology`, `audio`, `original-language`, `commentary`, `references`, `headings`, `people`, `isbe`, `encyclotopical`, `art`, `atlas-map`, `study`, `devotionals`, `timeline`, `connections`, `word-links`.
 
@@ -937,8 +948,8 @@ Pack `type` values, from `src/adapters/db.ts`: `text`, `lexicon`, `dictionary`, 
 - `PACK_MANIFEST_URL` — `/api/packs/manifest.json` in production (proxied to GitHub Releases), `/packs/consolidated/manifest.json` in dev.
 - `USE_BUNDLED_PACKS` — true in dev, or when `VITE_USE_BUNDLED_PACKS === 'true'`.
 - `FEATURES` — `lazyPackLoading`, `packUpdates` (both keyed off `!USE_BUNDLED_PACKS`), `persistentStorage`, and `ttsReadAloud` (a kill switch for Read Aloud).
-- `PACK_PRIORITY` — `essential: [bootstrap]`, `high: [translations]`, `medium: [study-tools, lexical]`, `low: [ancient-languages]`.
-- `PACK_TRIGGERS` — which user action loads which pack: `translations` on `reader-open`, `ancient-languages` on `hebrew-greek-toggle`, `lexical` on `word-study-open`, `study-tools` on `maps-open`.
+- `PACK_PRIORITY` — `essential: [bootstrap]`, `high: [translations]`, `medium: [lexical]`, `low: [ancient-languages]`.
+- `PACK_TRIGGERS` — which user action loads which pack: `translations` on `reader-open`, `ancient-languages` on `hebrew-greek-toggle`, `lexical` on `word-study-open`.
 - `UI` — `showProgressDuringDownload`, `allowPackRemoval`, `showStorageUsage`, `promptForPersistentStorage`.
 
 ### 19.6 Related docs
@@ -1086,6 +1097,8 @@ Stored in `localStorage` under `projectbible_settings` (`settings.ts`). Accessor
 | `wakeAlarm` | `WakeAlarmSettings` | unset | Wake Alarm pane | mirrored, see [22](#22-wake-alarm) |
 | `allowRotation` | boolean | `false` | Settings pane | |
 | `autoCheckUpdates` | boolean | `true` | Settings pane | |
+| `notifyDotSize` | 'small' | 'normal' | 'large' | 'normal' | Settings pane → Appearance | |
+| `notifyDotColor` | 'accent' | 'red' | 'orange' | 'gold' | 'green' | 'white' | 'accent' | Settings pane → Appearance | |
 | `timezone` | IANA string | browser-detected | Settings pane | ✓ |
 | `dailyDriver*` (6 keys) | string | unset → `'kjv'` fallback | Settings pane, Profile | ✓ |
 
@@ -1148,7 +1161,7 @@ Color swatches are deliberately *not* stored per surface — both editors share 
 | Reader | layout · red letters | Font Size, Line Spacing, Verse Layout, Word Wrap, Words of Jesus in red letters, Theme colors in reader titles, Show art icons on Bible scenes, Underline multi-word place names, Menu when you tap a word, Measurements (US / Metric), plus a nested **Interlinear** sub-section |
 | Read Aloud (AI voice) | voice · speed | Voice, Reading Speed, Read section headings aloud, Highlight the verse being read, Soft glow drifts along the words, Wake Alarm button |
 | General | timezone · rotation | Time Zone, Allow Screen Rotation |
-| Storage & Updates | Packs · Cache · Updates | Pack Management, Cache Management, auto-update toggle, manual check |
+| Storage & Updates | Packs · Cache · Updates | Pack Management, Cache Management, auto-update toggle, manual check, missing packs & updates button |
 
 `SettingsSection.svelte` renders one section; its `sub` prop gives the nested Interlinear panel its inset styling. Open/closed state lives in `openSections`.
 

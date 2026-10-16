@@ -519,6 +519,8 @@ Everything in the app — translations, lexicons, commentaries, the encyclopedia
 - **Voice packs** — Read Aloud voices are managed here too.
 - **Devotionals** — Spurgeon's *Morning and Evening* and *Faith's Checkbook*, and Bagster's *Daily Light*. Read them from Reading Plan → Devotionals.
 - **Word Links** — ties English words to the Greek or Hebrew words they translate, so Strong's verse lists can mark the right English (KJV, BSB, WEB and NET).
+- **Missing packs & updates** — one button in Settings → Storage & updates finds every pack you haven't installed, every newer version of one you have, and every Read Aloud voice your device can run. It shows what will download and how big it is, then gets it all, one at a time. Not now puts it off until something new turns up.
+- **Notification dot** — when packs, updates or voices are waiting, a small dot on the gear leads to Storage & updates and on to that button. It goes away once the app is fully up to date. Its size and color are in Settings → Appearance.
 - **See what's installed**, how big it is, and remove anything you don't want.
 - **Database statistics** — how much space your content is using.
 - **Packs load when needed** — the app fetches a pack the first time you use something that requires it, with a progress bar, rather than making you wait at startup.
@@ -620,6 +622,7 @@ The formatting toolbar slides out of the way when you want the space.
 - Which menu opens when you tap a word — the ring or the older popup
 - Measurements in US or Metric, for the weights-and-measures pill
 - Allow screen rotation
+- Notification dot size (Small, Normal, Large) and color, per device
 
 ### 21.6 Read Aloud settings
 
@@ -633,6 +636,7 @@ Set your time zone so "today" means today where you are. This drives the journal
 
 - **Automatic updates** — the app checks for a new version on open and whenever you come back to it, then updates itself and tells you it's running the latest version. Can be turned off.
 - **Check for updates** manually at any time.
+- **Get missing packs & updates** — every missing pack, pack update and voice in one tap. See [19](#19-content-packs).
 - **Clear cache** — wipes cached packs, service workers, and databases. The fix if packs won't install or the app is stuck on old data.
 
 ### 21.9 Daily greeting
