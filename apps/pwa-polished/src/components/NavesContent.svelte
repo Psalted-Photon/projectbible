@@ -56,7 +56,8 @@
 
   export let windowId: string | null = null;
   export let onClose: (() => void) | null = null;
-  export let onPopOut: ((snap: PopOutSnapshot) => void) | null = null;
+  /** Null pins the contents: there is no topic to carry. */
+  export let onPopOut: ((snap: PopOutSnapshot | null) => void) | null = null;
   /** Reports the view on the way out, so switching tabs and coming back lands
    *  where you left rather than at the top. */
   export let onSnapshot: ((snap: PopOutSnapshot) => void) | null = null;
@@ -504,9 +505,14 @@
     // frame with a different work inside it. That is what makes these tabs.
   }
 
+  /** Pins the topic the card holds — still loading, the one it was asked
+   *  for — and with none at all, the contents. */
   function popOut() {
-    const snap = viewSnapshot();
-    if (snap) onPopOut?.(snap);
+    const pending =
+      topicId != null
+        ? { topicId, primaryName: title, tab: activeTab, expanded, expandedBooks: [], scrollTop: 0, trail }
+        : null;
+    onPopOut?.(viewSnapshot() ?? pending);
   }
 
   /** Everything needed to put this topic back exactly as it is now. */
@@ -546,16 +552,14 @@
       </div>
     </div>
     <div class="head-actions">
-      {#if !showContents && topic}
-        {#if onPopOut}
-          <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
-              <path d="M14 4v16" stroke-width="1.8" />
-              <path d="M6.2 9.6L8.6 12l-2.4 2.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
-        {/if}
+      {#if onPopOut}
+        <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
+            <path d="M14 4v16" stroke-width="1.8" />
+            <path d="M6.2 9.6L8.6 12l-2.4 2.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
       {/if}
       {#if onClose}
         <CloseX edge on:click={() => onClose?.()} />
@@ -787,7 +791,16 @@
     gap: calc(8px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
-  .pop-btn,
+  .pop-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #999);
+    cursor: pointer;
+    padding: calc(2px * var(--bar-scale, 1));
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
   }

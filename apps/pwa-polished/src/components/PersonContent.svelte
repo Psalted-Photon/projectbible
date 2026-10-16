@@ -60,7 +60,8 @@
   /** People walked through to reach this one, oldest first — the back trail. */
   export let initialTrail: TrailStop[] = [];
   export let onClose: (() => void) | null = null;
-  export let onPopOut: ((snap: { personId: string; primaryName: string }) => void) | null = null;
+  /** Null pins the contents: there is nobody to carry. */
+  export let onPopOut: ((snap: { personId: string; primaryName: string } | null) => void) | null = null;
   /** How far down the bio was, restored when you come back to this tab. */
   export let initialScrollTop = 0;
   /** Whose bio that offset was taken on. An offset belongs to the page it was
@@ -564,9 +565,11 @@
     if (!docked) onClose?.();
   }
 
+  /** Pins the person the card holds — still loading, the one it was asked
+   *  for — and with nobody at all, the contents. */
   function popOut() {
-    if (!person) return;
-    onPopOut?.({ personId: person.id, primaryName: title });
+    const id = person?.id ?? personId;
+    onPopOut?.(id ? { personId: id, primaryName: title } : null);
   }
 </script>
 
@@ -577,33 +580,33 @@
   {/if}
   <LibraryFace bind:this={face}>
   {#if showHeader}
-    <div class="person-header">
-      <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
-      <div class="head-text">
-        <h2>{showContents ? peopleSource.label : title}</h2>
-        <div class="sub">
-          {#if showContents}
-            {peopleSource.subtitle}
-          {:else if person?.verseCount}
-            {person.verseCount} verse{person.verseCount === 1 ? "" : "s"}
-          {/if}
+    <div class="person-header" class:with-tree={showContents}>
+      <div class="head-left">
+        <LibraryNavButtons {canGoBack} {canFlip} onIndex={showContents} onBack={goBack} onFlip={flip} />
+        <div class="head-text">
+          <h2>{showContents ? peopleSource.label : title}</h2>
+          <div class="sub">
+            {#if showContents}
+              {peopleSource.subtitle}
+            {:else if person?.verseCount}
+              {person.verseCount} verse{person.verseCount === 1 ? "" : "s"}
+            {/if}
+          </div>
         </div>
       </div>
+      {#if showContents}
+        <button class="tree-btn" on:click={() => openTreeOn()} aria-label="Open the family tree">
+          Family Tree <Tree size={16} weight="bold" />
+        </button>
+      {/if}
       <div class="head-actions">
-        {#if !showContents && person}
-          {#if onPopOut}
-            <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
-                <path d="M14 4v16" stroke-width="1.8" />
-                <path d="M6.2 9.6L8.6 12l-2.4 2.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-          {/if}
-        {/if}
-        {#if showContents}
-          <button class="pop-btn tree-btn" on:click={() => openTreeOn()} title="Family tree" aria-label="Open the family tree">
-            <Tree size={21} />
+        {#if onPopOut}
+          <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
+              <path d="M14 4v16" stroke-width="1.8" />
+              <path d="M6.2 9.6L8.6 12l-2.4 2.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
           </button>
         {/if}
         {#if onClose}
@@ -874,9 +877,27 @@
     border-bottom: 1px solid var(--border-color, #333);
     flex-shrink: 0;
   }
-  .head-text {
+  /* Back/contents buttons and the title, kept together so the index view can
+     center the Family Tree pill between them and the pin and close. */
+  .head-left {
+    display: flex;
+    align-items: flex-start;
+    gap: calc(12px * var(--bar-scale, 1));
     flex: 1 1 180px;
     min-width: 0;
+  }
+  .head-text {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  /* The index: equal side columns put the pill dead center of the header. */
+  .person-header.with-tree {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+  }
+  .person-header.with-tree .head-actions {
+    justify-self: end;
   }
   .head-text h2 {
     margin: 0;
@@ -933,18 +954,36 @@
     color: var(--text-muted, #666);
     font-size: 11px;
   }
-  .pop-btn,
+  .pop-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #999);
+    cursor: pointer;
+    padding: calc(2px * var(--bar-scale, 1));
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
   }
-  /* The way into the family tree: a soft green chip so it reads as a door. */
-  .pop-btn.tree-btn {
-    padding: calc(5px * var(--bar-scale, 1));
-    border-radius: 8px;
+  /* The way into the family tree: a soft green pill so it reads as a door. */
+  .tree-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(6px * var(--bar-scale, 1));
+    padding: calc(5px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1));
+    border: none;
+    border-radius: 999px;
     background: rgba(76, 175, 96, 0.18);
     color: #7fd08f;
+    font-family: inherit;
+    font-size: calc(13px * var(--bar-scale, 1));
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
   }
-  .pop-btn.tree-btn:hover {
+  .tree-btn:hover {
     background: rgba(76, 175, 96, 0.3);
     color: #a6e3b2;
   }
@@ -1224,7 +1263,7 @@
     height: calc(18px * var(--bar-scale, 1));
   }
   .person-header .tree-btn :global(svg) {
-    width: calc(21px * var(--bar-scale, 1));
-    height: calc(21px * var(--bar-scale, 1));
+    width: calc(16px * var(--bar-scale, 1));
+    height: calc(16px * var(--bar-scale, 1));
   }
 </style>

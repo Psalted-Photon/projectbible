@@ -21,7 +21,7 @@
     MAIN_READER,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { clearCarriedWorks } from "../lib/openWork";
+  import { clearCarriedWorks, openWorkIndex, type WorkKey } from "../lib/openWork";
   import PackUpdateNotice from "./PackUpdateNotice.svelte";
 
   /** The packs behind each work, so the card can say when one has a new version. */
@@ -210,6 +210,14 @@
     close();
   }
 
+  /** Pin a card that has no subject open — its A–Z contents go to the window. */
+  function popOutIndex(work: WorkKey) {
+    const id = newWindow();
+    if (!id) return;
+    openWorkIndex(work, id);
+    close();
+  }
+
   function popOutNaves(snap: {
     topicId: number;
     primaryName: string;
@@ -218,21 +226,24 @@
     expandedBooks: string[];
     scrollTop: number;
     trail: { topicId: number; name: string }[];
-  }) {
+  } | null) {
+    if (!snap) return popOutIndex("topical");
     const id = newWindow();
     if (!id) return;
     windowStore.setWindowContent(id, "naves", { ...snap });
     close();
   }
 
-  function popOutPerson(snap: { personId: string; primaryName: string }) {
+  function popOutPerson(snap: { personId: string; primaryName: string } | null) {
+    if (!snap) return popOutIndex("people");
     const id = newWindow();
     if (!id) return;
     windowStore.setWindowContent(id, "person", { ...snap });
     close();
   }
 
-  function popOutStrongs(snap: { strongsId: string; tab: string; trail: { id: string; name: string }[] }) {
+  function popOutStrongs(snap: { strongsId: string; tab: string; trail: { id: string; name: string }[] } | null) {
+    if (!snap) return popOutIndex("strongs");
     const id = newWindow();
     if (!id) return;
     windowStore.setWindowContent(id, "strongs", { strongsId: snap.strongsId, tab: snap.tab, trail: snap.trail });

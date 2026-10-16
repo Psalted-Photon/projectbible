@@ -59,7 +59,8 @@
   export let windowId: string | null = null;
   /** The host's own close. Docked, Window.svelte supplies the ×. */
   export let onClose: (() => void) | null = null;
-  export let onPopOut: ((snap: Snapshot) => void) | null = null;
+  /** Null pins the contents: there is no entry to carry. */
+  export let onPopOut: ((snap: Snapshot | null) => void) | null = null;
   /** Reports the view on the way out, so switching tabs and coming back lands
    *  where you left rather than at the top. */
   export let onSnapshot: ((snap: Snapshot) => void) | null = null;
@@ -348,9 +349,11 @@
     if (!docked) onClose?.();
   }
 
+  /** Pins the entry the card holds — still loading, the one it was asked
+   *  for — and with none at all, the contents. */
   function popOut() {
-    const snap = viewSnapshot();
-    if (snap) onPopOut?.(snap);
+    const pending = strongsId ? { strongsId, tab: activeTab, scrollTop: 0, trail } : null;
+    onPopOut?.(viewSnapshot() ?? pending);
   }
 
   /** Everything needed to put this entry back exactly as it is now. */
@@ -405,7 +408,7 @@
         {/if}
       </div>
       <div class="head-actions">
-        {#if !showContents && entry && onPopOut}
+        {#if onPopOut}
           <button class="pop-btn" on:click={popOut} title="Pin beside the reader" aria-label="Pin beside the reader">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8" />
@@ -542,7 +545,16 @@
     gap: calc(8px * var(--bar-scale, 1));
     flex-shrink: 0;
   }
-  .pop-btn,
+  .pop-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #999);
+    cursor: pointer;
+    padding: calc(2px * var(--bar-scale, 1));
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
   .pop-btn:hover {
     color: var(--color-primary, #4a90e2);
   }
