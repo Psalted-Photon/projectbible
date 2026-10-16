@@ -1,7 +1,6 @@
 <script lang="ts">
   import { CaretRight } from "phosphor-svelte";
   import { get } from "svelte/store";
-  import { getBookColor } from "../../lib/bibleData.js";
   import StrongsVerseList from "../StrongsVerseList.svelte";
   import EnglishChip from "../EnglishChip.svelte";
   import {
@@ -9,7 +8,6 @@
     buildVerseUses,
     buildFormGroups,
     sourcesByTestament,
-    summarizeArc,
     buildDistribution,
     refKey,
     type StrongsUsage,
@@ -55,8 +53,8 @@
     onTab?.(tab);
   }
 
-  // --- Usage: the Forms, Occurrences, Arc and Spread tabs -----------------
-  // All four answer questions about the same set of tagged words, so they
+  // --- Usage: the Forms, Occurrences and Spread tabs -----------------
+  // All three answer questions about the same set of tagged words, so they
   // share one scan of the morphology store rather than running one apiece.
   let usage: StrongsUsage | null = null;
   let usageLoading = false;
@@ -80,7 +78,6 @@
    * become wallpaper.
    */
   $: activeBaseline = source === null ? variantBaseline : { OT: [], NT: [] };
-  $: arc = summarizeArc(verseUses);
   $: distribution = buildDistribution(verseUses);
   /** The picker only earns its row when there is a choice to make. A Hebrew
    *  entry only ever appears in one text. */
@@ -126,7 +123,7 @@
   /**
    * Every tagged word carrying this number, in one pass.
    *
-   * All four tabs read from the result, and the source picker filters it in
+   * All three tabs read from the result, and the source picker filters it in
    * memory, so switching editions or tabs never goes back to the database.
    */
   async function loadUsage(id: string) {
@@ -152,7 +149,7 @@
   }
 
   $: needsUsage =
-    activeTab === "forms" || activeTab === "occurrences" || activeTab === "arc" || activeTab === "spread";
+    activeTab === "forms" || activeTab === "occurrences" || activeTab === "spread";
   $: if (needsUsage && usageEntry) loadUsage(usageEntry);
 
   /** Open on the text you are already reading when that is one of the originals,
@@ -249,7 +246,6 @@
     { key: "definition", label: "Definition" },
     { key: "forms", label: "Forms" },
     { key: "occurrences", label: "Occurrences" },
-    { key: "arc", label: "Arc" },
     { key: "spread", label: "Spread" },
     { key: "related", label: "Related" },
   ];
@@ -448,79 +444,6 @@
         />
       {/if}
     </div>
-  {:else if activeTab === "arc"}
-    <div class="usage-view">
-      {#if usageLoading}
-        <p class="hint show-late">Loading…</p>
-      {:else if arc.first && arc.last}
-        <!-- Bound once here so the click handlers close over a verse that
-             is known to exist, rather than re-reading a nullable field
-             whenever they happen to fire. -->
-        {@const first = arc.first}
-        {@const last = arc.last}
-        {#if arc.hapax}
-          <p class="hapax">
-            <strong>Hapax legomenon</strong> — used once in the whole of the
-            text installed. Everything this word means rests on one verse.
-          </p>
-        {/if}
-        <dl class="arc">
-          <dt>Reach</dt>
-          <dd>
-            {arc.total} verse{arc.total === 1 ? "" : "s"} across
-            {arc.books} book{arc.books === 1 ? "" : "s"}
-          </dd>
-          <dt>First</dt>
-          <dd>
-            <button class="arc-ref" on:click={() => handleVerseClick(first)}>
-              {refKey(first)}
-            </button>
-          </dd>
-          <dt>Last</dt>
-          <dd>
-            <button class="arc-ref" on:click={() => handleVerseClick(last)}>
-              {refKey(last)}
-            </button>
-          </dd>
-          {#if arc.busiest}
-            <dt>Densest</dt>
-            <dd>
-              <span style="color:{getBookColor(arc.busiest.book)}">{arc.busiest.book}</span>
-              <span class="arc-dim">({arc.busiest.count})</span>
-            </dd>
-          {/if}
-        </dl>
-        <!-- Only when a word actually reaches both. How the Septuagint uses
-             a word against how the New Testament does is the comparison
-             that makes a Greek word study worth doing. -->
-        {#each arc.spans as span (span.testament)}
-          <div class="arc-span">
-            <h3>{span.label}</h3>
-            <dl class="arc">
-              <dt>Reach</dt>
-              <dd>
-                {span.total} verse{span.total === 1 ? "" : "s"} across
-                {span.books} book{span.books === 1 ? "" : "s"}
-              </dd>
-              <dt>First</dt>
-              <dd>
-                <button class="arc-ref" on:click={() => handleVerseClick(span.first)}>
-                  {refKey(span.first)}
-                </button>
-              </dd>
-              <dt>Last</dt>
-              <dd>
-                <button class="arc-ref" on:click={() => handleVerseClick(span.last)}>
-                  {refKey(span.last)}
-                </button>
-              </dd>
-            </dl>
-          </div>
-        {/each}
-      {:else}
-        <p class="coming-soon">No occurrences found in the installed texts.</p>
-      {/if}
-    </div>
   {:else if activeTab === "spread"}
     <div class="usage-view">
       {#if usageLoading}
@@ -536,7 +459,7 @@
             {#if distribution.corpora.length > 1}
               <h3 class="spread-corpus-name">
                 {corpus.label}
-                <span class="arc-dim">{corpus.total}</span>
+                <span class="spread-dim">{corpus.total}</span>
               </h3>
             {/if}
             {#each corpus.categories as cat (cat.category)}
@@ -1120,74 +1043,9 @@
     text-align: right;
   }
 
-  /* --- Arc tab ------------------------------------------------------------ */
-  .hapax {
-    background: color-mix(in srgb, #fde047 12%, transparent);
-    border: 1px solid color-mix(in srgb, #fde047 35%, transparent);
-    border-radius: 6px;
-    color: #e4e7ec;
-    font-size: 13px;
-    line-height: 1.5;
-    margin: 0;
-    padding: 9px 11px;
-  }
-
-  .hapax strong {
-    color: #fde047;
-  }
-
-  dl.arc {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 6px 14px;
-    margin: 0;
-    align-items: baseline;
-  }
-
-  dl.arc dt {
+  .spread-dim {
     color: var(--text-muted, #9aa0aa);
     font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  dl.arc dd {
-    margin: 0;
-    font-size: 13.5px;
-  }
-
-  .arc-ref {
-    background: none;
-    border: none;
-    padding: 0;
-    font-family: inherit;
-    font-size: 13.5px;
-    color: var(--color-primary, #4a90e2);
-    cursor: pointer;
-    text-decoration: underline;
-    text-decoration-style: dotted;
-    text-underline-offset: 3px;
-  }
-
-  .arc-ref:hover {
-    text-decoration-style: solid;
-  }
-
-  .arc-dim {
-    color: var(--text-muted, #9aa0aa);
-    font-size: 12px;
-  }
-
-  .arc-span {
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
-    padding-top: 12px;
-  }
-
-  .arc-span h3 {
-    margin: 0 0 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-color, #dfe2e8);
   }
 
   .coming-soon {

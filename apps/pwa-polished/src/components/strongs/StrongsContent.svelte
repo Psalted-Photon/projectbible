@@ -85,7 +85,8 @@
 
   let entry: StrongsEntryData | null = null;
   let loading = false;
-  let activeTab: EntryTab = initialTab ?? "definition";
+  /** A window saved on the old Arc tab opens on Spread, the nearest one left. */
+  let activeTab: EntryTab = (initialTab as string) === "arc" ? "spread" : initialTab ?? "definition";
   let bodyEl: HTMLDivElement | null = null;
   /** The saved scroll belongs to the first entry shown, not to the next one. */
   let restoreScroll = initialScrollTop;

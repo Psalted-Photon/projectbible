@@ -16,7 +16,7 @@ import { firstForm } from './collate';
 export type StrongsEntryData = StrongEntry & { related?: RelatedWords };
 
 /** The entry's own tabs, under its header. */
-export type EntryTab = 'definition' | 'forms' | 'occurrences' | 'arc' | 'spread' | 'related';
+export type EntryTab = 'definition' | 'forms' | 'occurrences' | 'spread' | 'related';
 
 /**
  * The entry for an id, kept under the id asked for. A split meaning with no
