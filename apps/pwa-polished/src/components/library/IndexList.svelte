@@ -535,13 +535,13 @@
                 <button class="jump-btn" title="Read the bio" aria-label="Bio of {row.name}" on:click={(e) => openBadge(e, row, "bio")}><PanelIcon name="people" size={14} plain /></button>
               {/if}
               {#if shows("entry") && row.hasEntry}
-                <button class="jump-btn" title="Read the encyclopedia article" aria-label="Encyclopedia article on {row.name}" on:click={(e) => openBadge(e, row, "entry")}><Books size={14} weight="bold" /></button>
+                <button class="jump-btn books" title="Read the encyclopedia article" aria-label="Encyclopedia article on {row.name}" on:click={(e) => openBadge(e, row, "entry")}><Books size={14} weight="bold" /></button>
               {/if}
               {#if shows("topic") && row.hasTopic}
-                <button class="jump-btn" title="Open the topic in Nave's" aria-label="Nave's topic {row.name}" on:click={(e) => openBadge(e, row, "topic")}><Tag size={14} weight="bold" /></button>
+                <button class="jump-btn tag" title="Open the topic in Nave's" aria-label="Nave's topic {row.name}" on:click={(e) => openBadge(e, row, "topic")}><Tag size={14} weight="bold" /></button>
               {/if}
               {#if shows("dict") && row.hasDict}
-                <button class="jump-btn" title="Look it up in the dictionary" aria-label="Dictionary entry for {row.name}" on:click={(e) => openBadge(e, row, "dict")}><TextAa size={14} weight="bold" /></button>
+                <button class="jump-btn dict" title="Look it up in the dictionary" aria-label="Dictionary entry for {row.name}" on:click={(e) => openBadge(e, row, "dict")}><TextAa size={14} weight="bold" /></button>
               {/if}
               <!-- Right after the dictionary badge, directly beside ★ — not
                    before the map pin. The pin never appears on a People row,
@@ -551,7 +551,7 @@
                    the dictionary badge gives it a steady column. -->
               {#if onOpenTree && $familyTreeIds.has(String(row.id))}
                 <button
-                  class="jump-btn"
+                  class="jump-btn tree"
                   title="See on the family tree"
                   aria-label="{row.name} on the family tree"
                   on:click={(e) => {
@@ -803,6 +803,10 @@
     opacity: 1;
     transform: scale(1.3);
   }
+  .jump-btn.books { color: #3b82f6; }
+  .jump-btn.tag { color: #eab308; }
+  .jump-btn.tree { color: #22c55e; }
+  .jump-btn.dict { color: #ef4444; }
 
   .star {
     background: none;
