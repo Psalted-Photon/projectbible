@@ -42,6 +42,8 @@
   import SettingsSection from "../SettingsSection.svelte";
   import PacksCheckup from "../PacksCheckup.svelte";
   import { checkupDot } from "../../lib/packCheckup";
+  import { DOT_SIZES, DOT_COLORS, applyNotifyDot, type DotSize, type DotColor } from "../../lib/notifyDot";
+  import NotifyDot from "../NotifyDot.svelte";
   import { getInterlinearSettings } from "../../adapters/settings";
   import { closeDB } from "../../adapters/db";
   import { getReaderFont } from "../../lib/readerFonts";
@@ -141,6 +143,8 @@
   let navBarPinned: boolean = false;
   let navBarClock: boolean = true;
   let navBarSize: BarSize = "normal";
+  let notifyDotSize: DotSize = "normal";
+  let notifyDotColor: DotColor = "accent";
   let motionSetting: MotionSetting = "system";
   let showRedLetter: boolean = true;
   let themedTitles: boolean = true;
@@ -245,6 +249,8 @@
       navBarPinned,
       navBarClock,
       navBarSize,
+      notifyDotSize,
+      notifyDotColor,
       motion: motionSetting,
       showRedLetter,
       themedTitles,
@@ -502,6 +508,8 @@
     navBarPinned = settings.navBarPinned === true;
     navBarClock = settings.navBarClock !== false;
     navBarSize = settings.navBarSize ?? "normal";
+    notifyDotSize = settings.notifyDotSize ?? "normal";
+    notifyDotColor = settings.notifyDotColor ?? "accent";
     motionSetting = settings.motion ?? "system";
     showRedLetter = settings.showRedLetter !== false;
     themedTitles = settings.themedTitles !== false;
@@ -749,6 +757,7 @@
     );
 
     applyBarSize(navBarSize);
+    applyNotifyDot(notifyDotSize, notifyDotColor);
     applyMotion(motionSetting);
 
     // Apply word wrap
@@ -812,6 +821,8 @@
     navBarPinned;
     navBarClock;
     navBarSize;
+    notifyDotSize;
+    notifyDotColor;
     motionSetting;
     showRedLetter;
     themedTitles;
@@ -1007,6 +1018,37 @@
       </label>
       <p class="section-description dev-note">
         The navigation bar, window headers and tabs. On this device only.
+      </p>
+    </div>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Notification dot</span>
+        <select bind:value={notifyDotSize}>
+          {#each DOT_SIZES as opt}
+            <option value={opt.value}>{opt.label}</option>
+          {/each}
+        </select>
+      </label>
+      <div class="dot-colors" role="radiogroup" aria-label="Notification dot color">
+        {#each DOT_COLORS as opt}
+          <button
+            type="button"
+            class="dot-color"
+            class:selected={notifyDotColor === opt.value}
+            role="radio"
+            aria-checked={notifyDotColor === opt.value}
+            title={opt.label}
+            style="--swatch: {opt.color}"
+            on:click={() => (notifyDotColor = opt.value)}
+          ><span class="dot-color-fill"></span></button>
+        {/each}
+        <span class="dot-preview" title="How it looks">
+          <span class="dot-preview-gear"><NotifyDot show /></span>
+        </span>
+      </div>
+      <p class="section-description dev-note">
+        Shows on the gear when packs, updates or voices are waiting. On this device only.
       </p>
     </div>
 
@@ -1950,6 +1992,54 @@
 
   .toggle-label {
     user-select: none;
+  }
+
+  .dot-colors {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0.6rem 0 0.25rem;
+  }
+
+  .dot-color {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+  }
+
+  .dot-color.selected {
+    border-color: #f0f0f0;
+  }
+
+  .dot-color-fill {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--swatch);
+  }
+
+  /* A stand-in for the gear, so the size can be judged where it will sit. */
+  .dot-preview {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 6px;
+  }
+
+  .dot-preview-gear {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: radial-gradient(circle, #c0c0c0 0%, #c0c0c0 20%, #000000 100%);
   }
 
   .storage-facts {

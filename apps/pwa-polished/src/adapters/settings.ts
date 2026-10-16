@@ -245,6 +245,10 @@ export interface UserSettings {
   // short fade in place of every movement, or none at all. Per-device like Bar
   // size. See lib/motion.ts.
   motion?: 'system' | 'reduced' | 'off'; // default 'system'
+  // The notification dot's size and color. Per-device like Bar size. See
+  // lib/notifyDot.ts.
+  notifyDotSize?: 'small' | 'normal' | 'large'; // default 'normal'
+  notifyDotColor?: 'accent' | 'red' | 'orange' | 'gold' | 'green' | 'white'; // default 'accent'
   // Where the floating Read Aloud player was dragged to, in pixels from the
   // top-left of the screen. Per-device: a spot on a phone means nothing on a
   // desktop. Unset puts it bottom-right.

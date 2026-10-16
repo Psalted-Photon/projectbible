@@ -5,6 +5,7 @@ import App from './App.svelte';
 import { hasAnyText, hasStarterText, installStarterText, warmPackManifest } from './lib/progressive-init';
 import { applyTheme, getSettings } from './adapters/settings';
 import { applyBarSize } from './lib/barSize';
+import { applyNotifyDot } from './lib/notifyDot';
 import { applyMotion, installPress } from './lib/motion';
 import { FEATURES } from './config';
 import './adapters/tts'; // Read Aloud engine client (registers __tts dev hook; worker starts lazily)
@@ -72,6 +73,7 @@ function applyInitialSettings() {
 
   // Bar size, before the first paint so no bar draws at the wrong size first.
   applyBarSize(settings.navBarSize);
+  applyNotifyDot(settings.notifyDotSize, settings.notifyDotColor);
   // Motion likewise, so nothing plays its movement before the setting lands.
   applyMotion(settings.motion);
   installPress();
