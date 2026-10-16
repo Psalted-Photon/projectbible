@@ -41,10 +41,11 @@ export const PANE_TIPS: Tip[] = [
   section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Auto-Read Alarm is here too.'),
   section('General', 'Tutorial Mode, your time zone, the clock in the top bar, and screen rotation.'),
   section('Privacy', 'The journal lock: your fingerprint or face before the Journal opens, with your journal scrambled on this device and in the cloud.'),
-  section('Storage & Updates', 'How much space irisBible takes on this device, when it last updated, and checking for a new version.'),
+  section('Storage & Updates', 'How much space irisBible takes on this device, when it last updated, checking for a new version, and getting every missing pack and update in one tap.'),
   section('Dev Options', 'Every pack in one list, clearing the cache, and the eruda console button. Hide Dev Options puts them away again.'),
 
   setting('settings-theme', 'Theme', 'Theme', 'Auto follows your device. Sepia and Light are easier in daylight; Custom is yours to set.', true),
+  setting('settings-notify-dot', 'Notification dot', 'Notification dot', 'The dot’s size and color. It shows on the gear when packs, updates or voices are waiting, and goes away once everything is in.', true),
   setting('settings-bar-size', 'Bar size', 'Bar size', 'Small, Normal or Large: the top bar, window headers and tabs, buttons and all. Set on each device.', true),
   setting('settings-default-translations', 'Default Old Testament translation', 'Default translations', 'Going to a book in the other testament switches the reader to your pick for it. Not set keeps whatever you’re reading.'),
   setting('settings-layout', 'Verse Layout', 'Verse layout', 'One verse per line, or flowing paragraphs, with or without verse numbers.'),
@@ -74,6 +75,13 @@ export const PANE_TIPS: Tip[] = [
     body: 'Looks for a newer version of irisBible.',
   },
   {
+    id: 'settings-packs-checkup',
+    area,
+    target: '.pane-settings .checkup-button',
+    title: 'Missing packs & updates',
+    body: 'Finds every pack, newer version and Read Aloud voice this device doesn’t have yet, and gets them all, one at a time. Not now hides the dot until something new turns up.',
+  },
+  {
     id: 'settings-clear-cache',
     area,
     target: '.pane-settings .clear-cache-button',
@@ -96,7 +104,7 @@ export const PANE_TIPS: Tip[] = [
     area,
     target: '.pane-packs .install-all-btn',
     title: 'Install all',
-    body: 'Installs every pack and voice, one at a time. If it gets interrupted, tap again and it picks up where it stopped.',
+    body: 'Installs every pack and voice, and any newer versions of the ones you have, one at a time. If it gets interrupted, tap again and it picks up where it stopped.',
   },
   {
     id: 'packs-restart',

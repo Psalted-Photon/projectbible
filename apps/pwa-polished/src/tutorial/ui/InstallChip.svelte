@@ -16,6 +16,7 @@
     installAllState,
     restartNeeded,
     packsStillToInstall,
+    updatesStillToApply,
     voicesStillToInstall,
   } from "../../lib/packInstaller";
   import { appQuiet } from "../engine/watch";
@@ -26,8 +27,12 @@
   let remaining: number | null = null;
 
   async function countRemaining() {
-    const [packs, voices] = await Promise.all([packsStillToInstall(), voicesStillToInstall()]);
-    remaining = packs.length + voices.length;
+    const [updates, packs, voices] = await Promise.all([
+      updatesStillToApply(),
+      packsStillToInstall(),
+      voicesStillToInstall(),
+    ]);
+    remaining = updates.length + packs.length + voices.length;
     if (remaining === 0 && !$restartNeeded && !$installAllState.running) dispatch("done");
   }
 

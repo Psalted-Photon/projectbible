@@ -147,7 +147,8 @@ export const PART_ONE: TourStep[] = [
       return (
         'Most of irisBible comes in packs: more translations, dictionaries, commentaries, the encyclopedia, maps, art and the reading voices.' +
         size +
-        ' Or take them as you go: the translation list and each feature offer their own downloads.'
+        ' Or take them as you go: the translation list and each feature offer their own downloads.' +
+        ' Later, a dot on the gear means something new is waiting. It goes away once everything is in.'
       );
     },
     nextLabel: 'Install everything',

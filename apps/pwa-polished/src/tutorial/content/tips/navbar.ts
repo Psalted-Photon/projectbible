@@ -134,8 +134,10 @@ export const NAVBAR_TIPS: Tip[] = [
     id: 'nav-settings',
     area,
     target: '.pill-settings',
+    // Bottom corner: the top-right one is where the notification dot sits.
+    corner: 'bottom-right',
     title: 'Settings',
-    body: 'Themes, fonts, packs and the Auto-Read Alarm. Tutorial Mode’s switch is under General.',
+    body: 'Themes, fonts, packs and the Auto-Read Alarm. Tutorial Mode’s switch is under General. A small dot on the gear means packs, updates or voices are waiting. It leads you to them, and it goes away once the app is fully up to date.',
   },
   {
     id: 'nav-profile',
