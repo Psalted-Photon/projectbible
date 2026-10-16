@@ -168,6 +168,9 @@
   .connections-strip {
     display: block;
     width: 100%;
+    /* A phone's portrait width at most: the height is fixed, so wider only
+       flattens the arcs. The chapter header centers it. */
+    max-width: 400px;
     margin: 0;
     padding: 0;
     border: 0;
