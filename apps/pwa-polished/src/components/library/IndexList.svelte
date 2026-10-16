@@ -9,7 +9,7 @@
   import { isTextEntry } from "../../lib/isTextEntry";
   import { WORD_STUDY_PACKS, type LibraryBadge, type LibrarySourceAdapter, type LibraryRow } from "../../lib/library/source";
   import GetPacksCard from "../GetPacksCard.svelte";
-  import { isbeModalStore } from "../../stores/isbeModalStore";
+  import { isbeModalStore, type IsbeModalState } from "../../stores/isbeModalStore";
   import { navesModalStore } from "../../stores/navesModalStore";
   import { personModalStore } from "../../stores/personModalStore";
   import { lexicalModalStore } from "../../stores/lexicalModalStore";
@@ -31,6 +31,10 @@
   /** Opens the family tree on this row. Only People passes it — the tree has
    *  nothing to say about a lexicon entry or a topic. */
   export let onOpenTree: ((row: LibraryRow) => void) | null = null;
+  /** Opens a place from its map pin. The encyclopedia passes it so the pin
+   *  opens the article in the card you're in — without it the list would stay
+   *  on top of the article it had just loaded and the pin would look dead. */
+  export let onOpenPlace: ((target: Omit<IsbeModalState, "isOpen">) => void) | null = null;
   /** Letter to open on — where you left off, or the letter of the current entry. */
   export let initialLetter: string | null = null;
   /**
@@ -381,13 +385,15 @@
       if (entryId == null || Number.isNaN(entryId)) return;
       const place = await getIsbePlaceByEntryId(entryId);
       const mappable = !!place && place.latitude != null && place.longitude != null;
-      isbeModalStore.open({
-        kind: mappable ? "place" : "entry",
+      const target = {
+        kind: mappable ? ("place" as const) : ("entry" as const),
         entryId,
         placeId: mappable ? place!.placeId : null,
         primaryName: row.name,
-        tab: mappable ? "map" : null,
-      });
+        tab: mappable ? ("map" as const) : null,
+      };
+      if (onOpenPlace) onOpenPlace(target);
+      else isbeModalStore.open(target);
     }
   }
 </script>
@@ -529,7 +535,7 @@
                  and a button inside a button is invalid and would fire both. -->
             <span class="badges">
               {#if shows("place") && row.isPlace}
-                <button class="jump-btn" title="Show on the map" aria-label="Show {row.name} on the map" on:click={(e) => openBadge(e, row, "place")}><MapPin size={14} weight="bold" /></button>
+                <button class="jump-btn place" title="Show on the map" aria-label="Show {row.name} on the map" on:click={(e) => openBadge(e, row, "place")}><MapPin size={14} weight="bold" /></button>
               {/if}
               {#if shows("bio") && row.hasBio}
                 <button class="jump-btn bio" title="Read the bio" aria-label="Bio of {row.name}" on:click={(e) => openBadge(e, row, "bio")}><PanelIcon name="people" size={14} plain /></button>
@@ -803,6 +809,7 @@
     opacity: 1;
     transform: scale(1.3);
   }
+  .jump-btn.place { color: #f97316; }
   .jump-btn.bio { color: #a855f7; }
   .jump-btn.books { color: #3b82f6; }
   .jump-btn.topic { color: #eab308; }

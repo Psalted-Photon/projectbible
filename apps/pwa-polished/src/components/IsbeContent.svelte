@@ -3,7 +3,7 @@
   import { onDestroy, tick } from "svelte";
   import { get } from "svelte/store";
   import type { Map as LeafletMap } from "leaflet";
-  import { isbeModalStore, type IsbeTab } from "../stores/isbeModalStore";
+  import { isbeModalStore, type IsbeTab, type IsbeModalState } from "../stores/isbeModalStore";
   import { isbeReturnStore, type IsbeReturn } from "../stores/isbeReturnStore";
   import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
   import { verseAtEnglishRef } from "../lib/companion";
@@ -98,6 +98,8 @@
   // whenever you last closed it more than half an hour ago — the contents are
   // what you land on.
   let showContents = entryId == null && placeId == null;
+  /** A tab to land on after the next load — the contents' map pin asks for Map. */
+  let pendingTab: IsbeTab | null = null;
   let trail: TrailStop[] = [...initialTrail];
   let neighbors: { prev: LibraryRow | null; next: LibraryRow | null } = { prev: null, next: null };
 
@@ -169,6 +171,8 @@
   }
 
   async function loadData() {
+    const jumpTab = pendingTab;
+    pendingTab = null;
     loading = true;
     entry = null;
     place = null;
@@ -202,6 +206,11 @@
     // before the article renders — otherwise the links would pop in late.
     articleHtml = entry?.bodyHtml ? sanitizePackHtml(await linkifyCrossRefs(entry.bodyHtml)) : "";
     loading = false;
+
+    if (jumpTab) {
+      await selectTab(jumpTab);
+      return;
+    }
 
     // Reopen where we left off — same tab, same things open, same refs dimmed,
     // same scroll spot. This is what makes popping out feel like the article
@@ -281,6 +290,36 @@
 
   function openFromContents(row: LibraryRow) {
     turnTo(true, () => jumpToEntry(Number(row.id), row.name));
+  }
+
+  /** The contents' map pin: the place's article, straight onto its Map tab. */
+  function openPlaceFromContents(target: Omit<IsbeModalState, "isOpen">) {
+    turnTo(true, () => {
+      trail = [];
+      showContents = false;
+      // Already the article on the other side of the card: no reload will come
+      // to pick up the tab, so switch to it here.
+      if (`${target.kind}:${target.entryId}:${target.placeId}` === loadedKey) {
+        if (target.tab) selectTab(target.tab);
+        return;
+      }
+      pendingTab = target.tab ?? null;
+      if (windowId) {
+        windowStore.updateContentState(windowId, {
+          kind: target.kind,
+          entryId: target.entryId,
+          placeId: target.placeId,
+          primaryName: target.primaryName,
+          tab: null,
+          expanded: {},
+          expandedBooks: [],
+          visited: [],
+          trail,
+        });
+      } else {
+        isbeModalStore.open({ ...target, tab: null });
+      }
+    });
   }
 
   /** Step back to an article you came through. */
@@ -1166,6 +1205,7 @@
     <IndexList
       source={isbeSource}
       onOpen={openFromContents}
+      onOpenPlace={openPlaceFromContents}
       initialLetter={contentsLetter}
       initialRowId={contentsRowId}
     />
