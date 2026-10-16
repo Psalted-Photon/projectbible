@@ -177,6 +177,7 @@ async function initApp() {
   // Everything that does not have to happen first happens here, with the app
   // already on screen behind it.
   warmPackManifest();
+  void import('./adapters/db-manager').then((m) => m.removeRetiredPacks());
 
   // A new user's first voice comes with the starter: Heart (or Standard where
   // Heart can't run) downloads behind the app, so the talking head just reads.

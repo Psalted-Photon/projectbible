@@ -52,13 +52,6 @@ const PACK_CONFIGS = {
     description: "Strong's dictionaries + English wordlist/thesaurus/grammar",
     dependencies: []
   },
-  'study-tools.sqlite': {
-    id: 'study-tools',
-    type: 'study',
-    name: 'Study Tools Pack',
-    description: 'Maps, places, chronological ordering, cross-references (full TSK — all 66 books)',
-    dependencies: []
-  },
   'tsk-references.sqlite': {
     id: 'tsk-references',
     type: 'study',

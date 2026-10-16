@@ -3420,44 +3420,6 @@
     }
   }
 
-  async function loadChronologicalPack() {
-    try {
-      // Chronological data is now in the study-tools pack, not a JSON file
-      const { readTransaction, openDB } = await import('../adapters/db.js');
-      
-      // Check if study-tools pack is installed
-      const pack = await readTransaction('packs', (store) => 
-        store.get('study-tools') || store.get('consolidated-study-tools')
-      );
-      
-      if (!pack) {
-        console.log('Study tools pack not installed - chronological mode unavailable');
-        return;
-      }
-      
-      // Query chronological_order table from IndexedDB
-      const db = await openDB();
-      const chronoData = await new Promise<any[]>((resolve) => {
-        const tx = db.transaction('chronological_order', 'readonly');
-        const store = tx.objectStore('chronological_order');
-        const request = store.getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => resolve([]);
-      });
-      
-      if (chronoData.length > 0) {
-        // Transform to expected format
-        chronologicalData = {
-          verse_count: chronoData.length,
-          verses: chronoData
-        };
-        console.log(`Loaded chronological pack: ${chronologicalData.verse_count} entries`);
-      }
-    } catch (e) {
-      console.warn('Chronological pack not available:', e);
-    }
-  }
-
   // Returns the book/chapter of the chapter section most visible in the reader viewport
   function detectVisibleChapter(): { book: string; chapter: number } | null {
     if (!readerElement) return null;
@@ -6153,13 +6115,7 @@
     // Listen for settings updates
     window.addEventListener("settingsUpdated", handleSettingsUpdate);
 
-    (async () => {
-      await loadAvailableTranslations();
-      // A full getAll() of ~31k chronological rows, and already dead for panes:
-      // isChronologicalMode is forced false whenever windowId is set, so a
-      // harmony view's four readers would each pay for a table nothing reads.
-      if (!windowId) await loadChronologicalPack();
-    })();
+    void loadAvailableTranslations();
 
     // Open the ISBE indexes now rather than on the first tapped word. The ring
     // sizes itself the moment it opens and will not grow a seat afterwards, so

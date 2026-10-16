@@ -111,14 +111,6 @@ function getPackMetadata(filename) {
       schemaVersion: '1',
       minAppVersion: '1.0.0'
     },
-    'study-tools.sqlite': {
-      id: 'study-tools',
-      type: 'study',
-      name: 'Study Tools',
-      description: 'Maps, places, chronological ordering, cross-references',
-      schemaVersion: '1',
-      minAppVersion: '1.0.0'
-    },
     'bsb-audio-pt1.sqlite': {
       id: 'bsb-audio-pt1',
       type: 'audio',

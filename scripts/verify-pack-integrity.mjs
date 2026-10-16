@@ -24,7 +24,6 @@ const PACKS = [
   'translations.sqlite',
   'ancient-languages.sqlite',
   'lexical.sqlite',
-  'study-tools.sqlite',
   'bsb-audio-pt1.sqlite',
   'bsb-audio-pt2.sqlite'
 ];

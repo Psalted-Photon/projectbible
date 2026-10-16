@@ -304,21 +304,6 @@
       "createdAt": "2026-09-30T12:51:18.766Z"
     },
     {
-      "id": "study-tools",
-      "type": "study",
-      "name": "Study Tools Pack",
-      "description": "Maps, places, chronological ordering, cross-references (full TSK — all 66 books)",
-      "version": "1.0.0",
-      "schemaVersion": "1",
-      "minAppVersion": "1.0.0",
-      "size": 14512128,
-      "sizeMB": 13.84,
-      "sha256": "437dda814813ec7cc491dddda1ccd4707aca3c1dba46a628051dde8fab17425f",
-      "dependencies": [],
-      "downloadUrl": "/api/packs/study-tools.sqlite",
-      "createdAt": "2026-09-20T03:18:38.209Z"
-    },
-    {
       "id": "translations",
       "type": "translation",
       "name": "English Translations Pack",

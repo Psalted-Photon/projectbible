@@ -414,6 +414,24 @@ export async function removePack(packId: string): Promise<void> {
   }
 }
 
+/**
+ * Packs taken out of the catalog, removed from devices that still have them.
+ * Study Tools left in October 2026: the map, places and timeline each have
+ * their own pack, and nothing read its tables. Cheap when there is nothing to
+ * do, since removePack stops at the missing pack row.
+ */
+const RETIRED_PACKS = ['study-tools', 'consolidated-study-tools'];
+
+export async function removeRetiredPacks(): Promise<void> {
+  for (const id of RETIRED_PACKS) {
+    try {
+      await removePack(id);
+    } catch (error) {
+      console.warn(`Could not remove retired pack ${id}:`, error);
+    }
+  }
+}
+
 /** One number out of the Historical Map's own metadata, or 0 if it isn't there. */
 async function readAtlasMetaNumber(key: string): Promise<number> {
   const db = await openDB();

@@ -16,8 +16,7 @@ const packs = [
   'translations.sqlite',
   'dictionary-en.sqlite',
   'ancient-languages.sqlite',
-  'lexical.sqlite',
-  'study-tools.sqlite'
+  'lexical.sqlite'
 ];
 
 async function readPointerOrSignature(filePath) {
