@@ -7715,6 +7715,10 @@
     user-select: none;
     -webkit-user-select: none;
   }
+  /* Under Hebrew, on the same side as the Hebrew; it still reads left to right. */
+  :global(.verses.il-show-verse-english[dir="rtl"] .verse-english) {
+    text-align: right;
+  }
   :global(.verses.il-show-verse-english .verse-english .ve-tag) {
     font-size: 0.85em;
     letter-spacing: 0.04em;

@@ -237,6 +237,7 @@
                       {readerTranslation}
                       {strongsId}
                       marked={marks.length}
+                      {rtl}
                     />
                   </button>
                 {/each}

@@ -27,6 +27,8 @@
   export let marked = 1;
   /** Room for the whole line; several English verses share it. */
   export let maxLength = 180;
+  /** Under a right-aligned Hebrew line: sit on the same side. The text stays left to right. */
+  export let rtl = false;
 
   $: on = $englishCompanion && isOriginalLanguage(shown);
 
@@ -71,13 +73,13 @@
 
 {#if on && en}
   {#if !en.missing}
-    <span class="companion-line" dir="ltr" lang="en"
+    <span class="companion-line" class:cl-rtl={rtl} dir="ltr" lang="en"
       >{@html html(en.pieces)} <span class="cl-tag">{label(en.translation, en.pieces)}</span></span
     >
   {:else}
-    <span class="companion-line cl-missing" dir="ltr" lang="en">Not in {en.translation.toUpperCase()}</span>
+    <span class="companion-line cl-missing" class:cl-rtl={rtl} dir="ltr" lang="en">Not in {en.translation.toUpperCase()}</span>
     {#if en.fallback}
-      <span class="companion-line" dir="ltr" lang="en"
+      <span class="companion-line" class:cl-rtl={rtl} dir="ltr" lang="en"
         >{@html html(en.fallback.pieces)} <span class="cl-tag">{label(en.fallback.translation, en.fallback.pieces)}</span></span
       >
     {/if}
@@ -85,8 +87,8 @@
 {/if}
 
 <style>
-  /* The app's own font, dimmer than the original above it, and always left to
-     right, even under Hebrew. */
+  /* The app's own font, dimmer than the original above it. It always reads
+     left to right, even under Hebrew; .cl-rtl only moves it to the right. */
   .companion-line {
     display: block;
     margin-top: 2px;
@@ -97,6 +99,10 @@
     font-weight: 400;
     line-height: 1.45;
     text-align: left;
+  }
+
+  .cl-rtl {
+    text-align: right;
   }
 
   .cl-missing {
