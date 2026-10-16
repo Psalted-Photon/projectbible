@@ -53,7 +53,7 @@ import {
   type TtsVoiceInfo,
 } from '../adapters/tts';
 import { showNotice, errorText } from '../stores/noticeStore';
-import { markInstalled, markUpdated } from './packUpdates';
+import { markInstalled, markUpdated, checkPackUpdates, unignoredUpdates } from './packUpdates';
 
 /**
  * The Restart every finished download offers, wherever it was started from:
@@ -420,6 +420,18 @@ export async function packsStillToInstall(): Promise<CatalogPack[]> {
 }
 
 /**
+ * Installed packs with a newer version on the release, in install order. An
+ * update the reader chose to ignore is left out.
+ */
+export async function updatesStillToApply(): Promise<CatalogPack[]> {
+  await checkPackUpdates();
+  const updates = get(unignoredUpdates);
+  return INSTALL_ALL_ORDER.map((id) => PACK_CATALOG.find((p) => p.id === id)).filter(
+    (p): p is CatalogPack => !!p && !!updates[p.id],
+  );
+}
+
+/**
  * Voices still to download: every downloadable built-in voice this device can
  * run (getSelectableVoices already hides the natural voices on a device that
  * cannot run them). Natural voices first, Heart leading -- they are the ones a
@@ -497,8 +509,12 @@ export async function installAllVoices(): Promise<{ failed: string[]; outOfSpace
 }
 
 /**
- * Install every pack and every voice, one after another.
+ * Bring the device fully up to date: every newer version of an installed pack
+ * first, then every pack still missing, then every voice, one after another.
+ * The one button in Settings → Storage & updates, Install all in Manage Packs
+ * and the tutorial's Install everything all run this.
  *
+ * An update keeps the old copy until the new one is in (see updatePack).
  * Skips whatever already finished, so running it again after the phone
  * reclaimed the tab picks up where the last run stopped. A pack that fails is
  * noted and the run moves on -- a dropped connection on one pack should not
@@ -517,12 +533,38 @@ export async function installAll(): Promise<boolean> {
   let outOfSpace = false;
 
   try {
+    const updates = await updatesStillToApply();
     const packs = await packsStillToInstall();
     const voices = await voicesStillToInstall();
-    const total = packs.length + voices.length;
+    const total = updates.length + packs.length + voices.length;
     let step = 0;
 
-    for (const pack of packs) {
+    for (const pack of updates) {
+      step++;
+      installAllState.update((s) => ({ ...s, step, total, current: pack.name }));
+      installingPackId.set(pack.id);
+      try {
+        await downloadAndImportPack(
+          pack,
+          (message) => installMessage.set(`${step} of ${total} · ${message}`),
+          { replaceAfterDownload: true },
+        );
+        restartNeeded.set(true);
+        markUpdated(pack.id);
+        window.dispatchEvent(new CustomEvent('packsUpdated'));
+      } catch (error) {
+        console.error(`[InstallAll] Updating ${pack.name} failed:`, error);
+        failed.push(pack.name);
+        if (isQuotaError(error)) {
+          outOfSpace = true;
+          break;
+        }
+      } finally {
+        installingPackId.set(null);
+      }
+    }
+
+    for (const pack of outOfSpace ? [] : packs) {
       step++;
       installAllState.update((s) => ({ ...s, step, total, current: pack.name }));
       try {
@@ -781,18 +823,19 @@ export async function updatePack(pack: CatalogPack): Promise<boolean> {
  * once per voice.
  */
 export async function estimateRemaining(): Promise<{ count: number; bytes: number }> {
-  const [packs, voices, sizes] = await Promise.all([
+  const [updates, packs, voices, sizes] = await Promise.all([
+    updatesStillToApply(),
     packsStillToInstall(),
     voicesStillToInstall(),
     loadPackSizes(),
   ]);
   const MB = 1024 * 1024;
-  let bytes = packs.reduce(
+  let bytes = [...updates, ...packs].reduce(
     (sum, pack) => sum + (installBytesFor(pack.id, sizes.bytes) || parseFloat(pack.size) * MB || 0),
     0,
   );
   bytes += (await estimateVoicesMB(voices)) * MB;
-  return { count: packs.length + voices.length, bytes };
+  return { count: updates.length + packs.length + voices.length, bytes };
 }
 
 /**

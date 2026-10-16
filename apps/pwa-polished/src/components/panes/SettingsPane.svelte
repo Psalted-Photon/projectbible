@@ -40,6 +40,7 @@
   } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
+  import PacksCheckup from "../PacksCheckup.svelte";
   import { getInterlinearSettings } from "../../adapters/settings";
   import { closeDB } from "../../adapters/db";
   import { getReaderFont } from "../../lib/readerFonts";
@@ -1426,6 +1427,8 @@
         <input type="checkbox" bind:checked={autoCheckUpdates} />
         <span class="toggle-label">Auto-check on open</span>
       </label>
+      <!-- Every missing pack, pack update and voice, in one tap. -->
+      <PacksCheckup />
     </div>
   </SettingsSection>
 
