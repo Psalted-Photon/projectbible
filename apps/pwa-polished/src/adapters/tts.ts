@@ -284,7 +284,11 @@ export function downloadVoice(
       'download',
       { voiceId, source, engine: engineOf(voiceId) },
       { onProgress: (p) => listeners.forEach((l) => l(p)) }
-    ).finally(() => downloading.delete(voiceId));
+    ).finally(() => {
+      downloading.delete(voiceId);
+      // The packs check-up counts voices; this tells it to count again.
+      window.dispatchEvent(new CustomEvent('voicesUpdated'));
+    });
     entry = { promise, listeners };
     downloading.set(voiceId, entry);
   }
@@ -364,6 +368,7 @@ export async function voiceToOffer(savedId: string): Promise<string> {
 export async function removeVoice(voiceId: string): Promise<void> {
   await call<void>('remove', { voiceId, engine: engineOf(voiceId) });
   unregisterCustomVoice(voiceId);
+  window.dispatchEvent(new CustomEvent('voicesUpdated'));
 }
 
 // ─── the shared Kokoro model ────────────────────────────────────────────────

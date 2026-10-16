@@ -12,6 +12,7 @@ import { initMediaSession } from './lib/tts/mediaSession';
 import { dumpPreviousInstallLog } from './lib/install-log';
 import { watchForInstallPrompt } from './lib/installPrompt';
 import { showLaunchSplash } from './lib/launchSplash';
+import { startCheckup } from './lib/packCheckup';
 
 // Before anything that awaits: the browser fires beforeinstallprompt early and
 // only once, and initApp() below can sit waiting on the starter text download
@@ -106,6 +107,10 @@ async function initApp() {
   // what marks the page as a media player, so the phone is far less willing to
   // throttle it once the screen goes off.
   initMediaSession();
+
+  // What the device is still missing (packs, updates, voices), for the dot on
+  // the gear. Waits a few seconds on its own so it never slows the launch.
+  startCheckup();
 
   // The speech runtime used to be cached under a name with no version in it.
   // Its filenames never change between onnxruntime releases - only the contents

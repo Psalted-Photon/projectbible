@@ -41,6 +41,19 @@ const ignored = writable<Record<string, string>>(readIgnored());
 /** Put off with Not now, this session only. */
 const notNow = writable<Set<string>>(new Set());
 
+/** Updates not ignored, whether or not they were put off with Not now. */
+export const unignoredUpdates = derived([packUpdates, ignored], ([$updates, $ignored]) => {
+  const out: Record<string, string> = {};
+  for (const [id, sha] of Object.entries($updates)) if ($ignored[id] !== sha) out[id] = sha;
+  return out;
+});
+
+/**
+ * The manifest has been read this session, so the update list means
+ * something. Bundled packs (dev) have no manifest to read and count as reached.
+ */
+export const packCheckReached = writable<boolean>(USE_BUNDLED_PACKS);
+
 /** Updates still waiting on an answer: not ignored, not put off. */
 export const pendingUpdates = derived([packUpdates, ignored, notNow], ([$updates, $ignored, $notNow]) => {
   const out: Record<string, string> = {};
@@ -84,6 +97,7 @@ export function checkPackUpdates(): Promise<void> {
   checking ??= (async () => {
     try {
       const [shas, installed] = await Promise.all([fetchShas(), installedPackHashes()]);
+      if (Object.keys(shas).length) packCheckReached.set(true);
       const next: Record<string, string> = {};
       for (const [id, hash] of Object.entries(installed)) {
         const latest = shas[id];
