@@ -261,7 +261,7 @@
         class:active={activeTab === "references"}
         on:click={() => (activeTab = "references")}
       >
-        ◆ References
+        ◆ Refs
         {#if displayTskEntries.length > 0}
           <span class="badge" style="background:{TSK_COLOR}">{displayTskEntries.length}</span>
         {/if}
@@ -271,7 +271,7 @@
         class:active={activeTab === "commentary"}
         on:click={() => (activeTab = "commentary")}
       >
-        ● Commentaries
+        ● Comm
         {#if displayCommentaryEntries.length > 0}
           <span class="badge" style="background:#666">{displayCommentaryEntries.length}</span>
         {/if}
