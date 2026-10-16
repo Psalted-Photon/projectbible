@@ -120,6 +120,40 @@ function unmarkFootnoteReferences(content) {
   return content.replace(/\\f [\s\S]*?\\f\*/g, (note) => note.replace(/\\\+?xo /g, ''));
 }
 
+/**
+ * The NET leaves out 16 verses the oldest manuscripts lack (Matthew 17:21 ...),
+ * and numbers 2 Corinthians 13:14 as 13:13. The eBible USFM keeps each as an
+ * empty verse whose only footnote reads "[[EMPTY]]", where the NET's own note
+ * was dropped, so the reader opened a note that said nothing. Each gets a note
+ * of ours instead, quoting what later manuscripts add in the KJV's words. Only
+ * the note changes; the verse stays empty.
+ */
+const KJV_PATH = join(repoRoot, 'packs/kjv.sqlite');
+const EMPTY_NOTE = '\x16[[EMPTY]]\x01';
+const RENUMBERED = { '2 Corinthians 13:14': 'In the NET this verse is numbered 13:13.' };
+let kjvVerse = null;
+let emptyNotesFilled = 0;
+
+function fillEmptyNote(book, verse, text) {
+  if (!text.includes(EMPTY_NOTE)) return text;
+  const ref = `${book} ${verse.chapter}:${verse.verse}`;
+  let body = RENUMBERED[ref];
+  if (!body) {
+    kjvVerse ??= new Database(KJV_PATH, { readonly: true })
+      .prepare('SELECT text FROM verses WHERE book = ? AND chapter = ? AND verse = ?');
+    const kjv = kjvVerse.get(book, verse.chapter, verse.verse)?.text;
+    if (!kjv) {
+      console.error(`❌ No KJV text for ${ref} to fill its empty NET note`);
+      process.exit(1);
+    }
+    // The KJV's supplied words stay italic, in the note's own italic marks.
+    const added = kjv.replace(/<i>/g, '\x1A').replace(/<\/i>/g, '\x1B').replace(/<[^>]+>/g, '');
+    body = `The NET leaves this verse out because the oldest manuscripts don’t have it. Later manuscripts add: “${added}” (KJV)`;
+  }
+  emptyNotesFilled++;
+  return text.replace(EMPTY_NOTE, `\x16${body}\x01`);
+}
+
 /** File names look like 02-GENengnet.usfm; the middle group is the book code. */
 const FILE_PATTERN = /^\d+-([A-Z0-9]+)engnet\.usfm$/i;
 
@@ -169,7 +203,7 @@ export function readBooks(parseOptions = {}, { quiet = false } = {}) {
     const verses = processVerses(parseUSFM(content, { ...NET_OPTIONS, ...parseOptions })).map((v) => ({
       chapter: v.chapter,
       verse: v.verse,
-      text: applyRepair(name, { ...v, text: cleanUSFMMarkup(v.text) }),
+      text: fillEmptyNote(name, v, applyRepair(name, { ...v, text: cleanUSFMMarkup(v.text) })),
     }));
 
     books.push({ name, verses });
@@ -240,6 +274,7 @@ function buildPack(books) {
   console.log(`\n✓ ${total.toLocaleString()} verses`);
   console.log(`✓ ${repairsApplied} verses restored from the source-defect table`);
   console.log(`✓ ${doubledRepaired} doubled quotations written once`);
+  console.log(`✓ ${emptyNotesFilled} empty notes on left-out verses filled in`);
   console.log(`✓ ${Number(structure.paragraphs).toLocaleString()} verses open a paragraph`);
   console.log(`✓ ${Number(structure.poetry).toLocaleString()} verses carry a poetic line`);
   console.log(`\n✅ NET pack built: ${OUTPUT_PATH}`);

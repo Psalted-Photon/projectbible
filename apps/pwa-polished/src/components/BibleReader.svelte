@@ -2617,8 +2617,8 @@
     }
 
     // Fallback 2: normalize both sides — strips Greek accents AND Hebrew
-    // cantillation/vowel points, lowercases. Fixes e.g. unaccented "αβρααμ"
-    // (from BYZ verse text) matching "Ἀβραὰμ" (from OpenGNT morphology).
+    // cantillation/vowel points, lowercases. Fixes e.g. "Ἀβραάμ" in the verse
+    // text matching "Ἀβραὰμ" in the morphology (acute vs. grave).
     const normClicked = normalizeForComparison(clickedText);
     byText = verseMorphs.find(
       (m) => normalizeForComparison(m.text) === normClicked,

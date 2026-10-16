@@ -78,9 +78,9 @@ function chapterOf(translation: string, book: string, chapter: number): Promise<
   return found;
 }
 
-/** No row, nothing left once notes go, or NET's "[[EMPTY]]" placeholder. */
+/** No row, or nothing left once notes go (the verses NET leaves out). */
 function isMissing(stored: string | undefined): boolean {
-  if (!stored || stored.includes('[[EMPTY]]')) return true;
+  if (!stored) return true;
   return cleanVersePreviewText(stored) === '';
 }
 

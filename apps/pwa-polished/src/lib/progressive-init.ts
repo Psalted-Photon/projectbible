@@ -63,8 +63,10 @@ const STARTER_TRANSLATION = 'NET';
  *       female them male and female"); Isaiah 43's notes lose raw markers.
  *   4 — KJV's notes on where each letter was written no longer sit above
  *       verse 1 of the next book ("Written to the Romans…" over 1 Corinthians).
+ *   5 — the 17 verses NET leaves out (Matthew 17:21 …) have a note that says
+ *       why and quotes the KJV, not one that read "[[EMPTY]]".
  */
-const STARTER_REVISION = 4;
+const STARTER_REVISION = 5;
 const STARTER_REVISION_KEY = 'hexapla-starter-revision';
 
 /**

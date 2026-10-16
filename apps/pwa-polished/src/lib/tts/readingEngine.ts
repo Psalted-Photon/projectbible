@@ -529,8 +529,7 @@ async function loadChapterUtterances(
   }
 
   // Original-language chapters read from the per-word morphology rather than the
-  // verse prose: the plain Greek in the pack is unaccented, which puts espeak's
-  // stress on the wrong syllable.
+  // verse prose, so the spoken words line up with the highlighted ones.
   const greek = isGreekTranslation(translation)
     ? await loadGreekVerses(book, chapter)
     : null;

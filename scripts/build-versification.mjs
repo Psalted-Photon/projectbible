@@ -17,7 +17,7 @@
  * show 0 unmapped Hebrew verses.
  *
  * Also written here, because they come from the packs rather than TVTMS:
- *   byz      BYZ prints the Romans doxology (16:25-27) inside 14:23
+ *   byz      BYZ (RP 2018) prints the Romans doxology (16:25-27) as 14:24-26
  *   web      WEB prints it as 14:24-26
  *   lxxShift   the Greek Septuagint against lxx2012, chapter by chapter
  *   lxxHebrew  Septuagint chapters numbered like the Hebrew
@@ -405,16 +405,14 @@ const hebrew = encodeScheme(OSHB, hebrewTargets, otBooks);
 
 // ── BYZ and WEB: the Romans doxology ───────────────────────────────────────
 
-const byzText = ancient
-  .prepare("SELECT text FROM verses WHERE translation_id='byz' AND book='Romans' AND chapter=14 AND verse=23")
-  .get()?.text ?? '';
-const byzDoxologyIn1423 = ['(16:25)', '(16:26)', '(16:27)'].every((m) => byzText.includes(m));
-if (!byzDoxologyIn1423) problems.push('BYZ Rom 14:23 no longer carries the doxology markers');
+// RP 2018 prints it as 14:24-26 and stops chapter 16 at verse 24.
+const byzMoved = [24, 25, 26].every((v) => has(BYZ, 'Romans', 14, v)) && !has(BYZ, 'Romans', 16, 25);
+if (!byzMoved) problems.push('BYZ no longer has Romans 14:24-26 (and no 16:25)');
 const byz = encodeScheme(
   BYZ,
   (book, ch, v) =>
-    book === 'Romans' && ch === 14 && v === 23 && byzDoxologyIn1423
-      ? [14, 16, 16, 16].map((c, n) => ({ ch: c, v: n ? 24 + n : 23, part: 'w' }))
+    book === 'Romans' && ch === 14 && v >= 24 && byzMoved
+      ? [{ ch: 16, v: v + 1, part: 'w' }]
       : [{ ch, v, part: 'w' }],
   ['Romans'],
 );
@@ -537,7 +535,9 @@ const spot = [
   ['hebrew', 'Psalms', 51, 3, '51:1b'],
   ['hebrew', 'Genesis', 32, 1, '31:55'],
   ['web', 'Romans', 14, 25, '16:26'],
-  ['byz', 'Romans', 14, 23, '14:23,16:25,16:26,16:27'],
+  ['byz', 'Romans', 14, 23, '14:23'],
+  ['byz', 'Romans', 14, 24, '16:25'],
+  ['byz', 'Romans', 14, 26, '16:27'],
 ];
 const schemes = { hebrew, byz, web };
 const spotResults = spot.map(([s, book, ch, v, want]) => {

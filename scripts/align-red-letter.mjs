@@ -495,6 +495,9 @@ function refineWithCrossVerseQuotes(transOut, getter) {
         }
       }
 
+      // A hand fix is final; the scan would narrow Rev 3:17 back to its quote marks.
+      if (SOURCE_FIXES.net[key]) continue;
+
       if (spans.length > 0 && isJesus) {
         // Override rules (prevent multi-speaker verses being over-highlighted):
         // 1. Always override when entering mid-speech (cross-verse continuation).
@@ -629,6 +632,11 @@ const SOURCE_FIXES = {
     // only NET's second part matched and the opening words stayed black.
     'MAT:16:6': [{ text: '“Watch out,”' }, { text: '“beware of the yeast of the Pharisees and Sadducees.”' }],
     'MRK:14:62': [{ text: '“I am,”' }, { text: '“and you will see the Son of Man sitting at the right hand of the Power and coming with the clouds of heaven.”' }],
+    'MAT:17:7': [{ text: '“Get up,”' }, { text: '“Do not be afraid.”' }],
+    // A span snapped to NET's quotation marks stops at the first inner one: the
+    // nested “ in 26:18, the closing ” after "need nothing," in Rev 3:17.
+    'MAT:26:18': [{ text: '“Go into the city to a certain man and tell him, ‘The Teacher says, “My time is near. I will observe the Passover with my disciples at your house.”’”' }],
+    'REV:3:17': [{ text: 'Because you say, “I am rich and have acquired great wealth, and need nothing,” but do not realize that you are wretched, pitiful, poor, blind, and naked,' }],
   },
 };
 

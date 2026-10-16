@@ -2,11 +2,10 @@
  * Speech text for original-language (Greek/Hebrew) reading.
  *
  * The counterpart to extractSpeechText() in verseRendering.ts, which prepares
- * ordinary translation prose. Original-language verses are not stored as prose:
- * the readable form lives per-word in the morphology cache, and the plain
- * `verses.text` in the pack is unusable here — the Greek there is unaccented
- * and lowercased, which makes espeak stress the wrong syllable (θˈeon rather
- * than θeˈon). The accented per-word text is the only correct source.
+ * ordinary translation prose. Original-language verses are read from the
+ * per-word rows in the morphology cache, which the word highlighting follows.
+ * The words must be accented — unaccented Greek makes espeak stress the wrong
+ * syllable (θˈeon rather than θeˈon).
  *
  * Dependency-free on purpose, like voices.ts, so UI code can import it.
  */
@@ -25,8 +24,7 @@ export interface SpeechWord {
  * no working Hebrew letter-to-sound rules — it reads out the *names* of the
  * letters and points — and there is no permissively-licensed Hebrew voice to
  * read them with. The LXX is Greek but its pack ships no per-word rows at all,
- * and its verse text is lemmatized rather than running text, so it could only
- * ever produce silence.
+ * so it is left out.
  */
 const SPEAKABLE = new Set(['byz', 'tr', 'sblgnt']);
 
