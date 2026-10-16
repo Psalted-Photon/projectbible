@@ -6,11 +6,14 @@
  * Source: data-sources/stepbible/STEPBible-Data-master/Lexicons/
  * License: CC BY 4.0
  * 
- * Usage: node scripts/build-strongs-from-stepbible.mjs
+ * Usage: node scripts/build-strongs-from-stepbible.mjs [greek|hebrew]
+ *
+ * With a language, only that pack is rebuilt. Rebuilding Greek drops the
+ * related column, so run add-semantic-domains.mjs after it.
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -20,6 +23,7 @@ const repoRoot = join(__dirname, '..');
 
 const GREEK_LEX = join(repoRoot, 'data-sources/stepbible/STEPBible-Data-master/Lexicons/TBESG - Translators Brief lexicon of Extended Strongs for Greek - STEPBible.org CC BY.txt');
 const HEBREW_LEX = join(repoRoot, 'data-sources/stepbible/STEPBible-Data-master/Lexicons/TBESH - Translators Brief lexicon of Extended Strongs for Hebrew - STEPBible.org CC BY.txt');
+const TAHOT_DIR = join(repoRoot, 'data-sources/stepbible/STEPBible-Data-master/Translators Amalgamated OT+NT');
 const GREEK_XML  = join(repoRoot, 'data-sources/strongs/strongsgreek.xml');
 const HEBREW_XML = join(repoRoot, 'data-sources/strongs/StrongHebrewG.xml');
 
@@ -113,14 +117,74 @@ function loadHebrewStrongsData() {
   return map;
 }
 
+/**
+ * Which word a split Hebrew number's plain row should be.
+ *
+ * TBESH splits some numbers into different words with a lowercase letter:
+ * H6030a עוּן "to dwell", H6030b עָנָה "to answer", H6030c עָנָה "to sing".
+ * The plain row (H6030) is what the reader's OSHB tags, the Strong's list and
+ * the interlinear glosses all read, and taking the file's first row made it
+ * the rarest word as often as not — H1004 read "place" rather than "house",
+ * H5892 "excitement" rather than "city". So the plain row goes to the row the
+ * Hebrew text uses most, counted from STEPBible's tagged OT (TAHOT), which
+ * tags every word with its split. A row, not a word: the word H5483b holds
+ * both "Horse (Gate)" and "horse", and only the second is what סוּס means.
+ * Names and parts of names (צָבָא in "LORD of Hosts") are passed over while
+ * the number has a common meaning to give. Greek has no such splits.
+ *
+ * Returns Map<plainId, dStrong> for split numbers only, e.g. H6030 → H6030B.
+ */
+function preferredHebrewWords(lines) {
+  const uses = new Map(); // dStrong (H6030B) -> times tagged
+  if (existsSync(TAHOT_DIR)) {
+    for (const name of readdirSync(TAHOT_DIR).filter((n) => n.startsWith('TAHOT'))) {
+      for (const line of readFileSync(join(TAHOT_DIR, name), 'utf8').split('\n')) {
+        if (!/^[1-3A-Z][a-z]+\.\d+\.\d+#/.test(line)) continue;
+        for (const tag of (line.split('\t')[4] ?? '').match(/H\d{4}[A-Z]?/g) ?? []) {
+          uses.set(tag, (uses.get(tag) ?? 0) + 1);
+        }
+      }
+    }
+  } else {
+    console.warn('⚠️  TAHOT not found – split numbers keep their first row');
+  }
+
+  const perNumber = new Map(); // plainId -> { words: Set<eStrong>, rows }, in file order
+  for (const line of lines) {
+    const fields = line.split('\t');
+    const e = /^(H\d{4})[a-z]$/.exec((fields[0] ?? '').trim());
+    const d = /^(H\d{4}[A-Z]?)\b/.exec((fields[1] ?? '').trim());
+    if (!e || !d) continue;
+    if (!perNumber.has(e[1])) perNumber.set(e[1], { words: new Set(), rows: [] });
+    const number = perNumber.get(e[1]);
+    number.words.add(fields[0].trim());
+    // Only a title or a piece of a longer name. A group name is the word's
+    // meaning: H3669 is "Canaanite" 65 times and "merchant" twice.
+    const name = /a (Name|Part) of/.test(fields[1]);
+    number.rows.push({ dStrong: d[1], uses: uses.get(d[1]) ?? 0, name });
+  }
+
+  const preferred = new Map();
+  for (const [plainId, { words, rows }] of perNumber) {
+    if (words.size < 2) continue;
+    const common = rows.filter((row) => !row.name);
+    let best = null;
+    for (const row of common.length ? common : rows) if (!best || row.uses > best.uses) best = row;
+    preferred.set(plainId, best.dStrong);
+  }
+  return preferred;
+}
+
 // Parse STEPBible TSV lexicon
 function parseStepBibleLexicon(filePath, language) {
   const strongsData = language === 'greek' ? loadGreekStrongsData() : loadHebrewStrongsData();
   console.log(`📖 Parsing ${filePath}...`);
-  
+
   const content = readFileSync(filePath, 'utf8');
   const lines = content.split('\n');
-  
+  const preferred = language === 'hebrew' ? preferredHebrewWords(lines) : new Map();
+  if (preferred.size) console.log(`✅ ${preferred.size} split numbers take their most-used meaning`);
+
   const entriesMap = new Map(); // keyed by eStrong; first row wins
   const pendingU = []; // [uStrongId, entry] — applied after every eStrong exists
   let inData = false;
@@ -178,7 +242,9 @@ function parseStepBibleLexicon(filePath, language) {
     // place: G5140 became "Taverns" (from Three Taverns) instead of "three",
     // because that row's uStrong reached G5140 first and the real τρεῖς row was
     // then skipped as already present.
-    if (!entriesMap.has(strongsId)) entriesMap.set(strongsId, entry);
+    const dStrong = /^(H\d{4}[A-Z]?)\b/.exec((fields[1] || '').trim())?.[1];
+    const isPreferred = !preferred.has(strongsId) || preferred.get(strongsId) === dStrong;
+    if (isPreferred && !entriesMap.has(strongsId)) entriesMap.set(strongsId, entry);
 
     // Same-language only: a Greek entry's uStrong can point at the Hebrew it
     // translates (G0002 Aaron = "the Greek of H0175"), which is a
@@ -276,8 +342,12 @@ async function main() {
   try {
     console.log("📚 Building Strong's Dictionary Packs from STEPBible\n");
     
+    const only = process.argv[2];
+
     // Build Greek pack
-    if (existsSync(GREEK_LEX)) {
+    if (only === 'hebrew') {
+      console.log('⏭️  Greek skipped');
+    } else if (existsSync(GREEK_LEX)) {
       const greekEntries = parseStepBibleLexicon(GREEK_LEX, 'greek');
       createStrongsPack(greekEntries, GREEK_OUTPUT, 'Greek');
     } else {
@@ -287,7 +357,9 @@ async function main() {
     console.log('');
     
     // Build Hebrew pack
-    if (existsSync(HEBREW_LEX)) {
+    if (only === 'greek') {
+      console.log('⏭️  Hebrew skipped');
+    } else if (existsSync(HEBREW_LEX)) {
       const hebrewEntries = parseStepBibleLexicon(HEBREW_LEX, 'hebrew');
       createStrongsPack(hebrewEntries, HEBREW_OUTPUT, 'Hebrew');
     } else {
