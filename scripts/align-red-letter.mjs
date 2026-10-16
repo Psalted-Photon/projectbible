@@ -625,6 +625,10 @@ const SOURCE_FIXES = {
     // WEB reports this as indirect speech ("he asked him if he saw anything"),
     // so NET had no WEB span to borrow for its direct question.
     'MRK:8:23': [{ text: '“Do you see anything?”' }],
+    // WEB has one unbroken saying where NET splits it around "said Jesus", so
+    // only NET's second part matched and the opening words stayed black.
+    'MAT:16:6': [{ text: '“Watch out,”' }, { text: '“beware of the yeast of the Pharisees and Sadducees.”' }],
+    'MRK:14:62': [{ text: '“I am,”' }, { text: '“and you will see the Son of Man sitting at the right hand of the Power and coming with the clouds of heaven.”' }],
   },
 };
 

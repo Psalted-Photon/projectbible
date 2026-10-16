@@ -665,6 +665,74 @@ function toPersonRecord(row: any): PersonRecord {
 }
 
 /**
+ * A name reduced to the letters translations agree on, so "Zechariah" (NET)
+ * and "Zacharias" (Theographic's KJV spelling) come out the same: k/ch/c,
+ * z/s, a dropped h, doubled letters, e/a and o/u, ij/i, and the Greek -ias.
+ * Kept strict on purpose. Looser rules (dropping a final s, allowing one more
+ * letter off) were tried against the whole of NET and started matching
+ * "Kings" to Jesus and "Samaria" to Zechariah.
+ */
+function foldNameSpelling(word: string): string {
+  return word.toLowerCase().replace(/[^a-z]/g, '')
+    .replace(/^y/, 'j').replace(/ij/g, 'i').replace(/y/g, 'i')
+    .replace(/(.)h/g, '$1').replace(/[kq]/g, 'c').replace(/z/g, 's')
+    .replace(/e/g, 'a').replace(/o/g, 'u')
+    .replace(/(.)\1+/g, '$1').replace(/ias$/, 'ia');
+}
+
+/**
+ * Last resort when the clicked spelling isn't in the name index at all, or
+ * belongs only to people who aren't in this chapter: someone linked to the
+ * clicked verse (then chapter) whose name is the same name spelled another
+ * way. Only a capitalised word of five or more letters qualifies, so ordinary
+ * words never reach it.
+ */
+async function personBySpellingInContext(
+  db: IDBDatabase,
+  word: string,
+  ref: VerseRef,
+): Promise<{ person: PersonRecord; tier: 'verse' | 'chapter' } | null> {
+  const raw = word.trim();
+  if (!/^[A-Z][a-z]{4,}$/.test(raw)) return null;
+  if (!db.objectStoreNames.contains('person_verses') || !db.objectStoreNames.contains('people')) return null;
+  const folded = foldNameSpelling(raw);
+
+  const idsIn = (range: IDBKeyRange) => new Promise<string[]>((resolve) => {
+    const tx = db.transaction('person_verses', 'readonly');
+    const request = tx.objectStore('person_verses').index('book_chapter_verse').getAll(range);
+    request.onsuccess = () => resolve([...new Set((request.result || []).map((r: any) => r.personId as string))]);
+    request.onerror = () => resolve([]);
+  });
+  const recordsFor = (ids: string[]) => new Promise<PersonRecord[]>((resolve) => {
+    if (!ids.length) { resolve([]); return; }
+    const tx = db.transaction('people', 'readonly');
+    const store = tx.objectStore('people');
+    const out: PersonRecord[] = [];
+    for (const id of ids) {
+      const request = store.get(id);
+      request.onsuccess = () => { if (request.result) out.push(toPersonRecord(request.result)); };
+    }
+    tx.oncomplete = () => resolve(out);
+    tx.onerror = () => resolve(out);
+  });
+  const sameName = (p: PersonRecord) =>
+    [p.name, ...(p.alsoCalled ?? '').split(/[,;]/)].some((n) => n.trim() && foldNameSpelling(n) === folded);
+
+  const tiers: Array<['verse' | 'chapter', IDBKeyRange]> = [
+    ['verse', IDBKeyRange.only([ref.book, ref.chapter, ref.verse])],
+    ['chapter', IDBKeyRange.bound([ref.book, ref.chapter, -Infinity], [ref.book, ref.chapter, Infinity])],
+  ];
+  for (const [tier, range] of tiers) {
+    const hits = (await recordsFor(await idsIn(range))).filter(sameName);
+    if (hits.length) {
+      hits.sort((a, b) => (b.verseCount ?? 0) - (a.verseCount ?? 0));
+      return { person: hits[0], tier };
+    }
+  }
+  return null;
+}
+
+/**
  * Look up a clicked word as a biblical character.
  *
  * Resolution strategy:
@@ -692,7 +760,14 @@ export async function lookupPerson(word: string, ref?: VerseRef | null): Promise
       request.onsuccess = () => resolve([...new Set((request.result || []).map((r: any) => r.personId))]);
       request.onerror = () => resolve([]);
     });
-    if (!candidateIds.length) return null;
+    // A spelling the index doesn't know can still be someone in this verse.
+    const bySpelling = async (): Promise<PersonLookupResult | null> => {
+      const found = ref ? await personBySpellingInContext(db, word, ref) : null;
+      return found
+        ? { person: found.person, alternates: [], matchedByVerse: found.tier === 'verse', matchTier: found.tier }
+        : null;
+    };
+    if (!candidateIds.length) return await bySpelling();
 
     // 2. Context disambiguation, in two tiers.
     // Tier 1 — the person appears in the exact clicked verse. Best signal: it
@@ -731,8 +806,9 @@ export async function lookupPerson(word: string, ref?: VerseRef | null): Promise
       }
 
       // Nobody with this name appears anywhere in the clicked chapter → not a
-      // character here, so callers fall back to the dictionary definition.
-      if (matchedIds.length === 0) return null;
+      // character here (unless it's someone here spelled another way), so
+      // callers fall back to the dictionary definition.
+      if (matchedIds.length === 0) return await bySpelling();
     }
 
     // 3. Fetch all candidate records (to rank by prominence / verseCount)
@@ -805,7 +881,8 @@ export async function resolveClickedPersonId(
       request.onsuccess = () => resolve([...new Set((request.result || []).map((r: any) => r.personId))]);
       request.onerror = () => resolve([]);
     });
-    if (!candidateIds.length) return null;
+    const bySpelling = async () => (ref ? (await personBySpellingInContext(db, word, ref))?.person.id ?? null : null);
+    if (!candidateIds.length) return await bySpelling();
     if (!ref || !db.objectStoreNames.contains('person_verses')) return candidateIds[0];
 
     const atVerse = await new Promise<Set<string>>((resolve) => {
@@ -822,7 +899,7 @@ export async function resolveClickedPersonId(
       const verses = await getPersonVerses(id);
       if (verses.some((v) => v.book === ref.book && v.chapter === ref.chapter)) return id;
     }
-    return null;
+    return await bySpelling();
   } catch {
     return null;
   }
