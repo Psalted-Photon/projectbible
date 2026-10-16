@@ -22,11 +22,13 @@
     isRtl,
     displayId,
     loadMeanings,
+    loadHebrewRelated,
     parseKjvUsage,
     type StrongsEntryData,
     type EntryTab,
     type Meaning,
   } from "../../lib/strongs/entry";
+  import type { RelatedWords } from "../../adapters/lexicon-lookup";
   import { reveal } from "../../lib/motion";
   import { showOriginalWordAt } from "../OriginalWordPopup.svelte";
 
@@ -84,9 +86,25 @@
   $: showSourcePicker = (usage?.sources.length ?? 0) > 1;
   $: rtl = isRtl(entry.language);
 
-  /** Words sharing this one's sense, grouped in two tiers. Greek only: the
-   *  domain tagging comes from the Greek NT, so a Hebrew entry has none. */
-  $: related = entry.related;
+  /** Words sharing this one's sense, grouped in two tiers. A Greek row carries
+   *  its own; a Hebrew entry's are read the first time its Related tab opens. */
+  let hebrewRelated: RelatedWords | undefined;
+  let hebrewRelatedFor = "";
+  let relatedLoading = false;
+  $: if (activeTab === "related" && rtl && !entry.related && hebrewRelatedFor !== entry.id) {
+    hebrewRelatedFor = entry.id;
+    hebrewRelated = undefined;
+    relatedLoading = true;
+    const id = entry.id;
+    loadHebrewRelated(id)
+      .catch(() => undefined)
+      .then((found) => {
+        if (hebrewRelatedFor !== id) return;
+        hebrewRelated = found;
+        relatedLoading = false;
+      });
+  }
+  $: related = entry.related ?? (hebrewRelatedFor === entry.id ? hebrewRelated : undefined);
 
   // --- Meanings ----------------------------------------------------------
   // STEPBible splits some numbers where Strong's gave one number to two words
@@ -513,11 +531,13 @@
             </div>
           </div>
         {/if}
+      {:else if relatedLoading}
+        <p class="hint show-late">Loading…</p>
       {:else if rtl}
-        <p class="coming-soon">Sense grouping covers Greek only.</p>
+        <p class="coming-soon">No words share this one's sense.</p>
         <p class="hint">
-          The tagging behind it comes from the Greek New Testament, so
-          Hebrew and Aramaic entries have none yet.
+          Words are grouped by how they are tagged in the Hebrew Bible, and
+          that tagging is not finished: this word has none yet.
         </p>
       {:else}
         <p class="coming-soon">No words share this one's sense.</p>

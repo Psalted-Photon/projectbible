@@ -198,6 +198,13 @@ console.log(pron?.stress); // 2
 - **License:** Creative Commons (CC BY 4.0)
 - **Source:** https://github.com/STEPBible/STEPBible-Data
 
+### Related words (sense groups)
+
+- **Greek:** Louw-Nida domain numbers from OpenGNT, written into the Greek Strong's pack by `scripts/add-semantic-domains.mjs`
+- **Hebrew/Aramaic:** SDBH lexical and core domains from MACULA Hebrew (Clear Bible), built by `scripts/build-hebrew-sense-groups.mjs` into `apps/pwa-polished/src/data/strongs-related-hebrew.json`. Ships with the app, not in the lexical pack.
+- **License:** MACULA Hebrew Linguistic Datasets, CC BY 4.0, https://github.com/Clear-Bible/macula-hebrew
+- Domain names are never shown, only the member words.
+
 ### Morphology
 
 - **Greek NT:** OpenGNT and MorphGNT projects

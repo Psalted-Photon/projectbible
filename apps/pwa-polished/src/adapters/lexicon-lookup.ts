@@ -48,7 +48,7 @@ export interface LexiconEntry {
   derivation?: string;
   kjvUsage?: string;
   /** Words sharing this one's Louw-Nida sense, precomputed at pack-build time.
-   *  Greek only — the domain tagging comes from the Greek NT. */
+   *  Greek rows only; Hebrew's ship in the app (loadHebrewRelated). */
   related?: RelatedWords;
 }
 
