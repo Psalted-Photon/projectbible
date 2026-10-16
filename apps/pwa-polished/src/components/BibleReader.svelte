@@ -118,7 +118,7 @@
   import { openStrongsWord } from "../lib/openWork";
   import { glossFor } from "../lib/strongs/entry";
   import { cleanOffsetOf, originalAt } from "../lib/wordLinks";
-  import { verseAtEnglishRef } from "../lib/companion";
+  import { companionChapterLines, verseAtEnglishRef } from "../lib/companion";
   import { isOriginalLanguage, isHebrewText as isHebrewTranslation, isEnglishTranslation } from "../lib/translationKind";
   import {
     resolveWordAt,
@@ -331,6 +331,7 @@
       text: string;
       html?: string;
       interlinearHtml?: string;
+      englishHtml?: string;
       heading?: string | null;
       headingLevel?: number | null;
       paraStart?: boolean;
@@ -2867,6 +2868,7 @@
       // Load morphology cache if original language translation
       if (isOriginalLanguage(translation)) {
         await loadMorphologyCache(translation, book, chapter);
+        const englishLines = await companionChapterLines(translation, book, chapter, processedVerses.map((v) => v.verse));
         if (ticket !== loadChapterTicket) return; // overtaken while loading morphology
         // Pre-build interlinear HTML so toggling the view is instant (no reload).
         // Layer visibility is handled in CSS, so this is built once per load.
@@ -2875,6 +2877,7 @@
           verses: c.verses.map((v) => ({
             ...v,
             interlinearHtml: buildInterlinearHtml(morphologyCache.get(v.verse)),
+            englishHtml: englishLines.get(v.verse),
           })),
         }));
       } else {
@@ -3739,6 +3742,9 @@
         const nextMorph = isOriginalLanguage(currentTranslation)
           ? await fetchChapterMorphology(currentTranslation, nextBook, nextChapter)
           : null;
+        const nextEnglish = nextMorph
+          ? await companionChapterLines(currentTranslation, nextBook, nextChapter, nextVerses.map((v) => v.verse))
+          : null;
         const processedVerses = nextVerses.map((v) => {
           const { heading, textWithoutHeading } = extractHeading(v.text);
           const hlEntry = nextHeadingMap.get(v.verse);
@@ -3750,6 +3756,7 @@
             text: cleanText,
             html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
             interlinearHtml: nextMorph ? buildInterlinearHtml(nextMorph.get(v.verse)) : undefined,
+            englishHtml: nextEnglish?.get(v.verse),
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
             paraStart,
@@ -3861,6 +3868,9 @@
         const prevMorph = isOriginalLanguage(currentTranslation)
           ? await fetchChapterMorphology(currentTranslation, prevBook, prevChapter)
           : null;
+        const prevEnglish = prevMorph
+          ? await companionChapterLines(currentTranslation, prevBook, prevChapter, prevVerses.map((v) => v.verse))
+          : null;
         const processedVerses = prevVerses.map((v) => {
           const { heading, textWithoutHeading } = extractHeading(v.text);
           const hlEntry = prevHeadingMap.get(v.verse);
@@ -3872,6 +3882,7 @@
             text: cleanText,
             html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
             interlinearHtml: prevMorph ? buildInterlinearHtml(prevMorph.get(v.verse)) : undefined,
+            englishHtml: prevEnglish?.get(v.verse),
             heading: finalHeading,
             headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
             paraStart,
@@ -6727,6 +6738,7 @@
             class:il-show-lemma={isInterlinearActive && interlinearSettings.showLemma}
             class:il-show-strongs={isInterlinearActive && interlinearSettings.showStrongs}
             class:il-show-parse={isInterlinearActive && interlinearSettings.showParsing}
+            class:il-show-verse-english={interlinearSettings.showVerseEnglish && isOriginalLanguage(currentTranslation)}
             style="--verse-num-color:{getBookColor(chapterData.book)}"
           >
             <!-- Verses come in stretches: inside an "Only in" run or not. A run
@@ -6748,7 +6760,7 @@
                 </div>
               {/if}
               <div class="verse-run" class:solo-run={seg.run !== null}>
-                {#each chapterData.verses.slice(seg.start, seg.end) as { verse, text, html, interlinearHtml, heading, headingLevel, paraStart, poetryLevel, stanzaBreak }, segIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
+                {#each chapterData.verses.slice(seg.start, seg.end) as { verse, text, html, interlinearHtml, englishHtml, heading, headingLevel, paraStart, poetryLevel, stanzaBreak }, segIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
                 {@const verseIdx = seg.start + segIdx}
                 {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
                 {#if heading && showSectionHeadings && !(seg.run && segIdx === 0)}
@@ -6847,6 +6859,7 @@
                       on:keypress|stopPropagation={(e) => e.key === 'Enter' && openNotePopup(verse, chapterData.book, chapterData.chapter)}
                     ><NotePencil size="1em" weight="bold" class="ph-inline" /></span>
                   {/if}
+                  {#if englishHtml}<span class="verse-english" dir="ltr" lang="en">{@html englishHtml}</span>{/if}
                   </span>
                   {#if hCtxsForVerse.length > 0}
                     {#each hCtxsForVerse as hCtx}
@@ -7683,6 +7696,43 @@
     font-size: 0.48em;
     color: #93c69a;
   }
+  /* The English verse under a Greek or Hebrew one. Outside .verse-text, so
+     taps, highlights, read-aloud and share never see it. Its own fixed
+     line-height and an em size, like the interlinear layers, so font size and
+     line spacing scale it without breaking the layout. */
+  :global(.verse-english) {
+    display: none;
+  }
+  :global(.verses.il-show-verse-english .verse-english) {
+    display: block;
+    margin: 0.2em 0 0.45em;
+    font-size: 0.68em;
+    font-style: normal;
+    line-height: 1.4;
+    color: var(--text-muted, #9aa0aa);
+    text-align: left;
+    unicode-bidi: isolate;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  :global(.verses.il-show-verse-english .verse-english .ve-tag) {
+    font-size: 0.85em;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+  :global(.verses.il-show-verse-english .verse-english .ve-missing) {
+    font-style: italic;
+    opacity: 0.75;
+  }
+  /* A line under each verse needs each verse on its own line, so the two
+     paragraph layouts go back to one verse per line. Poetry keeps its grid:
+     the line sits inside .verse-body, under the text. */
+  :global(.verses.il-show-verse-english.paragraph-layout .verse:not(.poetry-1):not(.poetry-2)),
+  :global(.verses.il-show-verse-english.nonumber-layout .verse:not(.poetry-1):not(.poetry-2)) {
+    display: block;
+  }
+
   /* Interlinear forces per-word block layout regardless of verse layout mode. */
   :global(.verses.interlinear-active .verse) {
     display: block !important;

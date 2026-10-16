@@ -112,6 +112,10 @@ A toolbar button toggles it while you read. The same controls also live in Setti
 - **Strong's number** — the standard reference number for the word.
 - **Parsing** — the grammar: part of speech, tense, case, gender, number.
 
+### 4.4 English verse under each verse
+
+A separate checkbox, **English verse under each verse**, puts the whole verse in English under each Greek or Hebrew verse in the reader. It works with the interlinear on or off and is off until you turn it on. The English is your Settings default for that testament, or NET; the Septuagint pairs with its own English (lxx2012). Where the numbering differs, the English verse's number shows at the end (Hebrew Malachi 3:19 reads "NET 4:1"). A Hebrew psalm's title verse gets the English title and its next verse the body. Where the translation leaves a verse out (Matthew 17:21 in NET), it says so and shows the KJV. Nothing is marked in it, and it stays out of word taps, highlights, Read Aloud and Share. In paragraph layouts each verse goes back to its own line while it's on.
+
 ## 5. Word Study
 
 Tap any word in the text to open a full study panel for it. Works on English words and on Greek and Hebrew words.

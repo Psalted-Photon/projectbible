@@ -122,6 +122,13 @@
     {/each}
   </div>
 
+  <!-- Not a layer: it shows with word stacking on or off, so it sits apart
+       from the presets. -->
+  <label class="il-layer il-verse-english">
+    <input type="checkbox" bind:checked={s.showVerseEnglish} on:change={persist} />
+    <span>English verse under each verse</span>
+  </label>
+
   {#if showPreview}
     <div class="il-preview-label">Preview</div>
     <div class="il-preview">
@@ -210,6 +217,10 @@
     height: 18px;
     cursor: pointer;
     accent-color: #667eea;
+  }
+  .il-verse-english {
+    padding-top: 10px;
+    border-top: 1px solid #333;
   }
   .il-layer input[type='checkbox']:disabled {
     cursor: not-allowed;

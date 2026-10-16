@@ -129,7 +129,7 @@ Primary files: `src/stores/navigationStore.ts`, `src/components/NavigationBar.sv
 
 ## 4. Interlinear (Greek & Hebrew)
 
-Files: `src/components/InterlinearControls.svelte` (254 lines), settings in `src/adapters/settings.ts`, reader state at `BibleReader.svelte`.
+Files: `src/components/InterlinearControls.svelte` (265 lines), settings in `src/adapters/settings.ts`, reader state at `BibleReader.svelte`.
 
 `InterlinearControls` is used in two contexts, driven by two props:
 
@@ -151,6 +151,7 @@ Interface `InterlinearSettings`, `settings.ts`. Resolved with defaults by `getIn
 | `showLemma` | `false` | Dictionary (lexical) form |
 | `showStrongs` | `false` | Strong's number |
 | `showParsing` | `false` | Morphology / part-of-speech |
+| `showVerseEnglish` | `false` | Whole English verse under each verse. Not part of the presets; applies whenever an original-language text is open, stacking on or off. |
 
 ### 4.2 Presets
 
@@ -169,6 +170,10 @@ Interface `InterlinearSettings`, `settings.ts`. Resolved with defaults by `getIn
 Rendered as a vertical `inline-flex` stack per word. Colors: original `#f0f0f0`, gloss `#cfe3ff`, transliteration `#b0b0b0` italic, lemma `#e3cd96`, parsing `#9aa0a6`, Strong's `#93c69a`. `InterlinearControls.svelte`.
 
 The preview block uses fixed `line-height: 1.15` and `font-size: 21px` with `em`-relative layer sizes, deliberately independent of `--base-font-size` / `--line-spacing` so it can't be distorted by the user's reading settings. `InterlinearControls.svelte`. Sample phrase is John 1:1a.
+
+### 4.4 English verse line
+
+`companionChapterLines(translation, book, chapter, verseNumbers)` (`lib/companion.ts`) returns a map of the original's verse number to HTML: the English from `companionTranslationFor(null, book)` (lxx2012 for the Septuagint), converted with `convertRef`, each piece through `renderCompanionHtml` with its `title`/`body` range and no marks. An English verse several original verses share goes under the first; a verse whose number moved ends in a `.ve-tag` ("NET 4:1"); a missing verse reads `.ve-missing` "Not in NET" plus KJV's verse when installed. An empty map when the English isn't installed or has nothing for the whole chapter. BibleReader builds `englishHtml` beside `interlinearHtml` at its three morphology sites (chapter load, append, prepend) and draws `<span class="verse-english" dir="ltr">` at the end of `.verse-body`, outside `.verse-text`, so taps, highlights, Read Aloud and Share never see it. `.verses.il-show-verse-english` shows it (hidden otherwise, so toggling needs no reload), at `0.68em` with its own `line-height: 1.4`, and returns the paragraph layouts to one verse per line (poetry keeps its grid).
 
 ## 5. Word Study
 

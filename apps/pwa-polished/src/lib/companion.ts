@@ -16,7 +16,7 @@ import { DEFAULT_TRANSLATION } from './bibleData';
 import { defaultTranslationFor, testamentOf } from './testamentDefaults';
 import { isOriginalLanguage } from './translationKind';
 import { convertRef, englishRefIn, schemeOf, type MappedRef, type VerseRef } from './versification';
-import { cleanVersePreviewText, companionText } from './verseRendering';
+import { cleanVersePreviewText, companionText, renderCompanionHtml } from './verseRendering';
 import { glossSpans, type Span } from './wordLinks/glossMatch';
 import { getVerseLinks, spansForStrongs } from './wordLinks/index';
 import { availableTranslations } from '../stores/navigationStore';
@@ -169,4 +169,72 @@ export async function verseAtEnglishRef(translation: string, book: string, chapt
   const at = englishRefIn(translation, { book, chapter, verse });
   if (!at) return '';
   return (await textStore.getVerse(translation, book, at.chapter, at.verse).catch(() => null)) ?? '';
+}
+
+/**
+ * English lines for a whole Greek or Hebrew chapter, by the original's verse
+ * number, as HTML ready for the reader. Unmarked: these sit under the main
+ * verse text, which never carries app marks.
+ *
+ * A Hebrew psalm title (verse 1) gets the English title, and verse 2 the
+ * body. When several original verses share one English verse, it goes under
+ * the first. Empty when the English has nothing for the whole chapter (not
+ * installed, or a book it lacks), so a page of "Not in" lines never shows.
+ */
+export async function companionChapterLines(
+  translation: string,
+  book: string,
+  chapter: number,
+  verseNumbers: number[],
+): Promise<Map<number, string>> {
+  const lines = new Map<number, string>();
+  try {
+    const english = schemeOf(translation) === 'lxx' ? 'lxx2012' : companionTranslationFor(null, book);
+    if (!installed(english.toLowerCase())) return lines;
+    const name = english.toUpperCase();
+    const used = new Set<string>();
+    let found = 0;
+
+    const render = async (from: string, targets: MappedRef[]) => {
+      const parts: string[] = [];
+      for (const t of targets) {
+        const stored = (await chapterOf(from, t.book, t.chapter)).get(t.verse);
+        if (!isMissing(stored)) parts.push(renderCompanionHtml(stored!, [], { range: t.part }));
+      }
+      return parts.join(' ');
+    };
+
+    for (const verse of verseNumbers) {
+      const mapped = convertRef(translation, english, { book, chapter, verse });
+      const targets = mapped.filter((t) => {
+        const key = `${t.book}|${t.chapter}|${t.verse}|${t.part}`;
+        if (used.has(key)) return false;
+        used.add(key);
+        return true;
+      });
+      // Every English verse it maps to already sits under an earlier verse.
+      if (mapped.length && !targets.length) continue;
+
+      const text = await render(english, targets);
+      if (text) {
+        found++;
+        // Name the English verse only when its number isn't the original's.
+        const moved = targets.length > 1 || targets.some((t) => t.chapter !== chapter || t.verse !== verse);
+        const tag = moved ? ` <span class="ve-tag">${name} ${targets.map((t) => `${t.chapter}:${t.verse}`).join(', ')}</span>` : '';
+        lines.set(verse, text + tag);
+        continue;
+      }
+      // Matthew 17:21 in NET: say so, and give KJV's verse when it's there.
+      let line = `<span class="ve-missing">Not in ${name}</span>`;
+      if (name !== 'KJV' && installed('kjv')) {
+        const kjv = await render('KJV', convertRef(translation, 'KJV', { book, chapter, verse }));
+        if (kjv) line += ` ${kjv} <span class="ve-tag">KJV</span>`;
+      }
+      lines.set(verse, line);
+    }
+    if (!found) lines.clear();
+  } catch {
+    lines.clear();
+  }
+  return lines;
 }

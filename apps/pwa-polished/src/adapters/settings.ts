@@ -24,6 +24,7 @@ export interface InterlinearSettings {
   showLemma: boolean;     // dictionary (lexical) form
   showStrongs: boolean;   // Strong's number
   showParsing: boolean;   // morphology / part-of-speech parsing
+  showVerseEnglish: boolean; // the whole verse in English under each verse; not part of the presets, works with stacking off too
 }
 
 /**
@@ -587,6 +588,7 @@ export function getInterlinearSettings(): InterlinearSettings {
     showLemma: s?.showLemma ?? false,
     showStrongs: s?.showStrongs ?? false,
     showParsing: s?.showParsing ?? false,
+    showVerseEnglish: s?.showVerseEnglish ?? false,
   };
 }
 
