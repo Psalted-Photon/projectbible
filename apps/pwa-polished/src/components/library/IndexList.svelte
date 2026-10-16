@@ -532,13 +532,13 @@
                 <button class="jump-btn" title="Show on the map" aria-label="Show {row.name} on the map" on:click={(e) => openBadge(e, row, "place")}><MapPin size={14} weight="bold" /></button>
               {/if}
               {#if shows("bio") && row.hasBio}
-                <button class="jump-btn" title="Read the bio" aria-label="Bio of {row.name}" on:click={(e) => openBadge(e, row, "bio")}><PanelIcon name="people" size={14} plain /></button>
+                <button class="jump-btn bio" title="Read the bio" aria-label="Bio of {row.name}" on:click={(e) => openBadge(e, row, "bio")}><PanelIcon name="people" size={14} plain /></button>
               {/if}
               {#if shows("entry") && row.hasEntry}
                 <button class="jump-btn books" title="Read the encyclopedia article" aria-label="Encyclopedia article on {row.name}" on:click={(e) => openBadge(e, row, "entry")}><Books size={14} weight="bold" /></button>
               {/if}
               {#if shows("topic") && row.hasTopic}
-                <button class="jump-btn tag" title="Open the topic in Nave's" aria-label="Nave's topic {row.name}" on:click={(e) => openBadge(e, row, "topic")}><Tag size={14} weight="bold" /></button>
+                <button class="jump-btn topic" title="Open the topic in Nave's" aria-label="Nave's topic {row.name}" on:click={(e) => openBadge(e, row, "topic")}><Tag size={14} weight="bold" /></button>
               {/if}
               {#if shows("dict") && row.hasDict}
                 <button class="jump-btn dict" title="Look it up in the dictionary" aria-label="Dictionary entry for {row.name}" on:click={(e) => openBadge(e, row, "dict")}><TextAa size={14} weight="bold" /></button>
@@ -803,8 +803,9 @@
     opacity: 1;
     transform: scale(1.3);
   }
+  .jump-btn.bio { color: #a855f7; }
   .jump-btn.books { color: #3b82f6; }
-  .jump-btn.tag { color: #eab308; }
+  .jump-btn.topic { color: #eab308; }
   .jump-btn.tree { color: #22c55e; }
   .jump-btn.dict { color: #ef4444; }
 
