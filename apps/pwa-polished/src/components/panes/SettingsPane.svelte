@@ -13,6 +13,7 @@
     isTtsSupported,
     DEFAULT_TTS_VOICE,
     firstVoiceDownload,
+    installVoiceFromFiles,
     type TtsVoiceInfo,
   } from "../../adapters/tts";
   import {
@@ -38,6 +39,7 @@
     CheckCircle,
     CloudArrowDown,
     Trash,
+    Microphone,
   } from 'phosphor-svelte';
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
@@ -204,7 +206,8 @@
     ? ttsVoices.filter((v) => installedVoiceIds!.includes(v.id))
     : ttsVoices;
   $: naturalVoices = shownVoices.filter((v) => v.engine === "kokoro");
-  $: standardVoices = shownVoices.filter((v) => v.engine !== "kokoro");
+  $: standardVoices = shownVoices.filter((v) => v.engine !== "kokoro" && !v.custom);
+  $: ownVoices = shownVoices.filter((v) => v.custom);
   $: noVoicesYet = installedVoiceIds !== null && shownVoices.length === 0;
   /** Voices one tap would still fetch, and roughly how big that is. */
   let missingVoiceCount = 0;
@@ -426,6 +429,41 @@
     month: "long",
     year: "numeric",
   });
+
+  let voiceFileInput: HTMLInputElement;
+  let addingVoice = false;
+
+  /**
+   * A Piper voice the reader brings themselves: its model (.onnx) and settings
+   * (.onnx.json), picked together. Same install as Manage Packs; once it lands
+   * it becomes the voice in use.
+   */
+  async function handleVoiceFiles(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = ""; // allow re-picking the same files
+    if (files.length === 0) return;
+
+    const model = files.find((f) => f.name.toLowerCase().endsWith(".onnx"));
+    const config = files.find((f) => f.name.toLowerCase().endsWith(".json"));
+    if (!model || !config) {
+      showNotice("Pick both files for the voice: the model (.onnx) and its settings (.onnx.json).", "error");
+      return;
+    }
+
+    addingVoice = true;
+    try {
+      const id = await installVoiceFromFiles(model, config);
+      await refreshVoiceInventory();
+      ttsVoice = id;
+      showNotice("Voice added. It's now the voice in use.");
+    } catch (err: any) {
+      console.error("[Settings] Custom voice install failed:", err);
+      showNotice(`Couldn't add the voice: ${err?.message ?? err}`, "error");
+    } finally {
+      addingVoice = false;
+    }
+  }
 
   /** Space this site takes on the device: packs, voices, maps, the app itself. */
   let storageUsed = "";
@@ -1257,9 +1295,16 @@
               </optgroup>
             {/if}
           {:else}
-            {#each shownVoices as v}
+            {#each standardVoices as v}
               <option value={v.id}>{v.label}</option>
             {/each}
+          {/if}
+          {#if ownVoices.length > 0}
+            <optgroup label="Your voices">
+              {#each ownVoices as v}
+                <option value={v.id}>{v.label}</option>
+              {/each}
+            </optgroup>
           {/if}
         </select>
       </label>
@@ -1279,6 +1324,26 @@
         </button>
       {/if}
       {/if}
+      <button
+        class="packs-button voices-button voices-button-small add-voice-button"
+        on:click={() => voiceFileInput?.click()}
+        disabled={addingVoice || $installBusy}
+      >
+        <span class="icon"><Microphone size={18} weight="bold" /></span>
+        <span class="text">{addingVoice ? "Adding voice…" : "Add custom voice"}</span>
+      </button>
+      <p class="install-hint add-voice-hint">
+        Your own Piper voice, kept separate from ours. Pick its model (.onnx) and
+        settings (.onnx.json) together.
+      </p>
+      <input
+        type="file"
+        accept=".onnx,.json,application/json"
+        multiple
+        hidden
+        bind:this={voiceFileInput}
+        on:change={handleVoiceFiles}
+      />
       <label>
         <span class="label-text">Reading speed: {ttsRate.toFixed(2)}×</span>
         <input
@@ -1907,6 +1972,12 @@
   .voices-button-small {
     margin-top: 0.5rem;
     font-size: 0.85rem;
+  }
+  .add-voice-button {
+    margin-bottom: 0;
+  }
+  .add-voice-hint {
+    margin-bottom: 0.75rem;
   }
   /* Same affordance as Manage Packs, but sitting inside the Read Aloud group. */
   .alarm-button {
