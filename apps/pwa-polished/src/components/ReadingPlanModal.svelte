@@ -1573,7 +1573,7 @@
                     </div>
                     <div class="plan-manager-actions">
                       {#if nextCh}
-                        <button class="pm-chapter-link" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{normalizeBookName(nextCh.book)} {nextCh.chapter} <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
+                        <button class="pm-chapter-link" style="--book-color: {getBookColor(nextCh.book)}" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{normalizeBookName(nextCh.book)} {nextCh.chapter} <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
                       {/if}
                       {#if planRenamingId !== entry.id}
                         <button class="pm-rename-btn" on:click={() => { planRenamingId = entry.id; planRenameValue = getPlanDisplayName(entry.plan.config); planDeleteConfirmId = null; }}>Rename</button>
@@ -1618,6 +1618,7 @@
                               {@const pIdx = todayReading.harmonySections.slice(0, sIdx).reduce((n: number, s: any) => n + s.passages.length, 0) + pi}
                               <button
                                 class="chapter-link harmony-passage-link banner-passage-link"
+                                style="--book-color: {getBookColor(passage.book)}"
                                 on:click={() => handlePassageClick(todayReading, passage, pIdx)}
                               >{passage.label}</button>
                             {/each}
@@ -1633,6 +1634,7 @@
                             />
                             <button
                               class="chapter-link"
+                              style="--book-color: {getBookColor(chapter.book)}"
                               on:click={() => handleChapterClick(todayReading, chapter)}
                             >{normalizeBookName(chapter.book)} {chapter.chapter}</button>
                           </label>
@@ -1792,7 +1794,7 @@
                           {#each daySections as sec}
                             {#each sec.passages as passage, pi}
                               {@const pIdx = daySections.slice(0, daySections.indexOf(sec)).reduce((n: number, s) => n + s.passages.length, 0) + pi}
-                              <label class="chapter-chip" title="§{sec.section} — {sec.title}">
+                              <label class="chapter-chip" title="§{sec.section} — {sec.title}" style="--book-color: {getBookColor(passage.book)}">
                                 <input
                                   type="checkbox"
                                   checked={isPassageChecked(day.dayNumber, sec.section, passage.label)}
@@ -2476,26 +2478,19 @@
     font-size: 13px;
   }
 
+  /* Book-category color, same palette as the nav dropdown and reader. */
   .chapter-link {
     background: none;
     border: none;
-    color: #3b82f6;
+    color: var(--book-color, #3b82f6);
     font-weight: 500;
     cursor: pointer;
     text-decoration: underline;
     padding: 0 2px;
   }
 
-  .today-reading.day-done .chapter-link {
-    color: #4caf50;
-  }
-
   .chapter-link:hover {
-    color: #60a5fa;
-  }
-
-  .today-reading.day-done .chapter-link:hover {
-    color: #66bb6a;
+    filter: brightness(1.2);
   }
   
   /* Size and shape come from .today-reading-actions; this is color only. */
@@ -3240,15 +3235,15 @@
   }
   .pm-chapter-link {
     padding: 4px 10px;
-    background: linear-gradient(135deg, #1d4ed8, #1e40af);
-    color: #fff;
-    border: 1px solid #3b82f6;
+    background: #1a1a1a;
+    color: var(--book-color, #3b82f6);
+    border: 1px solid var(--book-color, #3b82f6);
     border-radius: 4px;
     font-size: 12px;
     cursor: pointer;
     font-weight: 500;
   }
-  .pm-chapter-link:hover { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+  .pm-chapter-link:hover { background: #2a2a2a; }
   .pm-rename-btn {
     padding: 4px 10px;
     background: #2a2a2a;
