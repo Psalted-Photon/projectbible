@@ -328,32 +328,18 @@ export async function removePack(packId: string): Promise<void> {
     await removeAudioPackFiles(packId);
 
   } else if (packType === 'text') {
-    // Both cursors run concurrently inside one transaction — IDB keeps it open
-    // until all pending cursor activity is exhausted.
+    // Every verse and word row is keyed "<translation>:book:chapter:verse…", so
+    // a translation's rows are one contiguous key range and go in a single
+    // delete. This used to walk every row of both stores -- every verse of every
+    // installed translation, and all 584k words, each read out in full -- just
+    // to pick out the ones to drop, which was most of an Ancient Languages
+    // update. The pack ids are covered too, as the old walk matched them.
+    const prefixes = [...translationIds, ...allPackIds];
     await withTx(['verses', 'morphology'], 'readwrite', tx => {
-      const versesCursor = tx.objectStore('verses').openCursor();
-      versesCursor.onsuccess = (event) => {
-        const c = (event.target as IDBRequest).result as IDBCursorWithValue | null;
-        if (c) {
-          if (
-            translationIds.has(c.value.translationId) ||
-            allPackIds.some(id => c.value.id?.startsWith(id + ':'))
-          ) c.delete();
-          c.continue();
-        }
-      };
-
-      const morphCursor = tx.objectStore('morphology').openCursor();
-      morphCursor.onsuccess = (event) => {
-        const c = (event.target as IDBRequest).result as IDBCursorWithValue | null;
-        if (c) {
-          if (
-            translationIds.has(c.value.translationId) ||
-            allPackIds.some(id => c.value.id?.startsWith(id + ':'))
-          ) c.delete();
-          c.continue();
-        }
-      };
+      for (const name of ['verses', 'morphology']) {
+        const store = tx.objectStore(name);
+        prefixes.forEach(prefix => store.delete(keyPrefixRange(prefix)));
+      }
     });
 
   } else {
@@ -611,6 +597,14 @@ function waitForTransaction(tx: IDBTransaction): Promise<void> {
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(new Error('Transaction aborted'));
   });
+}
+
+/**
+ * Every string key that starts with "<prefix>:". The colon is part of it, so
+ * "KJV" never reaches "KJVA:…".
+ */
+export function keyPrefixRange(prefix: string): IDBKeyRange {
+  return IDBKeyRange.bound(`${prefix}:`, `${prefix}:￿`);
 }
 
 /**

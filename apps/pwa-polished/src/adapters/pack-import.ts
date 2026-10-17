@@ -1,5 +1,6 @@
 import type { DBPack, DBVerse } from './db.js';
 import { batchWriteTransaction, writeTransaction, openDB } from './db.js';
+import { keyPrefixRange } from './db-manager';
 import { logInstall, logInstallFlush, logInstallError } from '../lib/install-log';
 import { normalizeBookName } from '../lib/bibleData';
 import { originalLanguageOf } from '../lib/translationKind';
@@ -1203,17 +1204,9 @@ export async function importPackFromBytes(
           const packEditions = hasRowTranslationId
             ? (db.exec('SELECT DISTINCT translation_id FROM words')[0]?.values ?? []).map((r) => r[0] as string)
             : [packInfo.translationId || 'unknown'];
+          // One range delete per edition: every row's key starts "<edition>:".
           await batchWriteTransaction('morphology', (store) => {
-            const byVerse = store.index('verse_ref');
-            for (const edition of packEditions) {
-              const req = byVerse.openKeyCursor(IDBKeyRange.bound([edition], [edition, []]));
-              req.onsuccess = () => {
-                const cursor = req.result;
-                if (!cursor) return;
-                store.delete(cursor.primaryKey);
-                cursor.continue();
-              };
-            }
+            for (const edition of packEditions) store.delete(keyPrefixRange(edition));
           });
 
           // Streamed: ~584k rows held at once is what killed the Ancient
