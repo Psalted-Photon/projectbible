@@ -42,7 +42,7 @@ function contentMismatch(message: string): PackContentError {
  * a phone that kills the app mid-install picks the file back up instead of
  * downloading it again. The caller says when with releaseDownload().
  */
-const MAX_CACHED_PACK_BYTES = 32 * 1024 * 1024;
+export const MAX_CACHED_PACK_BYTES = 32 * 1024 * 1024;
 
 export interface DownloadProgress {
   packId: string;
@@ -77,6 +77,14 @@ export interface PackLoaderOptions {
    * so the app supplies one.
    */
   onStage?: (stage: string, detail?: Record<string, unknown>) => void;
+
+  /**
+   * A file this pack may already be arriving as, from somewhere other than a
+   * plain fetch -- a background download the browser is running. Null means
+   * fetch it as usual. What it returns is read, size-checked and hash-checked
+   * like any download; if that fails, the pack is fetched as usual.
+   */
+  fetchFile?: (pack: PackEntry, url: string) => Promise<Response | null>;
 }
 
 export class PackLoader {
@@ -90,7 +98,8 @@ export class PackLoader {
       maxRetries: options.maxRetries ?? 3,
       retryDelay: options.retryDelay ?? 1000,
       onProgress: options.onProgress ?? (() => {}),
-      onStage: options.onStage ?? (() => {})
+      onStage: options.onStage ?? (() => {}),
+      fetchFile: options.fetchFile ?? (async () => null)
     };
   }
   
@@ -216,6 +225,10 @@ export class PackLoader {
       return cached;
     }
     
+    // Arriving from a background download, or already saved by one.
+    const provided = await this.takeProvidedFile(pack);
+    if (provided) return provided;
+
     // Download with retries
     let lastError: Error | null = null;
     
@@ -223,53 +236,9 @@ export class PackLoader {
       try {
         this.options.onStage('attempt', { attempt, of: this.options.maxRetries });
         console.log(`Downloading ${packId} (attempt ${attempt}/${this.options.maxRetries})...`);
-        
+
         const data = await this.downloadWithProgress(pack);
-
-        // Validate SHA-256
-        this.options.onStage('sha256-start', { bytes: data.length });
-        this.options.onProgress({
-          packId,
-          loaded: pack.size,
-          total: pack.size,
-          percentage: 100,
-          stage: 'validating'
-        });
-        
-        await this.validateSHA256(data, pack.sha256);
-        this.options.onStage('sha256-ok');
-
-        // Keep the file until its install succeeds. A big one goes again
-        // then (releaseDownload); a small one stays for good.
-        this.options.onProgress({
-          packId,
-          loaded: pack.size,
-          total: pack.size,
-          percentage: 100,
-          stage: 'caching'
-        });
-        const keep = pack.size <= MAX_CACHED_PACK_BYTES;
-        this.options.onStage('cache-start', { bytes: data.length, keep });
-        try {
-          await this.cachePack(packId, pack.version, pack.sha256, data, keep);
-          this.options.onStage('cache-done');
-        } catch (error) {
-          // Only a re-download is lost; the bytes in hand still install.
-          this.options.onStage('cache-failed', {
-            message: error instanceof Error ? error.message : String(error)
-          });
-        }
-
-        this.options.onProgress({
-          packId,
-          loaded: pack.size,
-          total: pack.size,
-          percentage: 100,
-          stage: 'complete'
-        });
-        
-        return data;
-        
+        return await this.checkAndKeep(pack, data);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         this.options.onStage('attempt-failed', {
@@ -304,15 +273,26 @@ export class PackLoader {
    * Download with progress tracking using ReadableStream
    */
   private async downloadWithProgress(pack: PackEntry): Promise<Uint8Array> {
-    // Pinning the proxy URL to the manifest's hash lets the CDN keep a copy
-    // and serve repeat downloads itself; a re-uploaded pack has a new hash,
-    // so it can never be answered with the old bytes. See api/packs/[name].ts.
-    const url =
-      pack.sha256 && pack.downloadUrl.startsWith('/api/packs/') && !pack.downloadUrl.includes('?')
-        ? `${pack.downloadUrl}?v=${pack.sha256}`
-        : pack.downloadUrl;
+    const url = PackLoader.downloadUrlFor(pack);
     this.options.onStage('fetch-start', { url });
     const response = await fetch(url);
+    return this.readResponse(pack, response);
+  }
+
+  /**
+   * The URL a pack is downloaded from. Pinning the proxy URL to the
+   * manifest's hash lets the CDN keep a copy and serve repeat downloads
+   * itself; a re-uploaded pack has a new hash, so it can never be answered
+   * with the old bytes. See api/packs/[name].ts.
+   */
+  static downloadUrlFor(pack: PackEntry): string {
+    return pack.sha256 && pack.downloadUrl.startsWith('/api/packs/') && !pack.downloadUrl.includes('?')
+      ? `${pack.downloadUrl}?v=${pack.sha256}`
+      : pack.downloadUrl;
+  }
+
+  /** Read a response's body into one buffer, reporting progress as it comes. */
+  private async readResponse(pack: PackEntry, response: Response): Promise<Uint8Array> {
 
     this.options.onStage('fetch-resolved', {
       status: response.status,
@@ -416,6 +396,107 @@ export class PackLoader {
   }
   
   /**
+   * Check downloaded bytes against the manifest, keep them until the install
+   * succeeds, and hand them back.
+   */
+  private async checkAndKeep(pack: PackEntry, data: Uint8Array): Promise<Uint8Array> {
+    const packId = pack.id;
+    this.options.onStage('sha256-start', { bytes: data.length });
+    this.options.onProgress({
+      packId,
+      loaded: pack.size,
+      total: pack.size,
+      percentage: 100,
+      stage: 'validating'
+    });
+
+    await this.validateSHA256(data, pack.sha256);
+    this.options.onStage('sha256-ok');
+
+    // Keep the file until its install succeeds. A big one goes again then
+    // (releaseDownload); a small one stays for good.
+    this.options.onProgress({
+      packId,
+      loaded: pack.size,
+      total: pack.size,
+      percentage: 100,
+      stage: 'caching'
+    });
+    const keep = pack.size <= MAX_CACHED_PACK_BYTES;
+    this.options.onStage('cache-start', { bytes: data.length, keep });
+    try {
+      await this.cachePack(packId, pack.version, pack.sha256, data, keep);
+      this.options.onStage('cache-done');
+    } catch (error) {
+      // Only a re-download is lost; the bytes in hand still install.
+      this.options.onStage('cache-failed', {
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+
+    this.options.onProgress({
+      packId,
+      loaded: pack.size,
+      total: pack.size,
+      percentage: 100,
+      stage: 'complete'
+    });
+    return data;
+  }
+
+  /**
+   * The file from fetchFile, if it has one for this pack. When it has none --
+   * a background download that has since finished and been put away -- the
+   * service worker may have saved it, so the cache is asked again. Null means
+   * download it as usual. A cancelled background download throws from
+   * fetchFile, and that is passed on rather than downloaded around.
+   */
+  private async takeProvidedFile(pack: PackEntry): Promise<Uint8Array | null> {
+    const response = await this.options.fetchFile(pack, PackLoader.downloadUrlFor(pack));
+    if (!response) {
+      const saved = await this.getCachedPack(pack.id, pack.version, pack.sha256);
+      if (saved) this.options.onStage('cache-hit-late', { bytes: saved.length });
+      return saved;
+    }
+    try {
+      this.options.onStage('background-file', { status: response.status });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await this.readResponse(pack, response);
+      return await this.checkAndKeep(pack, data);
+    } catch (error) {
+      this.options.onStage('background-file-failed', {
+        message: error instanceof Error ? error.message : String(error)
+      });
+      // The download may have ended under it, with the service worker
+      // saving the file as it did.
+      return await this.getCachedPack(pack.id, pack.version, pack.sha256);
+    }
+  }
+
+  /**
+   * The files kept in the cache with their bytes, as id -> SHA-256, so a new
+   * background download can leave out what is already here.
+   */
+  async keptFiles(): Promise<Map<string, string>> {
+    await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const kept = new Map<string, string>();
+      const transaction = this.db!.transaction(['pack_files'], 'readonly');
+      const request = transaction.objectStore('pack_files').openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const value = cursor.value;
+        if (value?.data && typeof value.sha256 === 'string') kept.set(value.id, value.sha256.toLowerCase());
+        cursor.continue();
+      };
+      transaction.oncomplete = () => resolve(kept);
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  /**
    * The manifest's SHA-256 for a pack, once the manifest has been fetched.
    *
    * After downloadPack returns, the bytes have been checked against this, so it
@@ -494,7 +575,12 @@ export class PackLoader {
       request.onsuccess = () => {
         // keep was not recorded before every file was kept; those entries
         // were all small ones kept for good.
-        if (request.result && request.result.keep === false) store.delete(packId);
+        const entry = request.result;
+        if (!entry || entry.keep !== false || !entry.data) return;
+        // The bytes go; a marker without them stays, so the service worker
+        // finishing a background download can tell this file is already
+        // installed and doesn't put it back (pack-fetch-handler.js).
+        store.put({ ...entry, data: null, installedAt: Date.now() });
       };
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
@@ -539,24 +625,40 @@ export class PackLoader {
     version: string,
     sha256: string,
   ): Promise<Uint8Array | null> {
-    const data = await this.readCachedPack(packId, version, sha256);
-    if (!data) return null;
-    if (data instanceof Uint8Array) return data;
-    // Read back as a Blob; a file the browser has lost from disk reads as an
-    // error, which is a miss, not a failed install.
-    try {
-      return new Uint8Array(await data.arrayBuffer());
-    } catch (error) {
-      console.warn(`Cached pack ${packId} could not be read — re-downloading`, error);
-      return null;
+    const cached = await this.readCachedPack(packId, version, sha256);
+    if (!cached) return null;
+    let bytes: Uint8Array;
+    if (cached.data instanceof Uint8Array) {
+      bytes = cached.data;
+    } else {
+      // Read back as a Blob; a file the browser has lost from disk reads as
+      // an error, which is a miss, not a failed install.
+      try {
+        bytes = new Uint8Array(await cached.data.arrayBuffer());
+      } catch (error) {
+        console.warn(`Cached pack ${packId} could not be read — re-downloading`, error);
+        return null;
+      }
     }
+    // The service worker saves what a background download brought without
+    // checking it; it is checked here, on first use, instead.
+    if (cached.verified === false) {
+      try {
+        await this.validateSHA256(bytes, sha256);
+      } catch (error) {
+        console.warn(`Saved pack ${packId} does not match the manifest — re-downloading`, error);
+        await this.removeCachedPack(packId).catch(() => {});
+        return null;
+      }
+    }
+    return bytes;
   }
 
   private async readCachedPack(
     packId: string,
     version: string,
     sha256: string,
-  ): Promise<Uint8Array | Blob | null> {
+  ): Promise<{ data: Uint8Array | Blob; verified?: boolean } | null> {
     await this.initDB();
 
     return new Promise((resolve, reject) => {
@@ -568,7 +670,8 @@ export class PackLoader {
       request.onsuccess = () => {
         const cached = request.result;
 
-        if (!cached) {
+        // No entry, or the marker an installed big file leaves behind.
+        if (!cached || !cached.data) {
           resolve(null);
           return;
         }
@@ -593,7 +696,7 @@ export class PackLoader {
           return;
         }
 
-        resolve(cached.data);
+        resolve({ data: cached.data, verified: cached.verified });
       };
 
       request.onerror = () => reject(request.error);

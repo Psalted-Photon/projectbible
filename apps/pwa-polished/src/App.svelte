@@ -12,6 +12,7 @@
   import WelcomeModal from "./components/WelcomeModal.svelte";
   import UpdateNotice from "./components/UpdateNotice.svelte";
   import AppNotice from "./components/AppNotice.svelte";
+  import PackRunCard from "./components/PackRunCard.svelte";
   import AppConfirm from "./components/AppConfirm.svelte";
   import FloatingTtsPlayer from "./components/FloatingTtsPlayer.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
@@ -469,6 +470,9 @@
 
     <!-- In-app messages (installs, removals, errors) in place of alert() -->
     <AppNotice />
+
+    <!-- Finishing a background pack download the app was closed during -->
+    <PackRunCard />
 
     <!-- In-app yes/no questions in place of confirm() -->
     <AppConfirm />

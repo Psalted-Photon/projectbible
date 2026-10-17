@@ -18,6 +18,7 @@ import { listInstalledPacks as listInstalledPacksFromDb } from '../adapters/db-m
 import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
 import { startInstallLog, logInstall, logInstallError, endInstallLog } from './install-log';
+import { backgroundResponse, BACKGROUND_PROGRESS_ID } from './backgroundFetch';
 
 let packLoader: PackLoader | null = null;
 let progressHandler: ((progress: DownloadProgress) => void) | null = null;
@@ -32,7 +33,19 @@ function getPackLoaderInstance(): PackLoader {
         progressHandler?.(progress);
       },
       // Core cannot import the app's logger, so hand it one.
-      onStage: (stage, detail) => logInstall(stage, detail)
+      onStage: (stage, detail) => logInstall(stage, detail),
+      // A file a background download is bringing. While it waits, the whole
+      // download's progress is reported, under its own id.
+      fetchFile: (pack, url) =>
+        backgroundResponse(pack.id, url, (loaded, total) =>
+          progressHandler?.({
+            packId: BACKGROUND_PROGRESS_ID,
+            loaded,
+            total,
+            percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
+            stage: 'downloading'
+          })
+        )
     });
   }
   return packLoader;
@@ -355,6 +368,9 @@ export async function loadPackOnDemand(
 /** Manifest ids of the art image shards, in install order. */
 const ART_SHARD_PREFIX = 'biblical-art-images-';
 
+/** What progress says while a pack waits on the whole background download. */
+export const BACKGROUND_MESSAGE = 'Downloading packs in the background';
+
 /**
  * Progress through a run of shards: what is happening in words, and the
  * percent of all the run's bytes downloaded so far.
@@ -382,7 +398,12 @@ async function installFileRun(
     const { id, size, what } = files[i];
     onProgress?.(`Downloading ${what}`, percentOf(doneBytes));
     setProgressHandler((p) => {
-      if (p.stage === 'downloading') onProgress?.(`Downloading ${what}`, percentOf(doneBytes + p.loaded));
+      if (p.stage !== 'downloading') return;
+      if (p.packId === BACKGROUND_PROGRESS_ID) {
+        onProgress?.(BACKGROUND_MESSAGE, p.total > 0 ? Math.min(100, Math.floor((p.loaded / p.total) * 100)) : null);
+      } else {
+        onProgress?.(`Downloading ${what}`, percentOf(doneBytes + p.loaded));
+      }
     });
     let data: Uint8Array | null;
     try {

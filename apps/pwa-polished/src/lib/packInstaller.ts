@@ -41,7 +41,19 @@ import {
   atlasPackSupported,
 } from '../adapters/pack-import';
 import { packInstallFinished, removePack } from '../adapters/db-manager';
-import { loadPackOnDemand, installArtImageShards, installAtlasParts } from './progressive-init';
+import {
+  loadPackOnDemand,
+  installArtImageShards,
+  installAtlasParts,
+  BACKGROUND_MESSAGE,
+} from './progressive-init';
+import {
+  startBackgroundDownload,
+  endBackgroundRun,
+  takeUnfinishedRun,
+  InstallCancelled,
+  BACKGROUND_PROGRESS_ID,
+} from './backgroundFetch';
 import { watchImportProgress } from './importProgress';
 import { stayAwake, allowSleep } from './installAwake';
 import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from '../config';
@@ -386,7 +398,10 @@ export async function downloadAndImportPack(
       (progress) => {
         switch (progress.stage) {
           case 'downloading':
-            onMessage(`Downloading ${pack.name}`, percentOf(progress.loaded, progress.total));
+            onMessage(
+              progress.packId === BACKGROUND_PROGRESS_ID ? BACKGROUND_MESSAGE : `Downloading ${pack.name}`,
+              percentOf(progress.loaded, progress.total),
+            );
             break;
           case 'validating':
             onMessage(`Checking ${pack.name}…`);
@@ -571,7 +586,13 @@ export async function installAllVoices(): Promise<{ failed: string[]; outOfSpace
  *
  * Returns false without doing anything if another install is already running.
  */
-export async function installAll(): Promise<boolean> {
+export async function installAll(
+  /**
+   * False when carrying on a run cut short: it uses the download that run
+   * started, if the browser still has it, but doesn't start another.
+   */
+  opts: { background?: boolean } = {},
+): Promise<boolean> {
   if (get(installBusy)) return false;
   installBusy.set(true);
   installAllState.set({ ...IDLE, running: true });
@@ -587,6 +608,16 @@ export async function installAll(): Promise<boolean> {
     const total = updates.length + packs.length + voices.length;
     let step = 0;
 
+    // Where the browser can, every pack file goes to one download that keeps
+    // going without the app. Voices stay on their own path.
+    if (opts.background !== false) {
+      await startBackgroundDownload(
+        [...updates, ...packs].map((p) => p.id),
+        { kind: 'all' },
+        'Downloading irisBible packs',
+      );
+    }
+
     for (const pack of updates) {
       step++;
       installAllState.update((s) => ({ ...s, step, total, current: pack.name }));
@@ -599,6 +630,7 @@ export async function installAll(): Promise<boolean> {
         markUpdated(pack.id);
         window.dispatchEvent(new CustomEvent('packsUpdated'));
       } catch (error) {
+        if (error instanceof InstallCancelled) throw error;
         console.error(`[InstallAll] Updating ${pack.name} failed:`, error);
         failed.push(pack.name);
         if (isQuotaError(error)) {
@@ -618,6 +650,7 @@ export async function installAll(): Promise<boolean> {
         restartNeeded.set(true);
         window.dispatchEvent(new CustomEvent('packsUpdated'));
       } catch (error) {
+        if (error instanceof InstallCancelled) throw error;
         console.error(`[InstallAll] ${pack.name} failed:`, error);
         failed.push(pack.name);
         if (isQuotaError(error)) {
@@ -634,7 +667,12 @@ export async function installAll(): Promise<boolean> {
       failed.push(...result.failed);
       outOfSpace = result.outOfSpace;
     }
+  } catch (error) {
+    // Cancel on the download's notification: the run stops where it is.
+    if (!(error instanceof InstallCancelled)) throw error;
+    console.log('[InstallAll] Cancelled from the notification');
   } finally {
+    await endBackgroundRun();
     installAllState.update((s) => ({
       ...s,
       running: false,
@@ -761,7 +799,11 @@ export const installingPackId = writable<string | null>(null);
  */
 export async function installPack(
   pack: CatalogPack,
-  opts: { replaceExisting?: boolean } = {},
+  opts: {
+    replaceExisting?: boolean;
+    /** False when carrying on a run cut short; see installAll. */
+    background?: boolean;
+  } = {},
 ): Promise<boolean> {
   if (get(installBusy)) return false;
 
@@ -784,6 +826,9 @@ export async function installPack(
       await removePack(pack.id);
     }
 
+    if (opts.background !== false) {
+      await startBackgroundDownload([pack.id], { kind: 'install', packId: pack.id }, `Downloading ${pack.name}`);
+    }
     await downloadAndImportPack(pack, reportTo());
 
     restartNeeded.set(true);
@@ -792,6 +837,10 @@ export async function installPack(
     window.dispatchEvent(new CustomEvent('packsUpdated'));
     return true;
   } catch (error) {
+    if (error instanceof InstallCancelled) {
+      showNotice(`${pack.name} download cancelled`, 'info');
+      return false;
+    }
     console.error(`Error installing ${pack.name}:`, error);
     showNotice(
       isQuotaError(error)
@@ -802,6 +851,7 @@ export async function installPack(
     );
     return false;
   } finally {
+    await endBackgroundRun();
     installingPackId.set(null);
     clearProgress();
     installBusy.set(false);
@@ -819,7 +869,11 @@ export async function installPack(
  * Takes the same lock and notices as installPack, so one install
  * or update runs at a time, app-wide.
  */
-export async function updatePack(pack: CatalogPack): Promise<boolean> {
+export async function updatePack(
+  pack: CatalogPack,
+  /** False when carrying on a run cut short; see installAll. */
+  opts: { background?: boolean } = {},
+): Promise<boolean> {
   if (get(installBusy)) return false;
 
   if (pack.id === 'atlas-map' && !atlasPackSupported()) {
@@ -834,6 +888,9 @@ export async function updatePack(pack: CatalogPack): Promise<boolean> {
   installBusy.set(true);
   installingPackId.set(pack.id);
   try {
+    if (opts.background !== false) {
+      await startBackgroundDownload([pack.id], { kind: 'update', packId: pack.id }, `Downloading the new ${pack.name}`);
+    }
     await downloadAndImportPack(pack, reportTo(), { replaceAfterDownload: true });
 
     restartNeeded.set(true);
@@ -842,6 +899,10 @@ export async function updatePack(pack: CatalogPack): Promise<boolean> {
     window.dispatchEvent(new CustomEvent('packsUpdated'));
     return true;
   } catch (error) {
+    if (error instanceof InstallCancelled) {
+      showNotice(`${pack.name} download cancelled`, 'info');
+      return false;
+    }
     console.error(`Error updating ${pack.name}:`, error);
     showNotice(
       isQuotaError(error)
@@ -852,9 +913,45 @@ export async function updatePack(pack: CatalogPack): Promise<boolean> {
     );
     return false;
   } finally {
+    await endBackgroundRun();
     installingPackId.set(null);
     clearProgress();
     installBusy.set(false);
+  }
+}
+
+// ── Carrying on a run cut short ─────────────────────────────────────────────
+
+/** True while a run left unfinished last time is being finished; PackRunCard shows it. */
+export const resumingRun = writable(false);
+
+/**
+ * Finish a background-download run the app was closed or killed in the
+ * middle of. Called once startup is done. Whatever the download brought is
+ * already saved on the device, so this mostly installs; anything that didn't
+ * arrive downloads the usual way. Does nothing when there is no such run, or
+ * something else is already installing.
+ */
+export async function resumePackRun(): Promise<void> {
+  if (get(installBusy)) return;
+  const run = await takeUnfinishedRun();
+  if (!run || get(installBusy)) return;
+
+  resumingRun.set(true);
+  try {
+    if (run.kind === 'all') {
+      await installAll({ background: false });
+      return;
+    }
+    const pack = PACK_CATALOG.find((p) => p.id === run.packId);
+    if (!pack) {
+      await endBackgroundRun();
+      return;
+    }
+    if (run.kind === 'update') await updatePack(pack, { background: false });
+    else await installPack(pack, { background: false });
+  } finally {
+    resumingRun.set(false);
   }
 }
 

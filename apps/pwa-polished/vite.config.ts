@@ -268,7 +268,9 @@ export default defineConfig({
         // Wake alarm push + notification-tap handling. Workbox still generates
         // the service worker; this is its documented slot for adding a push
         // listener, so the caching config below is unaffected.
-        importScripts: ['/push-handler.js'],
+        // Background Fetch for packs (pack-fetch-handler.js) comes after it
+        // and uses its focusOrOpenApp.
+        importScripts: ['/push-handler.js', '/pack-fetch-handler.js'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MB
         // TTS runtime files (~30 MB) are cached on first Read Aloud use, not
         // precached — users who never use TTS never pay the download. The

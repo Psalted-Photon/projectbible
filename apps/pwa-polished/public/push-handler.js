@@ -104,37 +104,42 @@ self.addEventListener('notificationclick', (event) => {
   const isDevotional = new URL(target, self.location.origin).searchParams.has('devo');
   const message = { type: isDevotional ? 'devotional-opened' : 'wake-alarm-opened', url: target };
 
-  event.waitUntil(
-    (async () => {
-      // Most recently focused first.
-      const clientList = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).filter(
-        (client) => new URL(client.url).origin === self.location.origin
-      );
-      const cache = await caches.open(WINDOWS_CACHE);
-
-      // Prefer an app window that is already open, even one asleep in the
-      // background: focusing it keeps the user's place, downloaded packs and
-      // warm state instead of a cold boot.
-      for (const client of clientList) {
-        if (!(await cache.match(APP_WINDOW_PREFIX + client.id))) continue;
-        await client.focus();
-        client.postMessage(message);
-        return;
-      }
-
-      // No app window open. On Android, once the app has run here, open the
-      // link fresh: Chrome hands it to the installed app, where focusing a tab
-      // would land in Chrome. Elsewhere, or where only the website has been
-      // used, bring forward an open tab so taps don't pile up new ones.
-      const appTakesLinks =
-        /Android/i.test(self.navigator.userAgent) && Boolean(await cache.match(APP_ON_DEVICE_KEY));
-      if (!appTakesLinks && clientList.length > 0) {
-        await clientList[0].focus();
-        clientList[0].postMessage(message);
-        return;
-      }
-
-      await self.clients.openWindow(target);
-    })()
-  );
+  event.waitUntil(focusOrOpenApp(target, message));
 });
+
+/*
+ * Bring the app to the front, or open it at `target`, and hand the window
+ * `message`. Shared with pack-fetch-handler.js, which is loaded after this
+ * file into the same worker.
+ */
+async function focusOrOpenApp(target, message) {
+  // Most recently focused first.
+  const clientList = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).filter(
+    (client) => new URL(client.url).origin === self.location.origin
+  );
+  const cache = await caches.open(WINDOWS_CACHE);
+
+  // Prefer an app window that is already open, even one asleep in the
+  // background: focusing it keeps the user's place, downloaded packs and
+  // warm state instead of a cold boot.
+  for (const client of clientList) {
+    if (!(await cache.match(APP_WINDOW_PREFIX + client.id))) continue;
+    await client.focus();
+    client.postMessage(message);
+    return;
+  }
+
+  // No app window open. On Android, once the app has run here, open the
+  // link fresh: Chrome hands it to the installed app, where focusing a tab
+  // would land in Chrome. Elsewhere, or where only the website has been
+  // used, bring forward an open tab so taps don't pile up new ones.
+  const appTakesLinks =
+    /Android/i.test(self.navigator.userAgent) && Boolean(await cache.match(APP_ON_DEVICE_KEY));
+  if (!appTakesLinks && clientList.length > 0) {
+    await clientList[0].focus();
+    clientList[0].postMessage(message);
+    return;
+  }
+
+  await self.clients.openWindow(target);
+}

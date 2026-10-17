@@ -186,6 +186,14 @@ async function initApp() {
   warmPackManifest();
   void import('./adapters/db-manager').then((m) => m.removeRetiredPacks());
 
+  // A background pack download the app was closed during: finish installing
+  // what it brought, once the first screen has settled.
+  setTimeout(() => {
+    void import('./lib/packInstaller').then((m) => m.resumePackRun()).catch((error) => {
+      console.warn('Could not resume the pack run:', error);
+    });
+  }, 2000);
+
   // A new user's first voice comes with the starter: Heart (or Standard where
   // Heart can't run) downloads behind the app, so the talking head just reads.
   if (firstLaunch) {
