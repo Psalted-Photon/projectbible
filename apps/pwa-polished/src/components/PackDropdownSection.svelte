@@ -22,7 +22,7 @@
     installPack,
     updatePack,
     installBusy,
-    installMessage,
+    installStatus,
     installingPackId,
     loadPackSizes,
     packSizeLabel,
@@ -30,6 +30,7 @@
     type PackSizes,
   } from '../lib/packInstaller';
   import BrandSpinner from './BrandSpinner.svelte';
+  import InstallBar from './InstallBar.svelte';
   import {
     pendingUpdates,
     packUpdates,
@@ -101,7 +102,7 @@
         <span class="mt-text">
           <span class="mt-label">{row.label}</span>
           {#if $installingPackId === row.packId}
-            <span class="mt-progress">{$installMessage || 'Starting…'}</span>
+            <span class="mt-progress">{$installStatus || 'Starting…'}<InstallBar /></span>
           {:else if justIn[row.packId]}
             <span class="mt-contents">Installed. Restart to {restartFor}.</span>
           {:else}
@@ -139,7 +140,7 @@
         <span class="mt-text">
           <span class="mt-label">{row.label}</span>
           {#if $installingPackId === row.packId}
-            <span class="mt-progress">{$installMessage || 'Starting…'}</span>
+            <span class="mt-progress">{$installStatus || 'Starting…'}<InstallBar /></span>
           {:else if justUpdated[row.packId]}
             <span class="mt-contents">Updated. Restart to {restartFor}.</span>
           {:else}

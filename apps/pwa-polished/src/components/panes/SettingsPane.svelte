@@ -21,6 +21,7 @@
     estimateVoicesMB,
     installBusy,
     installMessage,
+    installStatus,
   } from "../../lib/packInstaller";
   import { paneStore } from "../../stores/paneStore";
   import {
@@ -41,6 +42,7 @@
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
   import PacksCheckup from "../PacksCheckup.svelte";
+  import InstallBar from "../InstallBar.svelte";
   import { checkupDot } from "../../lib/packCheckup";
   import { DOT_SIZES, DOT_COLORS, applyNotifyDot, type DotSize, type DotColor } from "../../lib/notifyDot";
   import NotifyDot from "../NotifyDot.svelte";
@@ -1232,8 +1234,9 @@
           <span class="icon"><DownloadSimple size={22} weight="bold" /></span>
           <span class="text">
             {gettingVoices && $installMessage
-              ? $installMessage
+              ? $installStatus
               : `Get high-quality voices (~${missingVoiceMB} MB)`}
+            {#if gettingVoices}<InstallBar />{/if}
           </span>
         </button>
       {:else}
@@ -1269,8 +1272,9 @@
           <span class="icon"><DownloadSimple size={18} weight="bold" /></span>
           <span class="text">
             {gettingVoices && $installMessage
-              ? $installMessage
+              ? $installStatus
               : `Get the rest of the voices (~${missingVoiceMB} MB)`}
+            {#if gettingVoices}<InstallBar />{/if}
           </span>
         </button>
       {/if}

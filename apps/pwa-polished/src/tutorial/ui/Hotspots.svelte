@@ -30,7 +30,7 @@
   import { appQuiet, anyPaneOpen, overlayOpen } from "../engine/watch";
   import { paneStore } from "../../stores/paneStore";
   import { windowStore } from "../../lib/stores/windowStore";
-  import { PACK_CATALOG, installPack, installBusy, installMessage } from "../../lib/packInstaller";
+  import { PACK_CATALOG, installPack, installBusy, installStatus, installPercent } from "../../lib/packInstaller";
   import { packInstallFinished } from "../../adapters/db-manager";
   import TipCard from "./TipCard.svelte";
   import Tour from "./Tour.svelte";
@@ -396,10 +396,11 @@
     note={!missingPack
       ? null
       : packState === "getting"
-        ? $installMessage || `Downloading ${missingPack}…`
+        ? $installStatus || `Downloading ${missingPack}…`
         : packState === "installed"
           ? `${missingPack} is installed. Restart to use it.`
           : `Needs the ${missingPack} pack.`}
+    notePercent={missingPack && packState === "getting" ? $installPercent : null}
   >
     <svelte:fragment slot="buttons">
       <button class="tut-btn-ghost small" on:click={backToDots}>Got it</button>

@@ -16,7 +16,7 @@
  * Install All runs without the per-pack notices.
  */
 
-import { writable, get } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import {
   BookOpen,
   TextAa,
@@ -42,6 +42,7 @@ import {
 } from '../adapters/pack-import';
 import { packInstallFinished, removePack } from '../adapters/db-manager';
 import { loadPackOnDemand, installArtImageShards, installAtlasParts } from './progressive-init';
+import { watchImportProgress } from './importProgress';
 import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from '../config';
 import {
   isTtsSupported,
@@ -257,6 +258,38 @@ export const installBusy = writable(false);
 export const installMessage = writable('');
 
 /**
+ * How far the step in installMessage has got, 0-100. Null when nothing real
+ * is being counted -- checking a file, opening it, removing an old copy --
+ * so those show words only rather than a made-up number.
+ */
+export const installPercent = writable<number | null>(null);
+
+/** installMessage with its percent, the way every progress line shows it. */
+export const installStatus = derived([installMessage, installPercent], ([message, percent]) =>
+  message && percent !== null ? `${message} · ${percent}%` : message,
+);
+
+/** Where an install reports its progress: words, and a percent when there is one. */
+export type InstallReport = (message: string, percent?: number | null) => void;
+
+/** An InstallReport that writes to the shared line, after `prefix` ("3 of 15 · "). */
+function reportTo(prefix = ''): InstallReport {
+  return (message, percent = null) => {
+    installMessage.set(prefix + message);
+    installPercent.set(percent);
+  };
+}
+
+function clearProgress(): void {
+  installMessage.set('');
+  installPercent.set(null);
+}
+
+function percentOf(loaded: number, total: number): number | null {
+  return total > 0 ? Math.min(100, Math.floor((loaded / total) * 100)) : null;
+}
+
+/**
  * Something new was installed this session. The reader, the encyclopedia
  * indexes, the place underlines and the people list all load once at startup,
  * so a new pack does nothing until the app restarts.
@@ -265,27 +298,16 @@ export const restartNeeded = writable(false);
 
 // ── Installing one catalog pack ─────────────────────────────────────────────
 
-function stageLabel(stage: string): string {
-  switch (stage) {
-    case 'downloading': return 'Downloading';
-    case 'validating': return 'Validating';
-    case 'extracting': return 'Extracting';
-    case 'caching': return 'Caching';
-    case 'complete': return 'Complete';
-    default: return 'Working';
-  }
-}
-
 /**
  * Download and import one catalog pack, with its shards.
  *
  * No confirmations and no alerts: callers that want those ask first. Progress
- * goes to `onMessage`. Throws on failure. Does not take the lock -- the caller
+ * goes to `onProgress`. Throws on failure. Does not take the lock -- the caller
  * holds it for as long as it needs, which for Install All is the whole run.
  */
 export async function downloadAndImportPack(
   pack: CatalogPack,
-  onMessage: (message: string) => void,
+  onMessage: InstallReport,
   /** An update: the old copy goes only after the new one has downloaded. */
   opts: { replaceAfterDownload?: boolean } = {},
 ): Promise<void> {
@@ -297,7 +319,7 @@ export async function downloadAndImportPack(
     throw new Error(`${pack.name} needs a newer browser than this one.`);
   }
 
-  onMessage(`Preparing ${pack.name}...`);
+  onMessage(`Preparing ${pack.name}…`);
 
   if (USE_BUNDLED_PACKS) {
     onMessage(`Loading ${pack.name} from local files...`);
@@ -347,16 +369,40 @@ export async function downloadAndImportPack(
     return;
   }
 
-  await loadPackOnDemand(pack.id, (progress) => {
-    const label = stageLabel(progress.stage);
-    if (progress.stage === 'downloading') {
-      const loadedMB = (progress.loaded / (1024 * 1024)).toFixed(1);
-      const totalMB = (progress.total / (1024 * 1024)).toFixed(1);
-      onMessage(`${label} ${pack.name} (${loadedMB} MB / ${totalMB} MB)...`);
-    } else {
-      onMessage(`${label} ${pack.name}...`);
-    }
-  }, opts);
+  // The download reports bytes; the import reports rows, through
+  // importProgress, once it has opened the file and counted them.
+  let importing = false;
+  const stopWatching = watchImportProgress((percent) =>
+    onMessage(`Installing ${pack.name}`, percent),
+  );
+  try {
+    await loadPackOnDemand(
+      pack.id,
+      (progress) => {
+        switch (progress.stage) {
+          case 'downloading':
+            onMessage(`Downloading ${pack.name}`, percentOf(progress.loaded, progress.total));
+            break;
+          case 'validating':
+            onMessage(`Checking ${pack.name}…`);
+            break;
+          case 'caching':
+            onMessage(`Saving ${pack.name}…`);
+            break;
+          case 'extracting':
+            importing = true;
+            onMessage(`Opening ${pack.name}…`);
+            break;
+          case 'complete':
+            onMessage(importing ? `Installing ${pack.name}` : `Downloading ${pack.name}`, 100);
+            break;
+        }
+      },
+      { ...opts, onRemoving: () => onMessage(`Removing the old ${pack.name}…`) },
+    );
+  } finally {
+    stopWatching();
+  }
 
   // art.sqlite carries only the scenes; the paintings arrive as small
   // shards so sql.js never holds the whole pack at once.
@@ -470,14 +516,11 @@ async function downloadVoicesInOrder(
   for (const voice of voices) {
     step++;
     onVoice(voice.label, step);
-    installMessage.set(`${step} of ${total} · Preparing ${voice.label}...`);
+    const report = reportTo(`${step} of ${total} · `);
+    report(`Preparing ${voice.label}…`);
     try {
       await downloadVoice(voice.id, ({ loaded, total: bytes }) => {
-        const loadedMB = (loaded / 1024 / 1024).toFixed(0);
-        const totalMB = bytes > 0 ? (bytes / 1024 / 1024).toFixed(0) : '?';
-        installMessage.set(
-          `${step} of ${total} · Downloading ${voice.label} (${loadedMB} MB / ${totalMB} MB)…`,
-        );
+        report(`Downloading ${voice.label}`, percentOf(loaded, bytes));
       });
     } catch (error) {
       console.error(`[InstallVoices] ${voice.label} failed:`, error);
@@ -503,7 +546,7 @@ export async function installAllVoices(): Promise<{ failed: string[]; outOfSpace
     const voices = await voicesStillToInstall();
     return await downloadVoicesInOrder(voices, 0, voices.length, () => {});
   } finally {
-    installMessage.set('');
+    clearProgress();
     installBusy.set(false);
   }
 }
@@ -544,11 +587,9 @@ export async function installAll(): Promise<boolean> {
       installAllState.update((s) => ({ ...s, step, total, current: pack.name }));
       installingPackId.set(pack.id);
       try {
-        await downloadAndImportPack(
-          pack,
-          (message) => installMessage.set(`${step} of ${total} · ${message}`),
-          { replaceAfterDownload: true },
-        );
+        await downloadAndImportPack(pack, reportTo(`${step} of ${total} · `), {
+          replaceAfterDownload: true,
+        });
         restartNeeded.set(true);
         markUpdated(pack.id);
         window.dispatchEvent(new CustomEvent('packsUpdated'));
@@ -568,9 +609,7 @@ export async function installAll(): Promise<boolean> {
       step++;
       installAllState.update((s) => ({ ...s, step, total, current: pack.name }));
       try {
-        await downloadAndImportPack(pack, (message) =>
-          installMessage.set(`${step} of ${total} · ${message}`),
-        );
+        await downloadAndImportPack(pack, reportTo(`${step} of ${total} · `));
         restartNeeded.set(true);
         window.dispatchEvent(new CustomEvent('packsUpdated'));
       } catch (error) {
@@ -599,7 +638,7 @@ export async function installAll(): Promise<boolean> {
       finished: true,
       outOfSpace,
     }));
-    installMessage.set('');
+    clearProgress();
     installBusy.set(false);
   }
   return true;
@@ -736,11 +775,11 @@ export async function installPack(
   installingPackId.set(pack.id);
   try {
     if (opts.replaceExisting) {
-      installMessage.set(`Removing old ${pack.name}...`);
+      installMessage.set(`Removing the old ${pack.name}…`);
       await removePack(pack.id);
     }
 
-    await downloadAndImportPack(pack, (message) => installMessage.set(message));
+    await downloadAndImportPack(pack, reportTo());
 
     restartNeeded.set(true);
     markInstalled(pack.id);
@@ -759,7 +798,7 @@ export async function installPack(
     return false;
   } finally {
     installingPackId.set(null);
-    installMessage.set('');
+    clearProgress();
     installBusy.set(false);
   }
 }
@@ -790,7 +829,7 @@ export async function updatePack(pack: CatalogPack): Promise<boolean> {
   installBusy.set(true);
   installingPackId.set(pack.id);
   try {
-    await downloadAndImportPack(pack, (message) => installMessage.set(message), { replaceAfterDownload: true });
+    await downloadAndImportPack(pack, reportTo(), { replaceAfterDownload: true });
 
     restartNeeded.set(true);
     markUpdated(pack.id);
@@ -809,7 +848,7 @@ export async function updatePack(pack: CatalogPack): Promise<boolean> {
     return false;
   } finally {
     installingPackId.set(null);
-    installMessage.set('');
+    clearProgress();
     installBusy.set(false);
   }
 }

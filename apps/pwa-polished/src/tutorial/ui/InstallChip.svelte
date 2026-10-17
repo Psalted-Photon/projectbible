@@ -14,6 +14,7 @@
   import {
     installAll,
     installAllState,
+    installPercent,
     restartNeeded,
     packsStillToInstall,
     updatesStillToApply,
@@ -57,7 +58,9 @@
   <div class="chip no-edge-gesture" role="status" transition:fly={{ y: 24, duration: 220 }}>
     {#if running}
       <span class="text">
-        Installing packs · {$installAllState.step} of {$installAllState.total}
+        Installing packs · {$installAllState.step} of {$installAllState.total}{$installPercent !== null
+          ? ` · ${$installPercent}%`
+          : ""}
       </span>
       <span class="bar"><span class="fill" style="width:{Math.round(progress * 100)}%"></span></span>
     {:else if $restartNeeded}

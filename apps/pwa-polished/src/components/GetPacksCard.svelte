@@ -21,7 +21,7 @@
     PACK_CATALOG,
     installPack,
     installBusy,
-    installMessage,
+    installStatus,
     installingPackId,
     restartNeeded,
     loadPackSizes,
@@ -30,6 +30,7 @@
     type PackSizes,
   } from '../lib/packInstaller';
   import BrandSpinner from './BrandSpinner.svelte';
+  import InstallBar from './InstallBar.svelte';
 
   /** Catalog ids of the packs this feature needs, in the order to list them. */
   export let packs: string[];
@@ -91,7 +92,7 @@
         <span class="gp-text">
           <span class="gp-name">{pack.name}</span>
           {#if $installingPackId === pack.id}
-            <span class="gp-progress">{$installMessage || 'Starting…'}</span>
+            <span class="gp-progress">{$installStatus || 'Starting…'}<InstallBar /></span>
           {:else}
             <span class="gp-desc">{pack.description}</span>
           {/if}

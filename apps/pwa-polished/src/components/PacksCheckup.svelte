@@ -21,7 +21,7 @@
     installAll,
     installAllState,
     installBusy,
-    installMessage,
+    installStatus,
     restartNeeded,
     loadPackSizes,
     installBytesFor,
@@ -34,6 +34,7 @@
   import { showNotice } from '../stores/noticeStore';
   import PackIcon from './icons/PackIcon.svelte';
   import BrandSpinner from './BrandSpinner.svelte';
+  import InstallBar from './InstallBar.svelte';
   import NotifyDot from './NotifyDot.svelte';
 
   const MB = 1024 * 1024;
@@ -117,7 +118,7 @@
   <span class="text">
     {#if running}
       <span class="main">Getting packs · {$installAllState.step} of {$installAllState.total}</span>
-      <span class="sub">{$installMessage || 'Starting…'}</span>
+      <span class="sub">{$installStatus || 'Starting…'}<InstallBar /></span>
     {:else if !$checkup.counted}
       <span class="main">Checking packs…</span>
     {:else if waiting === 0}

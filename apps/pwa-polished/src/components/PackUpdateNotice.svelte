@@ -19,7 +19,7 @@
     PACK_CATALOG,
     updatePack,
     installBusy,
-    installMessage,
+    installStatus,
     installingPackId,
     restartNeeded,
     loadPackSizes,
@@ -37,6 +37,7 @@
     ignoreUpdate,
   } from '../lib/packUpdates';
   import BrandSpinner from './BrandSpinner.svelte';
+  import InstallBar from './InstallBar.svelte';
   import PackIcon from './icons/PackIcon.svelte';
 
   /** Catalog ids of the packs this feature reads. */
@@ -104,7 +105,7 @@
         <span class="pu-busy"><BrandSpinner size={20} title="Updating…" /></span>
         <span class="pu-text">
           <span class="pu-name">Updating {updating.name}</span>
-          <span class="pu-progress">{$installMessage || 'Starting…'}</span>
+          <span class="pu-progress">{$installStatus || 'Starting…'}<InstallBar /></span>
         </span>
       </div>
     {/if}

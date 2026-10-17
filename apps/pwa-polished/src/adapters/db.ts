@@ -1,4 +1,5 @@
 import { logInstallIfActive } from '../lib/install-log';
+import { importCounting, countImportRows } from '../lib/importProgress';
 import { getDeviceOwner } from '../lib/sync/deviceOwner';
 /**
  * IndexedDB schema and utilities for PWA storage
@@ -1578,6 +1579,23 @@ function stampingStore(store: IDBObjectStore): IDBObjectStore {
   });
 }
 
+/** The same store, calling `onWrite` for every put or add. */
+function countingStore(store: IDBObjectStore, onWrite: () => void): IDBObjectStore {
+  return new Proxy(store, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target);
+      if (typeof value !== 'function') return value;
+      if (prop === 'put' || prop === 'add') {
+        return (...args: unknown[]) => {
+          onWrite();
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      }
+      return value.bind(target);
+    },
+  });
+}
+
 /**
  * Helper to execute a read transaction
  */
@@ -1667,11 +1685,18 @@ export async function batchWriteTransaction(
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, 'readwrite');
     const raw = transaction.objectStore(storeName);
-    const store = PERSONAL_STORES.has(storeName) ? stampingStore(raw) : raw;
+    const personal = PERSONAL_STORES.has(storeName);
+    const store = personal ? stampingStore(raw) : raw;
 
-    operations(store);
-    
-    transaction.oncomplete = () => resolve();
+    // A pack install is watching: count what this batch puts, for its percent.
+    let rows = 0;
+    const counting = !personal && importCounting();
+    operations(counting ? countingStore(store, () => rows++) : store);
+
+    transaction.oncomplete = () => {
+      if (counting) countImportRows(rows);
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () =>
       reject(transaction.error ?? new Error(`${storeName} transaction aborted`));

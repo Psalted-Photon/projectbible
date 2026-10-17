@@ -226,7 +226,11 @@ export async function loadPackOnDemand(
    * downloaded and passed its checksum, so the feature keeps working on the
    * old data for the whole download, and a failed download leaves it intact.
    */
-  opts: { replaceAfterDownload?: boolean } = {},
+  opts: {
+    replaceAfterDownload?: boolean;
+    /** The old copy is about to be removed, so progress can say so. */
+    onRemoving?: () => void;
+  } = {},
 ): Promise<void> {
   if (USE_BUNDLED_PACKS) {
     console.log('Using bundled packs - skipping on-demand download');
@@ -278,6 +282,7 @@ export async function loadPackOnDemand(
       logInstall('download-returned', { bytes: byteLength });
 
       if (opts.replaceAfterDownload && installedPack) {
+        opts.onRemoving?.();
         const { removePack } = await import('../adapters/db-manager');
         await removePack(packId);
         logInstall('old-copy-removed');
@@ -328,6 +333,52 @@ export async function loadPackOnDemand(
 const ART_SHARD_PREFIX = 'biblical-art-images-';
 
 /**
+ * Progress through a run of shards: what is happening in words, and the
+ * percent of all the run's bytes downloaded so far.
+ */
+export type ShardProgress = (message: string, percent: number | null) => void;
+
+/**
+ * Download and import a run of files one after another, reporting one percent
+ * across all of them by their manifest sizes. A file counts as done once it is
+ * installed; the one downloading counts by the bytes received.
+ */
+async function installFileRun(
+  loader: PackLoader,
+  files: Array<{ id: string; size?: number; what: string }>,
+  importFile: (data: Uint8Array, index: number, id: string) => Promise<number>,
+  onProgress?: ShardProgress,
+): Promise<number> {
+  const totalBytes = files.reduce((sum, f) => sum + (Number(f.size) || 0), 0);
+  const percentOf = (bytes: number) =>
+    totalBytes > 0 ? Math.min(100, Math.floor((bytes / totalBytes) * 100)) : null;
+  let doneBytes = 0;
+  let count = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const { id, size, what } = files[i];
+    onProgress?.(`Downloading ${what}`, percentOf(doneBytes));
+    setProgressHandler((p) => {
+      if (p.stage === 'downloading') onProgress?.(`Downloading ${what}`, percentOf(doneBytes + p.loaded));
+    });
+    let data: Uint8Array | null;
+    try {
+      data = await loader.downloadPack(id);
+    } finally {
+      setProgressHandler();
+    }
+    doneBytes += Number(size) || data.length;
+    onProgress?.(`Installing ${what}`, percentOf(doneBytes));
+    // Hand the bytes over and drop our reference before awaiting, so the
+    // file is not pinned in two places while it imports.
+    const importing = importFile(data, i, id);
+    data = null;
+    count += await importing;
+  }
+  return count;
+}
+
+/**
  * Download and import the art pack's image shards.
  *
  * art.sqlite carries only the scenes now; the images arrive as ~10 MB shards so
@@ -336,11 +387,11 @@ const ART_SHARD_PREFIX = 'biblical-art-images-';
  * gets, and its buffer is released before the next one starts.
  */
 export async function installArtImageShards(
-  onProgress?: (message: string) => void
+  onProgress?: ShardProgress
 ): Promise<number> {
   const loader = getPackLoaderInstance();
   const manifest = (await loader.fetchManifest()) as any;
-  const shards: Array<{ id: string }> = (manifest?.packs ?? [])
+  const shards: Array<{ id: string; size?: number }> = (manifest?.packs ?? [])
     .filter((p: any) => typeof p?.id === 'string' && p.id.startsWith(ART_SHARD_PREFIX))
     .sort((a: any, b: any) => a.id.localeCompare(b.id));
 
@@ -350,19 +401,12 @@ export async function installArtImageShards(
   }
 
   logInstall('art-shards-begin', { count: shards.length });
-  let total = 0;
-
-  for (let i = 0; i < shards.length; i++) {
-    const id = shards[i].id;
-    onProgress?.(`Installing artwork ${i + 1} of ${shards.length}…`);
-
-    let data: Uint8Array | null = await loader.downloadPack(id);
-    // Hand the bytes over and drop our reference before awaiting, so the
-    // shard is not pinned in two places while it imports.
-    const importing = importArtImageShard(data, { clearFirst: i === 0, label: id });
-    data = null;
-    total += await importing;
-  }
+  const total = await installFileRun(
+    loader,
+    shards.map((s) => ({ id: s.id, size: s.size, what: 'artwork' })),
+    (data, i, id) => importArtImageShard(data, { clearFirst: i === 0, label: id }),
+    onProgress,
+  );
 
   logInstall('art-shards-done', { images: total });
   return total;
@@ -383,11 +427,11 @@ const ATLAS_PLACES_ID = 'atlas-map-places';
  * gets, and its buffer is released before the next one starts.
  */
 export async function installAtlasParts(
-  onProgress?: (message: string) => void
+  onProgress?: ShardProgress
 ): Promise<{ layers: number; columns: number }> {
   const loader = getPackLoaderInstance();
   const manifest = (await loader.fetchManifest()) as any;
-  const entries: Array<{ id: string }> = manifest?.packs ?? [];
+  const entries: Array<{ id: string; size?: number }> = manifest?.packs ?? [];
 
   const shards = entries
     .filter(
@@ -404,28 +448,26 @@ export async function installAtlasParts(
   }
 
   logInstall('atlas-shards-begin', { count: shards.length });
+  // The place index goes last, in the same run, so the percent covers it too.
+  const places = entries.find((p: any) => p?.id === ATLAS_PLACES_ID);
+  const files = [
+    ...shards.map((s) => ({ id: s.id, size: s.size, what: 'map layers' })),
+    ...(places ? [{ id: places.id, size: places.size, what: 'place search' }] : []),
+  ];
   let layers = 0;
-
-  for (let i = 0; i < shards.length; i++) {
-    const id = shards[i].id;
-    onProgress?.(`Installing map layers ${i + 1} of ${shards.length}…`);
-
-    let data: Uint8Array | null = await loader.downloadPack(id);
-    // Hand the bytes over and drop our reference before awaiting, so the shard
-    // is not pinned in two places while it imports.
-    const importing = importAtlasGeometryShard(data, { clearFirst: i === 0, label: id });
-    data = null;
-    layers += await importing;
-  }
-
   let columns = 0;
-  if (entries.some((p: any) => p?.id === ATLAS_PLACES_ID)) {
-    onProgress?.('Installing place search…');
-    let data: Uint8Array | null = await loader.downloadPack(ATLAS_PLACES_ID);
-    const importing = importAtlasPlaceIndex(data);
-    data = null;
-    columns = await importing;
-  }
+  await installFileRun(
+    loader,
+    files,
+    // Not async: an async callback would hold `data` for the whole import.
+    (data, i, id) =>
+      id === ATLAS_PLACES_ID
+        ? importAtlasPlaceIndex(data).then((n) => ((columns = n), 0))
+        : importAtlasGeometryShard(data, { clearFirst: i === 0, label: id }).then(
+            (n) => ((layers += n), 0),
+          ),
+    onProgress,
+  );
 
   logInstall('atlas-shards-done', { layers, columns });
   return { layers, columns };

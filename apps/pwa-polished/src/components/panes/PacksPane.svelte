@@ -17,6 +17,7 @@
     installAllState,
     installBusy,
     installMessage,
+    installStatus,
     restartNeeded,
     loadPackSizes,
     packSizeLabel,
@@ -40,6 +41,7 @@
   import { showNotice, errorText } from "../../stores/noticeStore";
   import { askConfirm } from "../../stores/confirmStore";
   import CloseX from "../CloseX.svelte";
+  import InstallBar from "../InstallBar.svelte";
   import PackIcon from "../icons/PackIcon.svelte";
   import {
     BookOpen,
@@ -593,7 +595,7 @@
   <!-- Sticky: an install started from the top of the list has to stay visible
        once you scroll down to watch something else. -->
   {#if $installMessage}
-    <div class="progress-message">{$installMessage}</div>
+    <div class="progress-message">{$installStatus}<InstallBar /></div>
   {/if}
 
   {#if $restartNeeded && !$installBusy}

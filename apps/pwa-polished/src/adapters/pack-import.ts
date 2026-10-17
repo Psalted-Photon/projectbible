@@ -4,6 +4,7 @@ import { keyPrefixRange } from './db-manager';
 import { logInstall, logInstallFlush, logInstallError } from '../lib/install-log';
 import { normalizeBookName } from '../lib/bibleData';
 import { originalLanguageOf } from '../lib/translationKind';
+import { importWatched, expectImportRows } from '../lib/importProgress';
 
 /**
  * The BSB audio packs, retired now that Read Aloud reads every chapter. They
@@ -392,6 +393,27 @@ async function importSectionHeadings(db: any): Promise<void> {
   console.log(`✅ Section headings imported: ${entries.length} entries`);
 }
 
+/**
+ * Every row in a pack, for the install's percent. 0 if the pack can't say,
+ * which leaves the percent off rather than wrong.
+ */
+function countPackRows(db: any): number {
+  try {
+    const tables: unknown[][] =
+      db.exec(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'metadata'",
+      )[0]?.values ?? [];
+    let total = 0;
+    for (const [name] of tables) {
+      const quoted = `"${String(name).replace(/"/g, '""')}"`;
+      total += Number(db.exec(`SELECT COUNT(*) FROM ${quoted}`)[0]?.values[0][0] ?? 0);
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
 export async function importPackFromBytes(
   bytes: Uint8Array,
   sourceName: string,
@@ -451,6 +473,8 @@ export async function importPackFromBytes(
   logInstall('sqlite-open-done', { released: true });
 
   try {
+    if (importWatched()) expectImportRows(countPackRows(db));
+
     // Read metadata
     const metadataRows = db.exec('SELECT key, value FROM metadata');
     if (!metadataRows.length || !metadataRows[0].values.length) {

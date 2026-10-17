@@ -28,6 +28,8 @@
   export let skipLabel: string | null = "Skip tour";
   /** A line under the body, set apart: "Needs the … pack". */
   export let note: string | null = null;
+  /** A bar under the note, 0-100, while a pack it asked for installs. */
+  export let notePercent: number | null = null;
   /**
    * False inside the walk to the off switch itself, which is already there:
    * it shows the plain line instead, so the button can't lead back into it.
@@ -95,6 +97,9 @@
   <p class="body">{body}</p>
   {#if note}
     <p class="note">{note}</p>
+    {#if notePercent !== null}
+      <span class="note-bar"><span class="note-fill" style="width:{notePercent}%"></span></span>
+    {/if}
   {/if}
 
   <slot />
@@ -172,6 +177,22 @@
     font-size: 0.84rem;
     font-weight: 600;
     color: var(--tut-lime);
+  }
+
+  .note-bar {
+    display: block;
+    height: calc(3px * var(--bar-scale, 1));
+    margin-top: 0.35rem;
+    border-radius: 999px;
+    background: var(--tut-lime-faint);
+    overflow: hidden;
+  }
+
+  .note-fill {
+    display: block;
+    height: 100%;
+    background: var(--tut-lime);
+    transition: width 0.3s ease;
   }
 
   .buttons {
