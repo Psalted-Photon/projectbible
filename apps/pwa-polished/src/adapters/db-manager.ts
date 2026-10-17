@@ -218,7 +218,14 @@ async function removeAudioPackFiles(packId: string): Promise<void> {
   }
 }
 
-export async function removePack(packId: string): Promise<void> {
+export async function removePack(
+  packId: string,
+  /**
+   * Leave the downloaded files where they are: an update removing the old
+   * copy has just saved the new file, and needs it if the install is cut short.
+   */
+  opts: { keepDownloads?: boolean } = {},
+): Promise<void> {
   // Step 1: Read all pack metadata to determine type and collect sub-pack IDs / translation IDs.
   // Virtual sub-packs (e.g. 'translations-consolidated-KJV') share the packId prefix.
   let allPacks: Array<{ id: string; type: string; translationId?: string }> = [];
@@ -389,6 +396,7 @@ export async function removePack(packId: string): Promise<void> {
   // Step 4: Drop the downloaded file the loader kept. Without this a deleted
   // pack leaves its whole payload behind — 77 MB for the encyclopedia — and
   // reinstalling replays those bytes instead of fetching anything.
+  if (opts.keepDownloads) return;
   try {
     const { getPackLoader } = await import('../lib/progressive-init');
     const loader = getPackLoader();

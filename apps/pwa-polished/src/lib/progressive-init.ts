@@ -203,9 +203,29 @@ export async function installStarterText(
  */
 export function warmPackManifest(): void {
   if (USE_BUNDLED_PACKS) return;
-  getPackLoaderInstance()
+  const loader = getPackLoaderInstance();
+  loader
     .fetchManifest()
+    // Files kept from an install that never finished, for a pack that has
+    // since been rebuilt or retired, will never be used.
+    .then(() => loader.pruneDownloads())
+    .then((removed) => {
+      if (removed) console.log(`Removed ${removed} downloaded pack file(s) no longer in the manifest`);
+    })
     .catch((error) => console.warn('Manifest fetch failed:', error));
+}
+
+/**
+ * A downloaded file has installed: the loader can drop it if it was only kept
+ * in case the install was cut short. A failure here costs storage, not the
+ * install, so it is logged and passed over.
+ */
+async function releaseDownload(loader: PackLoader, packId: string): Promise<void> {
+  try {
+    await loader.releaseDownload(packId);
+  } catch (error) {
+    console.warn(`Could not release the downloaded file for ${packId}:`, error);
+  }
 }
 
 /**
@@ -284,7 +304,9 @@ export async function loadPackOnDemand(
       if (opts.replaceAfterDownload && installedPack) {
         opts.onRemoving?.();
         const { removePack } = await import('../adapters/db-manager');
-        await removePack(packId);
+        // The new file was saved by the download; keep it in case this
+        // install is cut short.
+        await removePack(packId, { keepDownloads: true });
         logInstall('old-copy-removed');
       }
 
@@ -308,6 +330,7 @@ export async function loadPackOnDemand(
       data = null;
       await importing;
       logInstall('import-returned');
+      await releaseDownload(loader, packId);
 
       onProgress?.({
         packId,
@@ -374,6 +397,7 @@ async function installFileRun(
     const importing = importFile(data, i, id);
     data = null;
     count += await importing;
+    await releaseDownload(loader, id);
   }
   return count;
 }

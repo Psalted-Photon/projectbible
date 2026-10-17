@@ -30,12 +30,17 @@ function contentMismatch(message: string): PackContentError {
 }
 
 /**
- * Above this size we do not keep the raw downloaded bytes in `pack_files`.
+ * Above this size the raw downloaded bytes are not kept in `pack_files` for
+ * good.
  *
  * That cache only ever saves a re-download -- what the app actually reads is
  * the expanded object stores -- so for a big pack it doubles the storage cost
  * of being installed in exchange for a convenience the user rarely collects.
  * Small packs stay cached: the copy is cheap and re-installs are instant.
+ *
+ * Every file is still kept until its install succeeds, big ones included, so
+ * a phone that kills the app mid-install picks the file back up instead of
+ * downloading it again. The caller says when with releaseDownload().
  */
 const MAX_CACHED_PACK_BYTES = 32 * 1024 * 1024;
 
@@ -234,22 +239,25 @@ export class PackLoader {
         await this.validateSHA256(data, pack.sha256);
         this.options.onStage('sha256-ok');
 
-        // Cache the pack, unless it is large enough that the second copy
-        // costs more than the re-download it would save.
-        if (pack.size <= MAX_CACHED_PACK_BYTES) {
-          this.options.onProgress({
-            packId,
-            loaded: pack.size,
-            total: pack.size,
-            percentage: 100,
-            stage: 'caching'
-          });
-
-          this.options.onStage('cache-start', { bytes: data.length });
-          await this.cachePack(packId, pack.version, pack.sha256, data);
+        // Keep the file until its install succeeds. A big one goes again
+        // then (releaseDownload); a small one stays for good.
+        this.options.onProgress({
+          packId,
+          loaded: pack.size,
+          total: pack.size,
+          percentage: 100,
+          stage: 'caching'
+        });
+        const keep = pack.size <= MAX_CACHED_PACK_BYTES;
+        this.options.onStage('cache-start', { bytes: data.length, keep });
+        try {
+          await this.cachePack(packId, pack.version, pack.sha256, data, keep);
           this.options.onStage('cache-done');
-        } else {
-          this.options.onStage('cache-skipped', { bytes: pack.size });
+        } catch (error) {
+          // Only a re-download is lost; the bytes in hand still install.
+          this.options.onStage('cache-failed', {
+            message: error instanceof Error ? error.message : String(error)
+          });
         }
 
         this.options.onProgress({
@@ -436,25 +444,90 @@ export class PackLoader {
   /**
    * Cache pack in IndexedDB
    */
-  private async cachePack(packId: string, version: string, sha256: string, data: Uint8Array): Promise<void> {
+  private async cachePack(
+    packId: string,
+    version: string,
+    sha256: string,
+    data: Uint8Array,
+    /** False for a big file, which goes once its install succeeds. */
+    keep: boolean,
+  ): Promise<void> {
     await this.initDB();
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['pack_files'], 'readwrite');
       const store = transaction.objectStore('pack_files');
 
-      const request = store.put({
+      store.put({
         id: packId,
         version,
         // What the bytes actually are, so a rebuilt pack is recognized as
         // different even when it kept its version number.
         sha256,
-        data,
+        // A Blob, so IndexedDB files it on disk rather than cloning a few
+        // hundred megabytes through memory. Older entries hold a Uint8Array.
+        data: new Blob([data as unknown as BlobPart]),
+        keep,
+        size: data.length,
         cachedAt: Date.now()
       });
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      // Settled on the transaction: the request can succeed and the commit
+      // still fail, storage full being the usual reason.
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error ?? new Error('Pack file save aborted'));
+    });
+  }
+
+  /**
+   * A downloaded file's install has succeeded. A big one is deleted now -- it
+   * was only kept in case the install was cut short -- and a small one stays.
+   */
+  async releaseDownload(packId: string): Promise<void> {
+    await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['pack_files'], 'readwrite');
+      const store = transaction.objectStore('pack_files');
+      const request = store.get(packId);
+      request.onsuccess = () => {
+        // keep was not recorded before every file was kept; those entries
+        // were all small ones kept for good.
+        if (request.result && request.result.keep === false) store.delete(packId);
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error ?? new Error('Pack file release aborted'));
+    });
+  }
+
+  /**
+   * Delete every kept file whose checksum is no longer in the manifest: a pack
+   * that was rebuilt or retired since. Returns how many went.
+   */
+  async pruneDownloads(): Promise<number> {
+    const manifest = this.manifest ?? (await this.fetchManifest());
+    const current = new Set(manifest.packs.map((p) => p.sha256?.toLowerCase()).filter(Boolean));
+    await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      let removed = 0;
+      const transaction = this.db!.transaction(['pack_files'], 'readwrite');
+      const request = transaction.objectStore('pack_files').openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const sha = typeof cursor.value?.sha256 === 'string' ? cursor.value.sha256.toLowerCase() : '';
+        if (!current.has(sha)) {
+          cursor.delete();
+          removed++;
+        }
+        cursor.continue();
+      };
+      transaction.oncomplete = () => resolve(removed);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error ?? new Error('Pack file prune aborted'));
     });
   }
   
@@ -466,6 +539,24 @@ export class PackLoader {
     version: string,
     sha256: string,
   ): Promise<Uint8Array | null> {
+    const data = await this.readCachedPack(packId, version, sha256);
+    if (!data) return null;
+    if (data instanceof Uint8Array) return data;
+    // Read back as a Blob; a file the browser has lost from disk reads as an
+    // error, which is a miss, not a failed install.
+    try {
+      return new Uint8Array(await data.arrayBuffer());
+    } catch (error) {
+      console.warn(`Cached pack ${packId} could not be read — re-downloading`, error);
+      return null;
+    }
+  }
+
+  private async readCachedPack(
+    packId: string,
+    version: string,
+    sha256: string,
+  ): Promise<Uint8Array | Blob | null> {
     await this.initDB();
 
     return new Promise((resolve, reject) => {
