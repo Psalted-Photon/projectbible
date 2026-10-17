@@ -43,6 +43,7 @@ import {
 import { packInstallFinished, removePack } from '../adapters/db-manager';
 import { loadPackOnDemand, installArtImageShards, installAtlasParts } from './progressive-init';
 import { watchImportProgress } from './importProgress';
+import { stayAwake, allowSleep } from './installAwake';
 import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from '../config';
 import {
   isTtsSupported,
@@ -253,6 +254,10 @@ export const INSTALL_ALL_ORDER: string[] = [
 
 /** True while anything is installing, removing or re-indexing. One at a time, app-wide. */
 export const installBusy = writable(false);
+
+// Every install takes this lock, whoever started it, so the phone is kept
+// awake for exactly as long as it is held.
+installBusy.subscribe((busy) => (busy ? stayAwake() : allowSleep()));
 
 /** The line shown in the Packs pane while that is happening. */
 export const installMessage = writable('');
