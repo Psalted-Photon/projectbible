@@ -1649,8 +1649,11 @@
     verseWidth: number;
   } | null = null;
 
+  /** The selection stayed up under the card, so it goes with it. */
   function closeTranslationCard() {
+    if (!translationHit) return;
     translationHit = null;
+    dismissSelection();
   }
 
   /** The box the card stays under: the first touched verse's left and width, the last one's bottom. */
@@ -6191,10 +6194,12 @@
         break;
       }
       case "translation":
-        // Captured before the selection comes down below.
+        // The selection stays painted under the card, so you can see which
+        // verses it is showing. Closing the card clears it.
         openTranslationCard([...new Set(selectedSegments.map(s => s.verse))]);
         showToast = false;
-        break;
+        extendArmed = false;
+        return;
       case "repeats":
         toggleRepeats(text);
         break;
@@ -6256,7 +6261,8 @@
     // rather than on click, so by the time we get here the toast is normally
     // already gone. This stays as the backstop for clicks with no pointer
     // sequence behind them (keyboard activation, synthetic clicks).
-    if (!target.closest(".selection-highlight") && !target.closest(".toast")) {
+    // The Translation card keeps its selection up while it is open.
+    if (!target.closest(".selection-highlight") && !target.closest(".toast") && !target.closest(".tc-card")) {
       dismissSelection();
     }
   }

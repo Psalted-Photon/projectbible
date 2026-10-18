@@ -101,7 +101,6 @@
     }
   }
 
-  $: isNet = picked?.toLowerCase() === 'net';
   $: numbered = verses.length > 1;
 
   // ── Placement: OtQuoteCard's rules, unchanged ───────────────────────────
@@ -166,13 +165,6 @@
             {/if}
             {' '}
           {/each}
-          {#if isNet}
-            <span class="tc-credit">(<a
-                href="https://netbible.org"
-                target="_blank"
-                rel="noopener noreferrer"
-                on:click|stopPropagation>NET</a>)</span>
-          {/if}
         </p>
       {/if}
     </div>
@@ -302,19 +294,5 @@
 
   .tc-note {
     margin: 6px 0 0;
-  }
-
-  .tc-credit {
-    color: #8a8a8a;
-    font-size: 0.72rem;
-  }
-
-  .tc-credit a {
-    color: rgba(230, 184, 74, 0.85);
-    text-decoration: none;
-  }
-
-  .tc-credit a:hover {
-    text-decoration: underline;
   }
 </style>
