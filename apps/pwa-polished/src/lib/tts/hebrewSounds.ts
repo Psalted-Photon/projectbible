@@ -44,6 +44,13 @@ const VOWEL_OF: Record<string, VowelKind> = {
   [M.SHVA]: 'shva', [M.HPAT]: 'hpatah', [M.HSEG]: 'hsegol', [M.HQAM]: 'hqamats',
 };
 
+/**
+ * Accents that sit on a word's first or last letter whatever its stress
+ * (segolta, pashta, yetiv, telisha, zinor). Every other accent in the Bible
+ * text, and the ole on a headword, marks the stressed syllable.
+ */
+const EDGE_ACCENTS = new Set(['֒', '֙', '֚', '֠', '֩', '֮']);
+
 const REDUCED = new Set<VowelKind>(['shva', 'hpatah', 'hsegol', 'hqamats']);
 const FINAL_FORM: Record<string, string> = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' };
 const BEGADKEFAT = new Set(['ב', 'ג', 'ד', 'כ', 'פ', 'ת']);
@@ -116,7 +123,7 @@ function parseUnits(word: string): Unit[] {
     const u = units[units.length - 1];
     if (!u) continue;
     if (ch >= '֑' && ch <= '֯') {
-      u.accent = true;
+      if (!EDGE_ACCENTS.has(ch)) u.accent = true;
     } else if (ch >= 'ְ' && ch <= 'ׇ') {
       u.marks.add(ch);
       const kind = VOWEL_OF[ch];

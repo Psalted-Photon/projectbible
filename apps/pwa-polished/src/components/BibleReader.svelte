@@ -156,11 +156,16 @@
   import { Info, Image as ImageIcon, BookOpenText, CheckCircle } from "phosphor-svelte";
   import {
     synthesizeWordSpeech,
+    synthesizeHebrewWordSpeech,
     unlockTtsAudio,
     isVoiceInstalled,
+    downloadVoice,
+    getVoiceInfo,
     greekSpeechRoute,
+    HEBREW_VOICE_ID,
   } from "../adapters/tts";
   import { speechWordText, canSpeakOriginal } from "../lib/tts/originalText";
+  import { hebrewWordSounds } from "../lib/tts/hebrewSounds";
   import BookIntroPanel from "./BookIntroPanel.svelte";
   import { syncQueue } from "../lib/sync/SyncQueueService";
   import type { UserHighlight, UserWordHighlight, HighlightStyle } from "@projectbible/core";
@@ -1728,15 +1733,22 @@
   let selectedMorphology: DBMorphology | null = null;
 
   // Read Aloud can pronounce the selected word only when it is an actual
-  // Greek word from the interlinear — English selections have nothing to say
-  // in the original, and Hebrew has no shippable voice yet.
+  // Greek or Hebrew word from the interlinear — English selections have
+  // nothing to say in the original. Hebrew words only: whole Hebrew chapters
+  // still have no voice, so canSpeakOriginal stays Greek.
   $: selectionCanSpeak =
     FEATURES.ttsReadAloud &&
-    selectedMorphology?.language === "greek" &&
-    canSpeakOriginal(currentTranslation);
+    ((selectedMorphology?.language === "greek" && canSpeakOriginal(currentTranslation)) ||
+      (isHebrewWord(selectedMorphology?.language) &&
+        hebrewWordSounds(selectedMorphology?.text ?? "") !== null));
+
+  function isHebrewWord(language?: string): boolean {
+    return language === "hebrew" || language === "aramaic";
+  }
 
   /** Speak one original-language word, from a tap. */
   async function speakOriginalWord(word: string, language?: string) {
+    if (isHebrewWord(language)) return speakHebrewWord(word);
     const text = speechWordText(word ?? "", language ?? "greek");
     if (!text) return;
     // Must happen inside the tap, before any await, or iOS refuses to play.
@@ -1770,6 +1782,66 @@
       console.warn(`🔊 could not speak "${text}":`, err);
       speakFailedWord = text;
       setTimeout(() => { if (speakFailedWord === text) speakFailedWord = null; }, 2500);
+    }
+  }
+
+  /**
+   * Hebrew goes to its own voice as sounds (hebrewSounds.ts), since espeak
+   * cannot read it. Without the voice, the notice offers it right there and
+   * says the word once it lands.
+   */
+  async function speakHebrewWord(word: string) {
+    const sounds = hebrewWordSounds(word ?? "");
+    if (!sounds) return;
+    unlockTtsAudio();
+    try {
+      if (!(await isVoiceInstalled(HEBREW_VOICE_ID))) {
+        pendingHebrewWord = word;
+        showTtsVoiceNeeded = HEBREW_VOICE_ID;
+        return;
+      }
+      console.log(`🔊 word "${word}" voice=${HEBREW_VOICE_ID} sounds=${sounds.join("")}`);
+      playWordClip(await synthesizeHebrewWordSpeech(sounds));
+    } catch (err) {
+      console.warn(`🔊 could not speak "${word}":`, err);
+      speakFailedWord = word;
+      setTimeout(() => { if (speakFailedWord === word) speakFailedWord = null; }, 2500);
+    }
+  }
+
+  function playWordClip(blob: Blob) {
+    const audio = getSharedTtsAudio();
+    audio.src = URL.createObjectURL(blob);
+    if (lastWordAudioUrl) URL.revokeObjectURL(lastWordAudioUrl);
+    lastWordAudioUrl = audio.src;
+    audio.playbackRate = 1;
+    void audio.play();
+  }
+
+  /** The Hebrew word tapped while its voice was missing. */
+  let pendingHebrewWord: string | null = null;
+  /** Percent of the Hebrew voice downloaded from the notice, or null. */
+  let voiceDownloadPct: number | null = null;
+  let voiceDownloadFailed = false;
+
+  async function downloadHebrewVoice() {
+    if (voiceDownloadPct !== null) return;
+    unlockTtsAudio();
+    voiceDownloadPct = 0;
+    voiceDownloadFailed = false;
+    try {
+      await downloadVoice(HEBREW_VOICE_ID, (p) => {
+        voiceDownloadPct = p.total > 0 ? Math.round((100 * p.loaded) / p.total) : 0;
+      });
+      showTtsVoiceNeeded = null;
+      const word = pendingHebrewWord;
+      pendingHebrewWord = null;
+      if (word) await speakHebrewWord(word);
+    } catch (err) {
+      console.warn("🔊 Hebrew voice download failed:", err);
+      voiceDownloadFailed = true;
+    } finally {
+      voiceDownloadPct = null;
     }
   }
 
@@ -7249,7 +7321,23 @@
   </div>
 {/if}
 
-{#if showTtsVoiceNeeded}
+{#if showTtsVoiceNeeded === HEBREW_VOICE_ID}
+  <div class="speak-voice-notice">
+    <span>
+      {voiceDownloadPct !== null
+        ? `Downloading the Hebrew voice… ${voiceDownloadPct}%`
+        : voiceDownloadFailed
+          ? "The Hebrew voice didn’t download."
+          : "The Hebrew voice isn’t on this device yet."}
+    </span>
+    {#if voiceDownloadPct === null}
+      <button class="speak-voice-get" on:click={downloadHebrewVoice}>
+        {voiceDownloadFailed ? "Try again" : `Download (~${getVoiceInfo(HEBREW_VOICE_ID)?.approxSizeMB ?? 63} MB)`}
+      </button>
+    {/if}
+    <CloseX edge label="Dismiss" on:click={() => { showTtsVoiceNeeded = null; pendingHebrewWord = null; }} />
+  </div>
+{:else if showTtsVoiceNeeded}
   <div class="speak-voice-notice">
     <span>The Greek voice isn't downloaded yet — use the Read Aloud button above the chapter.</span>
     <CloseX edge label="Dismiss" on:click={() => (showTtsVoiceNeeded = null)} />
@@ -7276,6 +7364,16 @@
     font-size: 13px;
     line-height: 1.35;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  }
+  .speak-voice-get {
+    flex-shrink: 0;
+    font: inherit;
+    color: #e0e0e0;
+    background: #2a2a2a;
+    border: 1px solid #4a4a4a;
+    border-radius: 7px;
+    padding: 5px 10px;
+    cursor: pointer;
   }
 
   .bible-reader {
