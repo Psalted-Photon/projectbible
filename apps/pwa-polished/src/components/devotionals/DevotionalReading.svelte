@@ -137,6 +137,18 @@
     for (const k of reading.keyRefs) loadVerse(k, translation);
   }
 
+  // Original keeps Spurgeon's own King James for the headline verse; Modern uses the reader's translation.
+  $: headlineTrans = hasModern && !showModern ? 'KJV' : translation;
+  $: if (reading && headlineTrans === 'KJV') {
+    for (const k of reading.keyRefs) loadVerse(k, 'KJV');
+  }
+
+  /** The headline verse as shown; the pack's KJV wording stands in when the KJV pack isn't installed. */
+  function headlineText(k: DevotionalKeyRef, trans: string, cache: Record<string, string>): string | undefined {
+    const text = cache[`${trans}|${k.osis}`];
+    return trans === 'KJV' && text === '' ? k.kjvText || '' : text;
+  }
+
   // ── Daily Light ──────────────────────────────────────────────────────────
 
   /** References grouped into Bagster's paragraphs, keeping each one's index into keyRefs. */
@@ -287,11 +299,11 @@
   $: readTitle = `${work.title} · ${formatMonthDay(target.month, target.day)}${slotLabel ? `, ${slotLabel}` : ''}`;
 
   /**
-   * A verse as it is read: the reader's translation where it is English and
-   * loaded, the pack's KJV otherwise — an English voice cannot read Greek.
+   * A verse as it is read: the translation it is shown in where that is English
+   * and loaded, the pack's KJV otherwise — an English voice cannot read Greek.
    */
   function spokenVerse(k: DevotionalKeyRef): string {
-    const shown = originalLanguageOf(translation) ? '' : verseCache[`${translation}|${k.osis}`];
+    const shown = originalLanguageOf(headlineTrans) ? '' : headlineText(k, headlineTrans, verseCache);
     return extractSpeechText(shown || k.kjvText || '');
   }
 
@@ -422,15 +434,15 @@
       <h3 class="dr-title">{reading.title}</h3>
     {/if}
     {#each reading.keyRefs as k}
-      {@const text = verseCache[`${translation}|${k.osis}`]}
+      {@const text = headlineText(k, headlineTrans, verseCache)}
       <div class="dr-headline">
         {#if text}
           <p class="dr-verse">{@html renderVerseHtml(text)}</p>
           {#each versesOf(k) as v}
-            <CompanionLine shown={translation} book={normalizeBookName(k.book)} chapter={k.chapter} verse={v} englishRef maxLength={600} />
+            <CompanionLine shown={headlineTrans} book={normalizeBookName(k.book)} chapter={k.chapter} verse={v} englishRef maxLength={600} />
           {/each}
         {:else if text === ''}
-          <p class="dr-muted">{translationLabel(translation)} doesn't have this verse.</p>
+          <p class="dr-muted">{translationLabel(headlineTrans)} doesn't have this verse.</p>
         {/if}
         <button class="dr-ref" style="color:{getBookColor(normalizeBookName(k.book))}" on:click={() => goToRef(k.osis)}>
           {k.label}
