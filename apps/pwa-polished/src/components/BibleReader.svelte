@@ -2223,8 +2223,22 @@
       if (Math.abs(readerElement.scrollTop - settledAt) > 2) return;
       const containerTop = readerElement.getBoundingClientRect().top;
       const drift = el.getBoundingClientRect().top - containerTop;
-      if (Math.abs(drift - 8) > 4) scrollToVerseEl(el);
+      if (Math.abs(drift - landingOffset(el)) > 4) scrollToVerseEl(el);
     }, 360);
+  }
+
+  /**
+   * How far below the reader's top edge an arrival lands. Arriving shows the
+   * bar, so the verse goes under it — the bar's full height, the same figure
+   * that hides it — with one line of the text before it showing in between.
+   * The line comes off the verse itself so it follows font size and spacing.
+   */
+  function landingOffset(verseEl: HTMLElement): number {
+    const style = getComputedStyle(verseEl);
+    let line = parseFloat(style.lineHeight);
+    if (!Number.isFinite(line)) line = parseFloat(style.fontSize) * 1.5;
+    if (!Number.isFinite(line)) line = 24;
+    return 68 * get(barScale) + line;
   }
 
   // Scroll to a verse element, pulling in any immediately-preceding section heading
@@ -2255,7 +2269,8 @@
     navBarOffset = 0;
     const containerRect = readerElement.getBoundingClientRect();
     const targetRect = scrollTarget.getBoundingClientRect();
-    const newScrollTop = readerElement.scrollTop + (targetRect.top - containerRect.top) - 8;
+    const newScrollTop =
+      readerElement.scrollTop + (targetRect.top - containerRect.top) - landingOffset(verseEl);
     readerElement.scrollTop = Math.max(0, newScrollTop);
     lastScrollTop = readerElement.scrollTop;
   }
