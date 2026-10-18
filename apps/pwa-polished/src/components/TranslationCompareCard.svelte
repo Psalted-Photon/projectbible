@@ -17,6 +17,7 @@
   import { translationLabel, translationSortIndex } from '../lib/bibleData';
   import { verseAtEnglishRef } from '../lib/companion';
   import { toEnglish } from '../lib/versification';
+  import { isHebrewText } from '../lib/translationKind';
   import { cleanVersePreviewText, renderVersePreviewHtml } from '../lib/verseRendering';
   import { OT_CARD_GAP, OT_CARD_MAX_HEIGHT } from '../lib/otCardMetrics';
 
@@ -102,6 +103,8 @@
   }
 
   $: numbered = verses.length > 1;
+  /** Hebrew reads right to left, as it does in the reader. */
+  $: pickedRtl = isHebrewText(picked);
 
   // ── Placement: OtQuoteCard's rules, unchanged ───────────────────────────
   $: viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
@@ -154,7 +157,7 @@
       {#if busy}
         <p class="tc-note show-late">Loading…</p>
       {:else}
-        <p class="tc-verse">
+        <p class="tc-verse" dir={pickedRtl ? 'rtl' : undefined} lang={pickedRtl ? 'he' : undefined}>
           {#each rows as row}
             {#if row.gapBefore}<span class="tc-gap">…</span>{/if}
             {#if numbered}<sup class="tc-num">{row.verse}</sup>{/if}
