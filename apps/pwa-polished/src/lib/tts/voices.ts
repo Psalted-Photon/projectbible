@@ -7,7 +7,7 @@
  */
 
 /** Language a voice was actually trained on — not the language it can be asked to read. */
-export type TtsVoiceLang = 'en' | 'el';
+export type TtsVoiceLang = 'en' | 'el' | 'de';
 
 /**
  * Which model runs a voice. They differ in nearly every practical way:
@@ -92,6 +92,18 @@ export const TTS_VOICES: TtsVoiceInfo[] = [
     lang: 'el',
     sampleRate: 22050,
     path: 'el/el_GR/rapunzelina/medium/el_GR-rapunzelina-medium.onnx',
+  },
+  {
+    // A German voice reading Hebrew: German has nearly every Hebrew sound, and
+    // the words reach it as sounds (hebrewSounds.ts), never as German text.
+    // CC0, from the Thorsten-Voice dataset. Its id is HEBREW_VOICE_ID.
+    id: 'de_DE-thorsten-medium',
+    label: 'Hebrew (עברית)',
+    quality: 'standard',
+    approxSizeMB: 63,
+    lang: 'de',
+    sampleRate: 22050,
+    path: 'de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx',
   },
 ];
 

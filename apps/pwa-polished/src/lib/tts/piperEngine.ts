@@ -27,6 +27,7 @@ import {
 } from './voices.js';
 import {
   carrierFor,
+  soundsCarrierFor,
   measureCopies,
   copiesAgree,
   cutWord,
@@ -231,44 +232,83 @@ export async function synthesizeWord(
   speech?: { espeakVoice?: string; substitutions?: Record<string, string> }
 ): Promise<ArrayBuffer> {
   const config = await getConfig(voiceId);
-  const session = await getSession(voiceId);
   const espeakVoice = speech?.espeakVoice || config.espeak.voice;
-  const sampleRate = config.audio.sample_rate;
   const text = carrierFor(word.trim());
 
-  for (let attempt = 0; attempt < WORD_ATTEMPTS; attempt++) {
+  const clip = await cutFromCarrier(voiceId, async () => {
     const result = await phonemize(text, espeakVoice);
-    let phonemeIds = result.phonemeIds;
     const subs = speech?.substitutions;
     if (subs && Object.keys(subs).length > 0 && config.phoneme_id_map) {
       const rewritten = result.phonemes.map((p) => subs[p] ?? p);
       if (rewritten.some((p, i) => p !== result.phonemes[i])) {
-        phonemeIds = idsFromPhonemes(rewritten, config.phoneme_id_map);
+        return idsFromPhonemes(rewritten, config.phoneme_id_map);
       }
     }
+    return result.phonemeIds;
+  });
+  if (clip) return clip;
+  throw new TtsError('SYNTH_FAILED', `Could not pronounce "${word}" cleanly`);
+}
 
-    const feeds: Record<string, ort.Tensor> = {
-      input: new ort.Tensor('int64', phonemeIds, [1, phonemeIds.length]),
-      input_lengths: new ort.Tensor('int64', [phonemeIds.length]),
-      scales: new ort.Tensor('float32', [
-        config.inference.noise_scale,
-        config.inference.length_scale,
-        config.inference.noise_w,
-      ]),
-    };
-    if (Object.keys(config.speaker_id_map ?? {}).length > 0) {
-      feeds.sid = new ort.Tensor('int64', [0]);
-    }
+/**
+ * Say one word given as sounds rather than text — Hebrew, which espeak cannot
+ * read. The same carrier and cut as synthesizeWord, built from sounds.
+ *
+ * If no render cuts cleanly, the word is said on its own instead, as the
+ * Hebrew voice lab plays it. Unlike Greek, every Hebrew word reaching here has
+ * at least one full vowel, and the lab found the voice holds up on those.
+ */
+export async function synthesizeSoundsWord(
+  sounds: string[],
+  voiceId: string,
+  pace = 1
+): Promise<ArrayBuffer> {
+  const config = await getConfig(voiceId);
+  const map = config.phoneme_id_map;
+  if (!map) throw new TtsError('SYNTH_FAILED', `Voice ${voiceId} has no phoneme table`);
+  const ids = idsFromPhonemes(soundsCarrierFor(sounds), map);
+  const clip = await cutFromCarrier(voiceId, async () => ids, pace);
+  if (clip) return clip;
+  const alone = await render(voiceId, idsFromPhonemes([...sounds, '.'], map), pace);
+  return encodeWav(alone, config.audio.sample_rate);
+}
 
-    const results = await session.run(feeds);
-    const samples = results.output.data as Float32Array;
+/** Run the voice once over an id stream. `pace` below 1 is slower. */
+async function render(voiceId: string, phonemeIds: number[], pace = 1): Promise<Float32Array> {
+  const config = await getConfig(voiceId);
+  const session = await getSession(voiceId);
+  const feeds: Record<string, ort.Tensor> = {
+    input: new ort.Tensor('int64', phonemeIds, [1, phonemeIds.length]),
+    input_lengths: new ort.Tensor('int64', [phonemeIds.length]),
+    scales: new ort.Tensor('float32', [
+      config.inference.noise_scale,
+      config.inference.length_scale / pace,
+      config.inference.noise_w,
+    ]),
+  };
+  if (Object.keys(config.speaker_id_map ?? {}).length > 0) {
+    feeds.sid = new ort.Tensor('int64', [0]);
+  }
+  const results = await session.run(feeds);
+  return results.output.data as Float32Array;
+}
 
+/**
+ * Render a word-in-carrier until the two copies agree, and return the first
+ * copy cut out — or null if no attempt came out clean.
+ */
+async function cutFromCarrier(
+  voiceId: string,
+  idsForAttempt: () => Promise<number[]>,
+  pace = 1
+): Promise<ArrayBuffer | null> {
+  const sampleRate = (await getConfig(voiceId)).audio.sample_rate;
+  for (let attempt = 0; attempt < WORD_ATTEMPTS; attempt++) {
+    const samples = await render(voiceId, await idsForAttempt(), pace);
     const measured = measureCopies(samples, sampleRate);
     if (!measured) continue;
     if (!copiesAgree(measured.first, measured.last)) continue;
-
     return encodeWav(cutWord(samples, sampleRate, measured.cutAt, measured.gapEnd), sampleRate);
   }
-
-  throw new TtsError('SYNTH_FAILED', `Could not pronounce "${word}" cleanly`);
+  return null;
 }

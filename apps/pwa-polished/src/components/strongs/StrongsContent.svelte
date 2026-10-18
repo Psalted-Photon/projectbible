@@ -10,7 +10,7 @@
   import GetPacksCard from "../GetPacksCard.svelte";
   import StrongsEntry from "./StrongsEntry.svelte";
   import SpeakWord, { type SpeakStatus } from "./SpeakWord.svelte";
-  import { canSpeakGreek } from "../../lib/tts/speakWord";
+  import { canSpeakWord, wordLanguage } from "../../lib/tts/speakWord";
   import { firstForm } from "../../lib/strongs/collate";
   import { packInstallFinished } from "../../adapters/db-manager";
   import { resolveWorks, EMPTY_WORKS, type WorksResolution, type LibraryRow } from "../../adapters/lexicon-lookup.js";
@@ -123,11 +123,14 @@
   $: rtl = isRtl(entry?.language);
 
   // --- Saying it ---------------------------------------------------------
-  // Greek only: there is no Hebrew voice. The line under the header belongs to
-  // the word on screen, so a new word clears it.
+  // Greek in the Greek voice, Hebrew in the Hebrew one. The line under the
+  // header belongs to the word on screen, so a new word clears it.
   let speaker: SpeakWord | null = null;
   let speakStatus: SpeakStatus = null;
-  $: canSay = !!entry && entry.language === "greek" && canSpeakGreek();
+  $: sayLanguage = wordLanguage(entry?.language);
+  $: sayWord = entry ? firstForm(entry.lemma) : "";
+  $: canSay = !!sayLanguage && canSpeakWord(sayWord, sayLanguage);
+  $: voiceName = sayLanguage === "hebrew" ? "Hebrew" : "Greek";
   $: entry, (speakStatus = null);
   $: subtitle = entry
     ? [
@@ -380,7 +383,7 @@
             <span class="lemma" dir={rtl ? "rtl" : "ltr"}>{entry.lemma}</span>
             <span class="strongs-id" style="color: {languageColor(entry.language)}">{displayId(entry.id)}</span>
             {#if canSay}
-              <SpeakWord bind:this={speaker} bind:status={speakStatus} word={firstForm(entry.lemma)} />
+              <SpeakWord bind:this={speaker} bind:status={speakStatus} word={sayWord} language={sayLanguage ?? "greek"} />
             {/if}
           {:else}
             {source.label}
@@ -396,12 +399,12 @@
         {#if !showContents && speakStatus}
           <div class="speak-note" role="status">
             {#if speakStatus.kind === "voice-needed"}
-              The Greek voice isn’t on this device yet.
+              The {voiceName} voice isn’t on this device yet.
               <button class="speak-get" on:click={() => speaker?.download()}>
                 Download it (~{speakStatus.sizeMB} MB)
               </button>
             {:else if speakStatus.kind === "downloading"}
-              Downloading the Greek voice… {speakStatus.percent}%
+              Downloading the {voiceName} voice… {speakStatus.percent}%
             {:else}
               {speakStatus.text}
             {/if}

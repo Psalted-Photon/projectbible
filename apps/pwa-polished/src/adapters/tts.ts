@@ -21,10 +21,11 @@ import {
   type SpeechRoute,
   type TtsEngine,
 } from '../lib/tts/voices.js';
+import { HEBREW_VOICE_ID, HEBREW_WORD_PACE } from '../lib/tts/hebrewSounds.js';
 import { get, writable } from 'svelte/store';
 import { getTtsSettings, updateTtsSettings } from './settings.js';
 
-export { TTS_VOICES, KOKORO_VOICES, GREEK_VOICE_ID };
+export { TTS_VOICES, KOKORO_VOICES, GREEK_VOICE_ID, HEBREW_VOICE_ID };
 export type { TtsVoiceInfo, TtsProgress, SpeechRoute };
 
 export const DEFAULT_TTS_VOICE = 'en_US-lessac-medium';
@@ -480,6 +481,19 @@ export async function synthesizeWordSpeech(
   const wav = await call<ArrayBuffer>(
     'synthesizeWord',
     { text: word, voiceId, espeakVoice: speech?.espeakVoice, substitutions: speech?.substitutions },
+    { timeoutMs: SYNTH_TIMEOUT_MS }
+  );
+  return new Blob([wav], { type: 'audio/wav' });
+}
+
+/**
+ * Say one Hebrew word, already turned into sounds by hebrewWordSounds. Same
+ * carrier and cut as synthesizeWordSpeech, on the Hebrew voice.
+ */
+export async function synthesizeHebrewWordSpeech(sounds: string[]): Promise<Blob> {
+  const wav = await call<ArrayBuffer>(
+    'synthesizeSounds',
+    { sounds, voiceId: HEBREW_VOICE_ID, pace: HEBREW_WORD_PACE },
     { timeoutMs: SYNTH_TIMEOUT_MS }
   );
   return new Blob([wav], { type: 'audio/wav' });

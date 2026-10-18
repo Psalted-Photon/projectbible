@@ -14,6 +14,8 @@
  * Runs inside ttsWorker.ts — do not import from the main thread.
  */
 
+import { hebrewWordSounds } from './hebrewSounds.js';
+
 /**
  * Long-short-long spine, long enough to keep the model in distribution.
  * A colon is the longest pause espeak offers (~0.37s); it cannot be told to
@@ -44,6 +46,27 @@ const MAX_ATTEMPTS = 8;
 
 export function carrierFor(word: string): string {
   return `${word}${CARRIER_MID}${word}.`;
+}
+
+/**
+ * The same long-short-long spine for a word given as sounds (Hebrew), in
+ * Hebrew so the voice stays in one language throughout. Full stops rather
+ * than colons: the colon's pause is espeak's, and with espeak skipped the
+ * pause is whatever the voice learned — a full stop is the one every
+ * recording ends on, so it is the pause the voice surely knows.
+ */
+const SOUNDS_CARRIER_MID: string[] = [
+  '.', ' ',
+  ...(hebrewWordSounds('הַמִּתְהַלְּכִים') ?? []),
+  '.', ' ',
+  ...(hebrewWordSounds('כֵּן') ?? []),
+  '.', ' ',
+  ...(hebrewWordSounds('וּבְמִשְׁפְּטֵיהֶם') ?? []),
+  '.', ' ',
+];
+
+export function soundsCarrierFor(sounds: string[]): string[] {
+  return [...sounds, ...SOUNDS_CARRIER_MID, ...sounds, '.'];
 }
 
 interface Edges {

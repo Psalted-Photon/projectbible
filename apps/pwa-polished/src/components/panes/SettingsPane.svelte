@@ -1384,7 +1384,8 @@
       <div class="greek-block">
         <p class="section-description il-hint">
           Greek and Hebrew texts read from the interlinear words, so the accents are
-          right. Hebrew has no voice yet.
+          right. Hebrew chapters have no voice yet, but Strong's Hebrew words are
+          said in the Hebrew voice.
         </p>
         <label>
           <span class="label-text">Greek pronunciation</span>

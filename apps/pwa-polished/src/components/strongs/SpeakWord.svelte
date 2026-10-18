@@ -12,22 +12,24 @@
   import { SpeakerHigh } from "phosphor-svelte";
   import {
     readyWordAudio,
-    greekVoiceInstalled,
-    greekVoiceSizeMB,
-    downloadGreekVoice,
-    speakGreekWord,
+    wordVoiceInstalled,
+    wordVoiceSizeMB,
+    downloadWordVoice,
+    speakWord,
+    type WordLanguage,
   } from "../../lib/tts/speakWord";
 
   /**
-   * A speaker beside a Greek headword. Says it in the voice and pronunciation
-   * chosen in Settings. The voice is a download of its own, so the first tap on
-   * a device without it offers it right there rather than sending you off to
-   * find it.
+   * A speaker beside a Greek or Hebrew headword. Greek is said in the voice and
+   * pronunciation chosen in Settings, Hebrew in the Hebrew voice. Each voice is
+   * a download of its own, so the first tap on a device without it offers it
+   * right there rather than sending you off to find it.
    *
    * The host draws `status` as a line under its header, since a word's heading
    * has no room for a sentence, and calls download() from that line.
    */
   export let word: string;
+  export let language: WordLanguage = "greek";
   export let status: SpeakStatus = null;
 
   let busy = false;
@@ -43,8 +45,8 @@
     }
     busy = true;
     try {
-      if (!(await greekVoiceInstalled())) {
-        status = { kind: "voice-needed", sizeMB: greekVoiceSizeMB() };
+      if (!(await wordVoiceInstalled(language))) {
+        status = { kind: "voice-needed", sizeMB: wordVoiceSizeMB(language) };
         return;
       }
       await say();
@@ -56,7 +58,7 @@
   async function say() {
     try {
       status = null;
-      await speakGreekWord(word);
+      await speakWord(word, language);
     } catch (err) {
       console.warn(`🔊 could not speak "${word}":`, err);
       fail(`Couldn’t say ${word} cleanly — nothing played.`);
@@ -68,10 +70,10 @@
     readyWordAudio();
     status = { kind: "downloading", percent: 0 };
     try {
-      await downloadGreekVoice((percent) => (status = { kind: "downloading", percent }));
+      await downloadWordVoice(language, (percent) => (status = { kind: "downloading", percent }));
     } catch (err) {
-      console.warn("🔊 Greek voice download failed:", err);
-      fail("The Greek voice didn’t download. Tap the speaker to try again.");
+      console.warn(`🔊 ${language} voice download failed:`, err);
+      fail(`The ${language === "hebrew" ? "Hebrew" : "Greek"} voice didn’t download. Tap the speaker to try again.`);
       return;
     }
     busy = true;

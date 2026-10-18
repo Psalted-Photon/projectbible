@@ -775,7 +775,7 @@
         {#if voice === standardVoices[0] && naturalVoices.length > 0}
           <p class="voice-group-note second">
             <strong>Standard voices.</strong> Lighter on the battery, and the only
-            option for Greek.
+            option for Greek and Hebrew.
           </p>
         {/if}
         {@const isVoiceInstalled = installedVoices.includes(voice.id)}

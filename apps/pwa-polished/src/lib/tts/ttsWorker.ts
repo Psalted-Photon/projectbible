@@ -27,6 +27,7 @@ interface TtsRequest {
     | 'installed'
     | 'synthesize'
     | 'synthesizeWord'
+    | 'synthesizeSounds'
     | 'hasKokoroModel'
     | 'removeKokoroModel'
     | 'kokoroBackend'
@@ -44,6 +45,10 @@ interface TtsRequest {
     substitutions?: Record<string, string>;
     /** Kokoro: the voice's espeak language, since it has no config file of its own. */
     phonemeVoice?: string;
+    /** synthesizeSounds: a word already turned into sounds (Hebrew). */
+    sounds?: string[];
+    /** synthesizeSounds: below 1 is slower than the voice's own pace. */
+    pace?: number;
   };
 }
 
@@ -130,6 +135,14 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
           espeakVoice: payload!.espeakVoice,
           substitutions: payload!.substitutions,
         });
+        (self as unknown as Worker).postMessage({ id, ok: true, result: clip }, [clip]);
+        break;
+      }
+
+      case 'synthesizeSounds': {
+        // Hebrew: espeak cannot read it, so the main thread sends the sounds.
+        if (isKokoro) throw new TtsError('UNKNOWN_VOICE', 'Single words are spoken by Piper only');
+        const clip = await piper.synthesizeSoundsWord(payload!.sounds!, payload!.voiceId!, payload!.pace);
         (self as unknown as Worker).postMessage({ id, ok: true, result: clip }, [clip]);
         break;
       }
