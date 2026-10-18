@@ -268,6 +268,117 @@ export function selectionSegments(anchor: WordPos, focus: WordPos): Segment[] {
   return segments;
 }
 
+// ---------------------------------------------------------------------------
+// Verse-number selections
+// ---------------------------------------------------------------------------
+
+/**
+ * A selection started by tapping a verse number. `verses` are the numbers
+ * tapped so far, ascending; `start` and `end` are where it currently begins
+ * and ends, which Extend moves. Only `start.start` and `end.end` are read.
+ */
+export interface VerseSelection {
+  verses: number[];
+  start: WordPos;
+  end: WordPos;
+}
+
+/** Text nodes that are not the verse's own words: notes, [pl], interlinear extras. */
+function isApparatus(node: Text): boolean {
+  const parent = node.parentElement;
+  return (
+    !!parent?.closest('.inline-note') ||
+    !!parent?.closest('.plural-marker') ||
+    (!!parent?.closest('.il-word') && !parent?.closest('.il-orig'))
+  );
+}
+
+/**
+ * One verse, whole: from its first character to its last, edge whitespace
+ * left out. Null when the verse has no text to select.
+ */
+export function wholeVersePos(verseEl: HTMLElement): WordPos | null {
+  const textEl = verseEl.querySelector<HTMLElement>('.verse-text');
+  if (!textEl) return null;
+  const verse = parseInt(verseEl.getAttribute('data-verse') ?? '', 10);
+  const full = textEl.textContent ?? '';
+  const start = full.length - full.trimStart().length;
+  const end = full.trimEnd().length;
+  if (isNaN(verse) || end <= start) return null;
+  return { verseEl, textEl, verse, start, end };
+}
+
+/**
+ * Where the verse's last word ends, notes and the like not counted — so a
+ * selection reaching that word can take the closing punctuation with it.
+ */
+function lastWordEnd(textEl: HTMLElement): number {
+  let last = 0;
+  for (const { node, start } of collectTextNodes(textEl)) {
+    if (isApparatus(node)) continue;
+    for (let i = node.length - 1; i >= 0; i--) {
+      if (isWordChar(node.data[i])) {
+        last = Math.max(last, start + i + 1);
+        break;
+      }
+    }
+  }
+  return last;
+}
+
+/** Where the verse's first word starts, notes not counted. */
+function firstWordStart(textEl: HTMLElement): number {
+  for (const { node, start } of collectTextNodes(textEl)) {
+    if (isApparatus(node)) continue;
+    for (let i = 0; i < node.length; i++) {
+      if (isWordChar(node.data[i])) return start + i;
+    }
+  }
+  return 0;
+}
+
+/**
+ * A word as the end of a verse selection: when it is its verse's last word,
+ * the end runs on to the verse's edge so the closing punctuation comes too.
+ */
+export function asSelectionEnd(pos: WordPos): WordPos {
+  const whole = wholeVersePos(pos.verseEl);
+  if (!whole || pos.end < lastWordEnd(pos.textEl)) return pos;
+  return { ...pos, end: Math.max(pos.end, whole.end) };
+}
+
+/** The same for a start: a verse's first word starts at the verse's edge. */
+export function asSelectionStart(pos: WordPos): WordPos {
+  const whole = wholeVersePos(pos.verseEl);
+  if (!whole || pos.start > firstWordStart(pos.textEl)) return pos;
+  return { ...pos, start: Math.min(pos.start, whole.start) };
+}
+
+/**
+ * The runs a verse selection covers: start to end, minus any verse that was
+ * not tapped and sits between two that were — tap 3 and 5 and 4 stays out.
+ */
+export function verseSelectionSegments(sel: VerseSelection): Segment[] {
+  const lo = sel.verses[0];
+  const hi = sel.verses[sel.verses.length - 1];
+  const segments = selectionSegments(
+    { ...sel.start, end: sel.start.start },
+    { ...sel.end, start: sel.end.end },
+  );
+  return segments.filter(s => s.verse < lo || s.verse > hi || sel.verses.includes(s.verse));
+}
+
+/** Segments split wherever a verse was skipped, so each run reads on its own. */
+export function segmentRuns(segments: Segment[]): Segment[][] {
+  const runs: Segment[][] = [];
+  for (const seg of segments) {
+    const run = runs[runs.length - 1];
+    if (run && seg.verse <= run[run.length - 1].verse + 1) run.push(seg);
+    else runs.push([seg]);
+  }
+  return runs;
+}
+
 /**
  * The readable text of one segment.
  *

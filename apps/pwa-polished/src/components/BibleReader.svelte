@@ -96,6 +96,7 @@
   import NotePopup from "./NotePopup.svelte";
   import FootnoteCard from "./FootnoteCard.svelte";
   import OtQuoteCard from "./OtQuoteCard.svelte";
+  import TranslationCompareCard from "./TranslationCompareCard.svelte";
   import {
     otQuotesForChapter,
     type OtQuoteEntry,
@@ -134,8 +135,13 @@
     posFromRange,
     getWordBounds,
     wordContextAround,
+    wholeVersePos,
+    asSelectionStart,
+    asSelectionEnd,
+    verseSelectionSegments,
+    segmentRuns,
   } from "../lib/wordSelection";
-  import type { WordPos, Segment } from "../lib/wordSelection";
+  import type { WordPos, Segment, VerseSelection } from "../lib/wordSelection";
   import { measureForWord, measureForStrongs, type MeasureContext, type UnitSystem } from "../lib/measures";
   import { repeatsStore, normalizeRepeatWord } from "../stores/repeatsStore";
   import type { RepeatGroup } from "../stores/repeatsStore";
@@ -1207,6 +1213,12 @@
   let dragArmed = false;
   /** Next tap extends the selection instead of replacing it (the Extend chip). */
   let extendArmed = false;
+  /**
+   * Set while the selection came from a verse-number tap. It has its own
+   * Extend rules (see extendVerseSel) and a stripped-down ring. selAnchor and
+   * selFocus mirror its start and end so the shared paths still see a pair.
+   */
+  let verseSel: VerseSelection | null = null;
 
   const ARM_PX = 8;          // finger travel before a touch gesture picks a lane
   const MOUSE_ARM_PX = 3;    // mouse has no scroll to protect, so it commits sooner
@@ -1622,6 +1634,64 @@
     closeOtQuote();
   }
 
+  // --- Translation card ---------------------------------------------------
+  // A verse-number selection's Translation button: the same verses in another
+  // installed translation, in a card under them. Placed and kept in place the
+  // way the OT quotation card is.
+
+  let translationHit: {
+    book: string;
+    chapter: number;
+    /** Every verse the selection touches, ascending. */
+    verses: number[];
+    verseBottom: number;
+    verseLeft: number;
+    verseWidth: number;
+  } | null = null;
+
+  function closeTranslationCard() {
+    translationHit = null;
+  }
+
+  /** The box the card stays under: the first touched verse's left and width, the last one's bottom. */
+  function translationBox(book: string, chapter: number, verses: number[]) {
+    const section = readerElement?.querySelector(
+      `[data-chapter-section][data-book="${CSS.escape(book)}"][data-chapter="${chapter}"]`,
+    );
+    const first = section?.querySelector<HTMLElement>(`.verse[data-verse="${verses[0]}"]`);
+    const last = section?.querySelector<HTMLElement>(`.verse[data-verse="${verses[verses.length - 1]}"]`);
+    if (!first || !last) return null;
+    const a = first.getBoundingClientRect();
+    const b = last.getBoundingClientRect();
+    return { verseBottom: b.bottom, verseLeft: a.left, verseWidth: a.width };
+  }
+
+  /** Follows the verses as the page scrolls; closes once they are no longer on the page. */
+  function repositionTranslationCard() {
+    if (!translationHit) return;
+    const box = translationBox(translationHit.book, translationHit.chapter, translationHit.verses);
+    if (!box) {
+      closeTranslationCard();
+      return;
+    }
+    translationHit = { ...translationHit, ...box };
+  }
+
+  function openTranslationCard(verses: number[]) {
+    if (verses.length === 0) return;
+    const box = translationBox(currentBook, currentChapter, verses);
+    if (!box) return;
+    closeOtQuote();
+    const shift = nudgeOtCardIntoView(box.verseBottom);
+    translationHit = {
+      book: currentBook,
+      chapter: currentChapter,
+      verses,
+      ...box,
+      verseBottom: box.verseBottom - shift,
+    };
+  }
+
   let shareModalPassage = '';
 
   // Highlight state
@@ -1636,6 +1706,12 @@
    * opening it tears down the painted spans the offsets were measured against.
    */
   let pendingWordSpans: { verse: number; wordStart: number; wordLength: number }[] = [];
+  /**
+   * The verses a verse-level highlight saves to or removes from. Usually just
+   * highlightModalRef's; every tapped verse on an untouched verse-number
+   * selection, so 3 and 5 both take the color.
+   */
+  let pendingHighlightVerses: number[] = [];
   // Pending "Highlight All" request from a repeat pill (bulk mode for the modal)
   let bulkRepeatRequest: RepeatHighlightAllRequest | null = null;
   // When opening the normal Highlight modal on a word that is an active repeat
@@ -3575,6 +3651,7 @@
       if (showToast) repositionToastToSelection();
       repositionFootnoteCard();
       repositionOtQuoteCard();
+      repositionTranslationCard();
 
       // Save scroll position after user stops scrolling (debounced)
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
@@ -3940,7 +4017,9 @@
       selectedWordCount = 0;
       return;
     }
-    selectedSegments = selectionSegments(selAnchor, selFocus);
+    selectedSegments = verseSel
+      ? verseSelectionSegments(verseSel)
+      : selectionSegments(selAnchor, selFocus);
     selectedText = segmentsText(selectedSegments);
     selectedWordCount = segmentsWordCount(selectedSegments);
     selectedVerseNumber = selectedSegments[0]?.verse ?? selectedVerseNumber;
@@ -4023,10 +4102,18 @@
 
     const target = e.target as HTMLElement;
     if (isSelectionExempt(target)) return;
-    if (!target.closest(".verse-text")) return;
+    // A verse number takes the same press so a tap on it can select the verse.
+    // It never resolves to a word, so a hold or drag from it simply cancels.
+    if (!target.closest(".verse-text") && !target.closest(".verse-number")) return;
 
     // The Extend chip turns the next tap into "stretch to here" — no drag
     // needed. Shift-click is the desktop equivalent and needs no chip.
+    // A verse-number selection grows and trims by its own rules.
+    if ((extendArmed || e.shiftKey) && verseSel) {
+      e.preventDefault();
+      extendVerseSel(e.clientX, e.clientY, target);
+      return;
+    }
     if ((extendArmed || e.shiftKey) && selAnchor) {
       e.preventDefault();
       const pos = resolveWordAt(e.clientX, e.clientY, {
@@ -4050,6 +4137,7 @@
     clearHoverHighlight();
     selectedSegments = [];
     selectedWordCount = 0;
+    verseSel = null;
     // Back to the word every time. Verse is a deliberate choice about the
     // selection you have, not a mode you leave switched on — most taps are
     // about the word you just tapped. Only a committed drag used to reset it,
@@ -4224,8 +4312,130 @@
   function selectWordAtPoint(x: number, y: number) {
     clearHoverHighlight();
     const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const numberEl = el?.closest<HTMLElement>(".verse-number");
+    if (numberEl) {
+      selectWholeVerse(numberEl, x, y);
+      return;
+    }
     if (!el || !el.closest(".verse-text")) return;
     handleTextSelection(x, y, el);
+  }
+
+  /**
+   * Verse-number tap: select the whole verse. It is a verse selection, not a
+   * long phrase: no Word/Verse toggle, and Extend follows extendVerseSel.
+   */
+  function selectWholeVerse(numberEl: HTMLElement, x: number, y: number) {
+    const verseEl = numberEl.closest<HTMLElement>(".verse[data-verse]");
+    const whole = verseEl ? wholeVersePos(verseEl) : null;
+    if (!whole) return;
+
+    verseSel = { verses: [whole.verse], start: whole, end: whole };
+    finishVerseSelection(x, y);
+  }
+
+  /** The tapped verses untouched: the first one's start to the last one's end. */
+  function verseSelBase(sel: VerseSelection): { start: WordPos; end: WordPos } | null {
+    const section = sel.start.verseEl.closest("[data-chapter-section]");
+    const find = (v: number) => {
+      const el = section?.querySelector<HTMLElement>(`.verse[data-verse="${v}"]`);
+      return el ? wholeVersePos(el) : null;
+    };
+    const start = find(sel.verses[0]);
+    const end = find(sel.verses[sel.verses.length - 1]);
+    return start && end ? { start, end } : null;
+  }
+
+  /** Still just the tapped verses, whole — nothing added and nothing cut. */
+  function verseSelUntouched(sel: VerseSelection): boolean {
+    const base = verseSelBase(sel);
+    return (
+      !!base &&
+      sel.start.verse === base.start.verse &&
+      sel.start.start === base.start.start &&
+      sel.end.verse === base.end.verse &&
+      sel.end.end === base.end.end
+    );
+  }
+
+  /**
+   * An Extend tap on a verse-number selection.
+   *
+   * A word after the selection moves the end out to it; a word before moves
+   * the start back. A word inside cuts: from where the first tapped verse
+   * starts onward it becomes the new end, and among the words added before
+   * that verse it becomes the new start. A tapped number resets to just the
+   * verses; another number joins them, leaving any verses between unselected.
+   */
+  function extendVerseSel(x: number, y: number, target: HTMLElement) {
+    if (!verseSel) return;
+    const sel = verseSel;
+
+    const numberEl = target.closest<HTMLElement>(".verse-number");
+    if (numberEl) {
+      const verseEl = numberEl.closest<HTMLElement>(".verse[data-verse]");
+      const whole = verseEl ? wholeVersePos(verseEl) : null;
+      if (!whole || !sameSection(sel.start, whole)) return;
+      if (sel.verses.includes(whole.verse)) {
+        const base = verseSelBase(sel);
+        if (!base) return;
+        verseSel = { ...sel, start: base.start, end: base.end };
+      } else {
+        verseSel = {
+          verses: [...sel.verses, whole.verse].sort((a, b) => a - b),
+          start: whole.verse < sel.start.verse ? whole : sel.start,
+          end: whole.verse > sel.end.verse ? whole : sel.end,
+        };
+      }
+    } else {
+      const pos = resolveWordAt(x, y, { interlinear: isInterlinearActive });
+      if (!pos || !sameSection(sel.start, pos)) return;
+      const base = verseSelBase(sel);
+      if (!base) return;
+
+      const afterEnd =
+        pos.verse > sel.end.verse || (pos.verse === sel.end.verse && pos.start >= sel.end.end);
+      const beforeStart =
+        pos.verse < sel.start.verse || (pos.verse === sel.start.verse && pos.end <= sel.start.start);
+      const fromVerseStart =
+        pos.verse > base.start.verse ||
+        (pos.verse === base.start.verse && pos.start >= base.start.start);
+
+      if (afterEnd || (!beforeStart && fromVerseStart)) {
+        verseSel = { ...sel, end: asSelectionEnd(pos) };
+      } else {
+        verseSel = { ...sel, start: asSelectionStart(pos) };
+      }
+    }
+
+    extendArmed = false;
+    haptic(15);
+    finishVerseSelection(x, y);
+  }
+
+  /** Paint a verse-number selection, mark its ends and open the ring. */
+  function finishVerseSelection(x: number, y: number) {
+    if (!verseSel) return;
+    selAnchor = verseSel.start;
+    selFocus = verseSel.end;
+
+    // No single term to look up, so void any in-flight person/ISBE request.
+    personLabelToken++;
+    selectedIsPerson = false;
+    selectedPersonPlaces = [];
+    selectedIsbeKind = null;
+    selectedContext = null;
+    selectedMeasureCtx = null;
+    selectedMorphology = null;
+    selectedLink = "";
+    wordLinkToken++;
+    selectionMode = "word";
+
+    clearHighlights();
+    refreshSelectionFromPair();
+    if (selectedSegments.length === 0) return;
+    addSelectionHandles();
+    showToastAt(x, y, { lookup: false });
   }
 
   /**
@@ -4729,6 +4939,13 @@
       { passive: false },
     );
 
+    // On a verse-number selection the bumpers only mark the ends. Dragging
+    // them would fight the verse rules, so they take no presses.
+    if (verseSel) {
+      startHandle.classList.add("decorative");
+      endHandle.classList.add("decorative");
+    }
+
     textContainer.appendChild(startHandle);
     textContainer.appendChild(endHandle);
     highlightedElements.push(startHandle, endHandle);
@@ -4852,6 +5069,7 @@
     extendArmed = false;
     selAnchor = null;
     selFocus = null;
+    verseSel = null;
     selectedSegments = [];
     selectedWordCount = 0;
     // Nothing selected means nothing to be in verse mode about — so the next
@@ -5156,6 +5374,7 @@
       moreInfo: !selectedIsPerson && selectedIsbeKind !== null,
       extendArmed,
       canSpeak: selectionCanSpeak,
+      verseLocked: !!verseSel,
     };
   }
 
@@ -5406,6 +5625,7 @@
     highlightModalRepeatGroup = null;
     highlightSelectionType = 'word';
     highlightModalExisting = null;
+    pendingHighlightVerses = [];
     highlightModalRef = { book: currentBook, chapter: currentChapter, verse: 1 };
     highlightModalOpen = true;
   }
@@ -5840,6 +6060,25 @@
           break;
         }
         const hlRef = { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber };
+        pendingHighlightVerses = [selectedVerseNumber];
+
+        // A verse-number selection left as tapped saves as verse highlights,
+        // one per tapped verse. Extended or cut, it is a phrase like any other.
+        if (verseSel && verseSelUntouched(verseSel)) {
+          const verses = [...verseSel.verses];
+          pendingWordSpans = [];
+          pendingHighlightVerses = verses;
+          highlightModalRef = { ...hlRef, verse: verses[0] };
+          highlightModalExisting =
+            chapterVerseHighlights.find(h => verses.includes(h.reference.verse)) ?? null;
+          highlightSelectionType = 'verse';
+          bulkRepeatRequest = null;
+          highlightModalRepeatGroup = null;
+          highlightModalOpen = true;
+          showToast = false;
+          break;
+        }
+
         // Capture the selection's character runs now, synchronously, before the
         // modal opens and the painted spans are torn down. One run per verse,
         // so a phrase that crosses a verse boundary saves as several records.
@@ -5911,6 +6150,32 @@
         const startVerse = Math.min(...shareVerses);
         const endVerse = Math.max(...shareVerses);
 
+        if (verseSel) {
+          // Untouched, the verses go out whole; extended or cut, exactly as
+          // selected. Runs either side of a skipped verse are joined by " … ".
+          const runs = segmentRuns(selectedSegments);
+          const untouched = verseSelUntouched(verseSel);
+          shareModalPassage = runs
+            .map(run =>
+              untouched
+                ? verseTextRange(currentBook, currentChapter, run[0].verse, run[run.length - 1].verse)
+                : segmentsText(run),
+            )
+            .filter(Boolean)
+            .join(' … ');
+          if (!shareModalPassage) break;
+          shareModalRef = {
+            book: currentBook,
+            chapter: currentChapter,
+            startVerse,
+            endVerse,
+            verses: shareVerses,
+          };
+          shareModalOpen = true;
+          showToast = false;
+          break;
+        }
+
         // A one-word quote is not something anyone sends, so a single tapped
         // word widens to its verse. A phrase was deliberately chosen, so it is
         // shared as chosen.
@@ -5925,6 +6190,11 @@
         showToast = false;
         break;
       }
+      case "translation":
+        // Captured before the selection comes down below.
+        openTranslationCard([...new Set(selectedSegments.map(s => s.verse))]);
+        showToast = false;
+        break;
       case "repeats":
         toggleRepeats(text);
         break;
@@ -6223,6 +6493,15 @@
     };
     document.addEventListener("pointerdown", handleOtQuoteOutside, true);
 
+    // And for the Translation card.
+    const handleTranslationOutside = (e: PointerEvent) => {
+      if (!translationHit) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.(".tc-card")) return;
+      closeTranslationCard();
+    };
+    document.addEventListener("pointerdown", handleTranslationOutside, true);
+
     // Text selection. Pointer events cover finger, pen and mouse in one path;
     // the extra non-passive touchmove exists only to stop the page scrolling
     // once a drag has committed to selecting.
@@ -6283,6 +6562,7 @@
       readerElement?.removeEventListener("click", handleNoteClick, true);
       document.removeEventListener("pointerdown", handleFootnoteOutside, true);
       document.removeEventListener("pointerdown", handleOtQuoteOutside, true);
+      document.removeEventListener("pointerdown", handleTranslationOutside, true);
       readerElement?.removeEventListener("pointermove", handleMouseMove);
       document.removeEventListener("pointerdown", handleToastGuard, true);
       readerElement?.removeEventListener("pointerdown", handlePointerDown);
@@ -6332,6 +6612,7 @@
       wordCount={selectedWordCount}
       {extendArmed}
       canSpeak={selectionCanSpeak}
+      verseLocked={!!verseSel}
       book={currentBook}
       chapter={currentChapter}
       verse={selectedVerseNumber}
@@ -6356,6 +6637,7 @@
       wordCount={selectedWordCount}
       {extendArmed}
       canSpeak={selectionCanSpeak}
+      verseLocked={!!verseSel}
       on:action={handleToastAction}
       on:modeChange={handleModeChange}
     />
@@ -6414,6 +6696,19 @@
     on:select={(e) => loadOtQuoteRef(e.detail.index)}
     on:goto={(e) => gotoOtQuote(e.detail.index)}
     on:close={closeOtQuote}
+  />
+{/if}
+
+{#if translationHit}
+  <TranslationCompareCard
+    verseBottom={translationHit.verseBottom}
+    verseLeft={translationHit.verseLeft}
+    verseWidth={translationHit.verseWidth}
+    book={translationHit.book}
+    chapter={translationHit.chapter}
+    verses={translationHit.verses}
+    readerTranslation={currentTranslation}
+    on:close={closeTranslationCard}
   />
 {/if}
 
@@ -6494,18 +6789,23 @@
         }
         chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
       } else {
-        // Verse-level
-        const prev = chapterVerseHighlights.find(h => h.reference.verse === highlightModalRef!.verse);
-        if (prev) {
-          await userDataStore.deleteHighlight(prev.id);
-          await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: prev.id });
+        // Verse-level: one record per verse, replacing whatever each had.
+        const verses = pendingHighlightVerses.length > 0
+          ? pendingHighlightVerses
+          : [highlightModalRef.verse];
+        for (const verse of verses) {
+          const prev = chapterVerseHighlights.find(h => h.reference.verse === verse);
+          if (prev) {
+            await userDataStore.deleteHighlight(prev.id);
+            await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: prev.id });
+          }
+          const saved = await userDataStore.saveHighlight({ reference: { ...highlightModalRef, verse }, style });
+          await syncQueue.enqueue({ type: 'INSERT', table: 'user_highlights', id: saved.id, data: {
+            id: saved.id, book: saved.reference.book, chapter: saved.reference.chapter,
+            verse: saved.reference.verse, color: saved.style.color,
+            style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
+          }});
         }
-        const saved = await userDataStore.saveHighlight({ reference: highlightModalRef, style });
-        await syncQueue.enqueue({ type: 'INSERT', table: 'user_highlights', id: saved.id, data: {
-          id: saved.id, book: saved.reference.book, chapter: saved.reference.chapter,
-          verse: saved.reference.verse, color: saved.style.color,
-          style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
-        }});
         chapterVerseHighlights = await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter);
       }
       // Re-apply all highlights for the chapter
@@ -6545,8 +6845,15 @@
           // A relocated book-intro pill may now have lost a highlight — re-derive.
           await refreshBookIntroPills();
         } else {
-          await userDataStore.deleteHighlight(highlightModalExisting.id);
-          await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: highlightModalExisting.id });
+          // Every verse the selection covers, so 3 and 5 come off together.
+          const existing = highlightModalExisting;
+          const targets = pendingHighlightVerses.length > 1
+            ? chapterVerseHighlights.filter(h => pendingHighlightVerses.includes(h.reference.verse))
+            : [existing];
+          for (const t of targets) {
+            await userDataStore.deleteHighlight(t.id);
+            await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: t.id });
+          }
           chapterVerseHighlights = await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter);
         }
         // Re-apply after removal
@@ -7215,6 +7522,7 @@
     color: var(--verse-num-color, #888);
     vertical-align: super;
     margin-inline-end: 0.1rem;
+    cursor: pointer;
   }
 
   .verse-text {
@@ -8133,6 +8441,12 @@
 
   :global(.drag-handle-float.left) {
     margin-left: -16px;
+  }
+
+  /* A verse-number selection's ends: drawn, never grabbed. */
+  :global(.drag-handle-float.decorative) {
+    pointer-events: none;
+    cursor: default;
   }
 
   :global(.drag-handle-float.right) {

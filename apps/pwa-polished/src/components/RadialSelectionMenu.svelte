@@ -11,6 +11,7 @@
   import Article from 'phosphor-svelte/lib/Article';
   import SpeakerHigh from 'phosphor-svelte/lib/SpeakerHigh';
   import ShareNetwork from 'phosphor-svelte/lib/ShareNetwork';
+  import Translate from 'phosphor-svelte/lib/Translate';
   import {
     BADGE,
     ringRadius,
@@ -47,6 +48,8 @@
   export let extendArmed = false;
   /** Greek/Hebrew selection Read Aloud can pronounce. */
   export let canSpeak = false;
+  /** A verse-number selection: no Word/Verse seat, no one-word buttons. */
+  export let verseLocked = false;
 
   /** The verse the tap landed in — the reference pill above the word. */
   export let book = '';
@@ -95,6 +98,7 @@
     repeats: Repeat,
     extend: ArrowsOutLineHorizontal,
     speak: SpeakerHigh,
+    translation: Translate,
   };
 
   // The sweep runs in list order, which seatAngles already returns as one
@@ -118,7 +122,7 @@
   // So a change that moves seats waits for the sweep to finish; a change that
   // only rewrites labels (Define → Bio → Info) is adopted straight away,
   // because nothing has to move for it.
-  $: live = radialItems({ mode, wordCount, isPlace, isPerson, moreInfo, extendArmed, canSpeak });
+  $: live = radialItems({ mode, wordCount, isPlace, isPerson, moreInfo, extendArmed, canSpeak, verseLocked });
 
   let shown: RadialItem[] = [];
   let settled = reduceMotion;

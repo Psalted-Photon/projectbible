@@ -22,6 +22,25 @@ export interface ShareRef {
   chapter: number;
   startVerse: number;
   endVerse: number;
+  /**
+   * Every verse the passage touches, when that is not simply start to end —
+   * tapping verse numbers 3 and 5 leaves 4 out. Reads "3, 5" in the reference.
+   */
+  verses?: number[];
+}
+
+/** "3, 5", "3-4, 7": the verses in runs. Null when they run unbroken. */
+function verseList(verses: number[] | undefined): string | null {
+  if (!verses || verses.length < 2) return null;
+  const sorted = [...new Set(verses)].sort((a, b) => a - b);
+  const runs: [number, number][] = [];
+  for (const v of sorted) {
+    const run = runs[runs.length - 1];
+    if (run && v === run[1] + 1) run[1] = v;
+    else runs.push([v, v]);
+  }
+  if (runs.length < 2) return null;
+  return runs.map(([a, b]) => (b > a ? `${a}-${b}` : `${a}`)).join(', ');
 }
 
 export interface ShareTextOpts {
@@ -42,7 +61,8 @@ export interface ShareTextOpts {
 export function formatShareRef(ref: ShareRef): string {
   const book = normalizeBookName(ref.book);
   const span =
-    ref.endVerse > ref.startVerse ? `${ref.startVerse}-${ref.endVerse}` : `${ref.startVerse}`;
+    verseList(ref.verses) ??
+    (ref.endVerse > ref.startVerse ? `${ref.startVerse}-${ref.endVerse}` : `${ref.startVerse}`);
   return `${book} ${ref.chapter}:${span}`;
 }
 
@@ -62,7 +82,12 @@ export function formatShareRef(ref: ShareRef): string {
 export function buildShareUrl(ref: ShareRef, translation?: string): string {
   if (typeof window === 'undefined') return '';
   const url = new URL(window.location.pathname, window.location.origin);
-  url.searchParams.set('ref', formatShareRef(ref));
+  // "John 3:3, 5" is not a reference the other end can open, so a passage
+  // with a gap links to its first verse.
+  const linked = verseList(ref.verses)
+    ? { book: ref.book, chapter: ref.chapter, startVerse: ref.startVerse, endVerse: ref.startVerse }
+    : ref;
+  url.searchParams.set('ref', formatShareRef(linked));
   if (translation) url.searchParams.set('t', translation.toUpperCase());
   return url.toString();
 }

@@ -161,6 +161,12 @@ export interface RadialItemOpts {
   extendArmed: boolean;
   /** Greek/Hebrew word Read Aloud can pronounce. */
   canSpeak?: boolean;
+  /**
+   * The selection came from a verse-number tap. It is about the verse, not a
+   * word, so the scope toggle and every one-word button go, and Translation
+   * comes in.
+   */
+  verseLocked?: boolean;
 }
 
 /**
@@ -176,6 +182,22 @@ export interface RadialItemOpts {
  * Share sits beside Notes on a sky blue deep enough to read apart from it.
  */
 export function radialItems(o: RadialItemOpts): RadialItem[] {
+  if (o.verseLocked) {
+    return [
+      { kind: 'action', id: 'highlight', label: 'Highlight', icon: 'highlight', accent: '#fde047' },
+      { kind: 'action', id: 'notes', label: 'Notes', icon: 'notes', accent: '#d1e3f5' },
+      { kind: 'action', id: 'share', label: 'Share', icon: 'share', accent: '#7dd3fc' },
+      { kind: 'action', id: 'translation', label: 'Translation', icon: 'translation', accent: '#e879f9' },
+      {
+        kind: 'action',
+        id: 'extend',
+        label: o.extendArmed ? 'Tap…' : 'Extend',
+        icon: 'extend',
+        accent: o.extendArmed ? '#667eea' : '#9ca3af',
+      },
+    ];
+  }
+
   // Same rule as the classic toast: single-term lookups only make sense for one
   // word, and verse mode is a single term by definition.
   const singleWord = o.mode === 'verse' || o.wordCount <= 1;

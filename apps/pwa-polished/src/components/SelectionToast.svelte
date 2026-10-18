@@ -18,6 +18,11 @@
   /** Greek/Hebrew selection that Read Aloud can pronounce — shows "Speak". */
   export let canSpeak = false;
   /**
+   * A verse-number selection. It is about the verse, so the Word/Verse toggle
+   * and the one-word buttons go, and Translation comes in.
+   */
+  export let verseLocked = false;
+  /**
    * False for the first frame after opening, while the caller measures us and
    * works out where we go. Kept laid out but invisible so the measurement is
    * real and there is no jump from a guessed position to the final one.
@@ -40,7 +45,7 @@
 
   // Define/Bio/More Info and Repeats look up a single term, so they only appear
   // for a one-word selection. Search, Highlight, Save and Notes work on a phrase.
-  $: singleWord = mode === 'verse' || wordCount <= 1;
+  $: singleWord = !verseLocked && (mode === 'verse' || wordCount <= 1);
 
   function handleAction(action: string) {
     dispatch('action', { action, text: selectedText });
@@ -56,14 +61,16 @@
   <!-- One button, not two. The word you tapped is already highlighted in front
        of you, so a button saying so earns nothing — what's worth the space is
        the way out of it. The label is what you'd be switching *to*. -->
-  <div class="mode-toggle">
-    <button
-      class="toggle-btn"
-      on:click={() => dispatch('modeChange', mode === 'word' ? 'verse' : 'word')}
-    >
-      {mode === 'word' ? 'Verse' : 'Word'}
-    </button>
-  </div>
+  {#if !verseLocked}
+    <div class="mode-toggle">
+      <button
+        class="toggle-btn"
+        on:click={() => dispatch('modeChange', mode === 'word' ? 'verse' : 'word')}
+      >
+        {mode === 'word' ? 'Verse' : 'Word'}
+      </button>
+    </div>
+  {/if}
   
   <div class="actions">
     {#if singleWord}
@@ -74,7 +81,7 @@
       </button>
     {/if}
 
-    {#if canSpeak}
+    {#if canSpeak && !verseLocked}
       <button class="action-btn" on:click={() => handleAction('speak')}>
         Speak
       </button>
@@ -84,7 +91,7 @@
       Search
     </button>
 
-    {#if isPlace}
+    {#if isPlace && !verseLocked}
       <button class="action-btn" on:click={() => handleAction('map')}>
         Map
       </button>
@@ -101,6 +108,12 @@
     <button class="action-btn" on:click={() => handleAction('notes')}>
       Notes
     </button>
+
+    {#if verseLocked}
+      <button class="action-btn" on:click={() => handleAction('translation')}>
+        Translation
+      </button>
+    {/if}
 
     {#if singleWord}
       <button class="action-btn" on:click={() => handleAction('repeats')}>
