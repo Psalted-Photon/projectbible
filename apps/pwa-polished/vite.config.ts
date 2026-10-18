@@ -296,6 +296,8 @@ export default defineConfig({
         //                     chunks the app precaches anyway.
         //   motion-lab.html   tunes the app's motion (library flip, work tabs,
         //                     dropdowns). Self-contained, like gem-lab.
+        //   hebrew-voice-lab  auditions Hebrew read from pointed text by a
+        //                     Piper voice. Self-contained, like voice-lab.
         //   connections-lab   tunes the cross-reference arcs. Built from the
         //                     app's own source, like tree-motion-lab, so its
         //                     entry chunk is kept out as well as the page.
@@ -321,6 +323,7 @@ export default defineConfig({
           '**/tree-motion-lab.html',
           '**/assets/tree-motion-lab-*.js',
           '**/motion-lab.html',
+          '**/hebrew-voice-lab.html',
           '**/connections-lab.html',
           '**/assets/connections-lab-*.js',
           '**/connections-grid-lab.html',
@@ -335,6 +338,7 @@ export default defineConfig({
           /^\/gem-lab\.html$/,
           /^\/tree-motion-lab\.html$/,
           /^\/motion-lab\.html$/,
+          /^\/hebrew-voice-lab\.html$/,
           /^\/connections-lab\.html$/,
           /^\/connections-grid-lab\.html$/,
           /^\/connections-chord-lab\.html$/,

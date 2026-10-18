@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hebrew Voice Lab</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 16px 64px;
+    background: #141414; color: #e6e6e6;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 1.15rem; margin: 0 0 2px; }
+  .sub { color: #888; font-size: 0.82rem; margin-bottom: 14px; max-width: 760px; }
+  .panel {
+    background: #1c1c1c; border: 1px solid #2f2f2f; border-radius: 10px;
+    padding: 12px; margin-bottom: 14px;
+  }
+  .panel h2 {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #8a8a8a; margin: 0 0 10px; font-weight: 600;
+  }
+  button {
+    font: inherit; color: #e6e6e6; background: #2a2a2a;
+    border: 1px solid #3d3d3d; border-radius: 7px;
+    padding: 6px 11px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #333; border-color: #555; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { background: #3b3169; border-color: #5b4da8; }
+  button.primary:hover:not(:disabled) { background: #473b80; }
+  button.playing { border-color: #7c6ad0; background: #2b2542; }
+  textarea, input[type="text"] {
+    width: 100%; font: inherit; color: #e6e6e6;
+    background: #131313; border: 1px solid #3a3a3a;
+    border-radius: 7px; padding: 7px 8px;
+  }
+  textarea { resize: vertical; }
+  input[type="range"] { width: 100%; }
+  select { font: inherit; color: #e6e6e6; background: #131313; border: 1px solid #3a3a3a; border-radius: 6px; padding: 6px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .status { font-size: 0.85rem; color: #9a9a9a; min-height: 1.4em; }
+  .status.err { color: #f08a8a; }
+  .hint { font-size: 0.78rem; color: #777; margin-top: 6px; }
+  .hint b { color: #a9a9a9; font-weight: 600; }
+  label.field { display: block; margin-bottom: 10px; }
+  label.field > span { display: block; font-size: 0.8rem; color: #9a9a9a; margin-bottom: 4px; }
+
+  .voices { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .vcard { background: #232323; border: 1px solid #343434; border-radius: 8px; padding: 9px 10px; }
+  .vcard .nm { font-weight: 600; }
+  .vcard .meta { font-size: 0.76rem; color: #8f8f8f; margin: 2px 0 8px; }
+  .vcard .state { font-size: 0.8rem; color: #9a9a9a; }
+  .vcard .state.ok { color: #8fd18f; }
+  .bar { height: 4px; background: #2a2a2a; border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: #7c6ad0; transition: width 0.15s; }
+
+  .he {
+    direction: rtl; unicode-bidi: isolate;
+    font-family: "SBL Hebrew", "Ezra SIL", "Noto Serif Hebrew", "Times New Roman", serif;
+    font-size: 1.7rem; line-height: 1.3;
+  }
+  textarea.he { font-size: 1.5rem; }
+  .ipa {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9rem; color: #b9aee8;
+  }
+  input.ipa { background: #1a1726; border-color: #332c52; }
+  .sent { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.74rem; color: #777; margin-top: 4px; min-height: 1.1em; word-break: break-all; }
+  .sent .drop { color: #f0a070; }
+
+  .words { display: grid; gap: 8px; }
+  .word {
+    display: grid; gap: 6px 12px; align-items: center;
+    grid-template-columns: minmax(110px, 150px) minmax(0, 1fr);
+    background: #202020; border: 1px solid #2f2f2f; border-radius: 8px; padding: 8px 10px;
+  }
+  .word .he { text-align: right; }
+  .word .info { min-width: 0; }
+  .word .say { font-size: 0.85rem; }
+  .word .say .num { color: #7c7c7c; font-size: 0.76rem; margin-left: 6px; }
+  .word .say .note { color: #8a8a8a; font-size: 0.76rem; display: block; }
+  .word .ctl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 5px; }
+  .word .ctl input.ipa { flex: 1 1 140px; width: auto; min-width: 0; }
+  .word .ctl button { padding: 4px 9px; font-size: 0.85rem; }
+  @media (max-width: 520px) {
+    .word { grid-template-columns: minmax(0, 1fr); }
+    .word .he { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<h1>Hebrew Voice Lab</h1>
+<div class="sub">
+  Pointed Hebrew is turned into sounds by the rules on this page, and the sounds go straight to a voice. espeak's
+  Hebrew is never used. German is the main test because it has almost every Hebrew sound (sh, kh, ts, the throat r,
+  the glottal catch). The Greek and English voices are here to compare against. The sound boxes can be edited: move the
+  <span class="ipa">ˈ</span> to change the stress, or change any sound, then play it again.
+</div>
+
+<div class="panel">
+  <h2>Voices</h2>
+  <div class="voices" id="voices"></div>
+  <div class="hint">Voices download once (about 60 MB each) and stay in this browser. A voice the app already has installed is used from there.</div>
+</div>
+
+<div class="panel">
+  <h2>Settings</h2>
+  <label class="field">
+    <span>Speed — <b id="speedVal"></b></span>
+    <input type="range" id="speed" min="0.6" max="1.4" step="0.05" value="0.85">
+  </label>
+  <div class="row" style="gap: 18px;">
+    <label class="row" style="gap: 6px;">Spoken shva sounds like
+      <select id="shva">
+        <option value="e">e (modern)</option>
+        <option value="ə">ə (a quick "uh")</option>
+      </select>
+    </label>
+    <label class="row" style="gap: 6px;"><input type="checkbox" id="lengthen" checked> Hold the stressed vowel (German voice)</label>
+  </div>
+  <div class="hint">Changing the shva setting rebuilds the sound boxes, which drops any edits you made in them.</div>
+</div>
+
+<div class="panel">
+  <h2>Try any Hebrew</h2>
+  <textarea id="freeHe" class="he" dir="rtl" rows="2" spellcheck="false">בְּרֵאשִׁית בָּרָא אֱלֹהִים</textarea>
+  <div class="ctl row" style="margin-top: 8px;">
+    <input type="text" id="freeIpa" class="ipa" spellcheck="false" style="flex: 1 1 200px; width: auto;">
+    <span id="freeBtns" class="row" style="gap: 6px;"></span>
+  </div>
+  <div class="sent" id="freeSent"></div>
+  <div class="hint">Paste pointed text (with vowel marks). Cantillation marks are ignored. Mark a qamats qatan (the short "o") with <b>ׇ</b> (U+05C7) when the text leaves it as a plain qamats.</div>
+</div>
+
+<div class="panel">
+  <h2>Word list</h2>
+  <div class="words" id="words"></div>
+</div>
+
+<div class="status" id="status"></div>
+
+<script type="module">
+import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort.all.min.mjs';
+
+const ORT_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
+const HF = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/';
+
+// The app keeps its Piper voices in OPFS /piper/. The lab reads from there so a
+// voice already installed costs nothing, but only ever writes to its own folder:
+// a file dropped into /piper/ would show up in the app as an installed voice.
+const APP_DIR = 'piper';
+const LAB_DIR = 'hebrew-voice-lab';
+
+// ── voices ──────────────────────────────────────────────────────────────────
+
+// Each voice gets the page's sounds, folded onto the ones it actually learned.
+// A value is the replacement; '' drops the sound.
+const VOICES = [
+  {
+    id: 'de_DE-thorsten-medium',
+    path: 'de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx',
+    name: 'German — Thorsten',
+    short: 'German',
+    meta: 'Public domain (CC0) · about 63 MB · the main test',
+    lengthen: true,
+    fold: {},
+  },
+  {
+    id: 'el_GR-rapunzelina-medium',
+    path: 'el/el_GR/rapunzelina/medium/el_GR-rapunzelina-medium.onnx',
+    name: 'Greek — Rapunzelina',
+    short: 'Greek',
+    meta: "The app's Greek voice · no sh, no h, no throat r",
+    lengthen: false,
+    // Same reasoning as KOINE_FOLD in src/lib/tts/voices.ts: a hard g renders
+    // as weak breath on this voice, so it takes the fricative instead.
+    fold: { 'ʃ': 's', 'ʁ': 'r', 'ʔ': '', h: 'x', 'ə': 'e', 'ɡ': 'ɣ' },
+  },
+  {
+    id: 'en_US-lessac-medium',
+    path: 'en/en_US/lessac/medium/en_US-lessac-medium.onnx',
+    name: 'English — Lessac',
+    short: 'English',
+    meta: 'One of the app’s English voices · no kh',
+    lengthen: false,
+    fold: { x: 'h', 'ʁ': 'ɹ', a: 'ɑ', e: 'ɛ', o: 'oʊ' },
+  },
+];
+
+const state = new Map(); // id → { config, session, status }
+
+const $ = (id) => document.getElementById(id);
+
+function say(msg, isErr) {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = isErr ? 'status err' : 'status';
+  if (isErr) console.error(msg);
+}
+
+// ── storage ─────────────────────────────────────────────────────────────────
+
+async function dir(name, create) {
+  const root = await navigator.storage.getDirectory();
+  return root.getDirectoryHandle(name, { create });
+}
+
+async function readFrom(dirName, file) {
+  try {
+    const d = await dir(dirName, false);
+    const h = await d.getFileHandle(file);
+    return await h.getFile();
+  } catch (err) {
+    return null;
+  }
+}
+
+async function readVoiceFile(file) {
+  return (await readFrom(APP_DIR, file)) || (await readFrom(LAB_DIR, file));
+}
+
+async function writeLab(file, blob) {
+  const d = await dir(LAB_DIR, true);
+  const h = await d.getFileHandle(file, { create: true });
+  const w = await h.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+
+async function fetchWithProgress(url, onPct) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Download failed (' + res.status + ') for ' + url);
+  const total = +(res.headers.get('Content-Length') || 0);
+  const reader = res.body && res.body.getReader();
+  if (!reader) return res.blob();
+  const chunks = [];
+  let got = 0;
+  for (;;) {
+    const step = await reader.read();
+    if (step.done) break;
+    chunks.push(step.value);
+    got += step.value.length;
+    if (total) onPct(Math.min(100, (got / total) * 100));
+  }
+  return new Blob(chunks);
+}
+
+// ── voice cards ─────────────────────────────────────────────────────────────
+
+function renderVoices() {
+  const host = $('voices');
+  host.innerHTML = '';
+  for (const v of VOICES) {
+    const card = document.createElement('div');
+    card.className = 'vcard';
+    card.innerHTML =
+      '<div class="nm"></div><div class="meta"></div>' +
+      '<div class="row"><button class="primary">Download</button><span class="state"></span></div>' +
+      '<div class="bar" hidden><i></i></div>';
+    card.querySelector('.nm').textContent = v.name;
+    card.querySelector('.meta').textContent = v.meta;
+    v.el = {
+      btn: card.querySelector('button'),
+      state: card.querySelector('.state'),
+      bar: card.querySelector('.bar'),
+      fill: card.querySelector('.bar > i'),
+    };
+    v.el.btn.addEventListener('click', () => download(v));
+    host.appendChild(card);
+  }
+}
+
+function setVoiceState(v, text, ok) {
+  v.el.state.textContent = text;
+  v.el.state.className = ok ? 'state ok' : 'state';
+}
+
+async function checkInstalled(v) {
+  const model = await readVoiceFile(v.id + '.onnx');
+  const config = await readVoiceFile(v.id + '.onnx.json');
+  if (model && config) {
+    v.el.btn.hidden = true;
+    setVoiceState(v, 'Ready', true);
+    return true;
+  }
+  setVoiceState(v, 'Not downloaded', false);
+  return false;
+}
+
+async function download(v) {
+  v.el.btn.disabled = true;
+  v.el.bar.hidden = false;
+  try {
+    setVoiceState(v, 'Downloading…');
+    const configBlob = await fetchWithProgress(HF + v.path + '.json', () => {});
+    const modelBlob = await fetchWithProgress(HF + v.path, (pct) => {
+      v.el.fill.style.width = pct.toFixed(0) + '%';
+      setVoiceState(v, 'Downloading… ' + pct.toFixed(0) + '%');
+    });
+    await writeLab(v.id + '.onnx.json', configBlob);
+    await writeLab(v.id + '.onnx', modelBlob);
+    v.el.bar.hidden = true;
+    v.el.btn.hidden = true;
+    setVoiceState(v, 'Ready', true);
+  } catch (err) {
+    v.el.btn.disabled = false;
+    setVoiceState(v, 'Failed');
+    say(String(err && err.message ? err.message : err), true);
+  }
+}
+
+// ── running a voice ─────────────────────────────────────────────────────────
+
+let ortReady = false;
+function configureOrt() {
+  if (ortReady) return;
+  ort.env.wasm.wasmPaths = ORT_CDN;
+  ort.env.wasm.numThreads = 1;
+  ortReady = true;
+}
+
+async function loadVoice(v) {
+  const cached = state.get(v.id);
+  if (cached) return cached;
+  const modelFile = await readVoiceFile(v.id + '.onnx');
+  const configFile = await readVoiceFile(v.id + '.onnx.json');
+  if (!modelFile || !configFile) throw new Error('Download the ' + v.short + ' voice first.');
+  configureOrt();
+  say('Loading the ' + v.short + ' voice…');
+  const config = JSON.parse(await configFile.text());
+  const session = await ort.InferenceSession.create(await modelFile.arrayBuffer(), {
+    executionProviders: ['wasm'],
+  });
+  const loaded = { config, session };
+  state.set(v.id, loaded);
+  say('');
+  return loaded;
+}
+
+// Same id stream piperEngine.ts builds: ^ _ p₁ _ p₂ _ … pₙ _ $
+function idsFor(symbols, map) {
+  const idOf = (s) => {
+    const e = map[s];
+    return Array.isArray(e) ? e[0] : e;
+  };
+  const pad = idOf('_') ?? 0;
+  const ids = [idOf('^') ?? 1, pad];
+  const dropped = [];
+  for (const s of symbols) {
+    const id = idOf(s);
+    if (id === undefined) { dropped.push(s); continue; }
+    ids.push(id, pad);
+  }
+  ids.push(idOf('$') ?? 2);
+  return { ids, dropped };
+}
+
+const VOWEL_SYMBOLS = new Set(['a', 'e', 'i', 'o', 'u', 'ə']);
+
+// The page's sounds → what this voice is given. Holding the stressed vowel is
+// done before folding, on the page's own five vowels.
+function forVoice(ipa, v) {
+  let symbols = Array.from(ipa.normalize('NFC'));
+  if (v.lengthen && $('lengthen').checked) {
+    const out = [];
+    let pending = false;
+    for (let i = 0; i < symbols.length; i++) {
+      const s = symbols[i];
+      out.push(s);
+      if (s === 'ˈ') pending = true;
+      else if (pending && VOWEL_SYMBOLS.has(s)) {
+        if (symbols[i + 1] !== 'ː') out.push('ː');
+        pending = false;
+      } else if (s === ' ') pending = false;
+    }
+    symbols = out;
+  }
+  const folded = [];
+  for (const s of symbols) {
+    const r = Object.prototype.hasOwnProperty.call(v.fold, s) ? v.fold[s] : s;
+    folded.push(...Array.from(r));
+  }
+  return folded;
+}
+
+let audioCtx = null;
+let currentSource = null;
+let currentBtn = null;
+
+function stopAudio() {
+  if (currentSource) {
+    try { currentSource.stop(); } catch (err) { /* already stopped */ }
+    currentSource = null;
+  }
+  if (currentBtn) currentBtn.classList.remove('playing');
+  currentBtn = null;
+}
+
+async function speak(ipa, v, btn, sentEl) {
+  stopAudio();
+  const text = ipa.trim();
+  if (!text) return;
+  try {
+    const { config, session } = await loadVoice(v);
+    const symbols = forVoice(text, v);
+    // A closing full stop gives the word a finished, falling end instead of
+    // being cut off mid-breath.
+    if (symbols[symbols.length - 1] !== '.') symbols.push('.');
+    const { ids, dropped } = idsFor(symbols, config.phoneme_id_map);
+
+    if (sentEl) {
+      sentEl.innerHTML = '';
+      sentEl.append(v.short + ' hears: ' + symbols.join(''));
+      if (dropped.length) {
+        const d = document.createElement('span');
+        d.className = 'drop';
+        d.textContent = '  (not in this voice, skipped: ' + [...new Set(dropped)].join(' ') + ')';
+        sentEl.append(d);
+      }
+    }
+
+    const inf = config.inference || {};
+    const speed = parseFloat($('speed').value);
+    const feeds = {
+      input: new ort.Tensor('int64', BigInt64Array.from(ids, BigInt), [1, ids.length]),
+      input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]),
+      scales: new ort.Tensor('float32', Float32Array.from([
+        inf.noise_scale ?? 0.667,
+        (inf.length_scale ?? 1) / speed,
+        inf.noise_w ?? 0.8,
+      ]), [3]),
+    };
+    if (Object.keys(config.speaker_id_map || {}).length > 0) {
+      feeds.sid = new ort.Tensor('int64', BigInt64Array.from([0n]), [1]);
+    }
+    const out = await session.run(feeds);
+    const samples = out.output.data;
+
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    const rate = config.audio.sample_rate;
+    const lead = Math.round(rate * 0.12);
+    const buf = audioCtx.createBuffer(1, samples.length + lead, rate);
+    buf.getChannelData(0).set(samples, lead);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioCtx.destination);
+    currentSource = src;
+    currentBtn = btn || null;
+    if (btn) btn.classList.add('playing');
+    src.onended = () => {
+      if (currentSource === src) stopAudio();
+    };
+    src.start();
+  } catch (err) {
+    say(String(err && err.message ? err.message : err), true);
+  }
+}
+
+// ── pointed Hebrew → sounds ─────────────────────────────────────────────────
+
+const M = {
+  SHVA: 'ְ', HSEG: 'ֱ', HPAT: 'ֲ', HQAM: 'ֳ',
+  HIRIQ: 'ִ', TSERE: 'ֵ', SEGOL: 'ֶ', PATAH: 'ַ',
+  QAMATS: 'ָ', HOLAM: 'ֹ', HOLAM_HASER: 'ֺ', QUBUTS: 'ֻ',
+  DAGESH: 'ּ', METEG: 'ֽ', MAQAF: '־', SHIN: 'ׁ',
+  SIN: 'ׂ', QQATAN: 'ׇ',
+};
+
+const VOWEL_OF = {
+  [M.PATAH]: 'patah', [M.QAMATS]: 'qamats', [M.QQATAN]: 'qqatan',
+  [M.TSERE]: 'tsere', [M.SEGOL]: 'segol', [M.HIRIQ]: 'hiriq',
+  [M.HOLAM]: 'holam', [M.HOLAM_HASER]: 'holam', [M.QUBUTS]: 'qubuts',
+  [M.SHVA]: 'shva', [M.HPAT]: 'hpatah', [M.HSEG]: 'hsegol', [M.HQAM]: 'hqamats',
+};
+
+const FINAL_FORM = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' };
+const BEGADKEFAT = new Set(['ב', 'ג', 'ד', 'כ', 'פ', 'ת']);
+
+function soundOfVowel(kind, shva) {
+  switch (kind) {
+    case 'patah': case 'qamats': case 'hpatah': return 'a';
+    case 'tsere': case 'segol': case 'hsegol': return 'e';
+    case 'hiriq': return 'i';
+    case 'holam': case 'qqatan': case 'hqamats': return 'o';
+    case 'qubuts': case 'shureq': return 'u';
+    case 'shva': return shva;
+    default: return '';
+  }
+}
+
+function consonantOf(u, i) {
+  const d = u.marks.has(M.DAGESH);
+  switch (u.base) {
+    case 'א': case 'ע': return i === 0 ? '' : 'ʔ';
+    case 'ב': return d ? 'b' : 'v';
+    case 'ג': return 'ɡ';
+    case 'ד': return 'd';
+    case 'ה': return 'h';
+    case 'ו': return 'v';
+    case 'ז': return 'z';
+    case 'ח': return 'x';
+    case 'ט': return 't';
+    case 'י': return 'j';
+    case 'כ': return d ? 'k' : 'x';
+    case 'ל': return 'l';
+    case 'מ': return 'm';
+    case 'נ': return 'n';
+    case 'ס': return 's';
+    case 'פ': return d ? 'p' : 'f';
+    case 'צ': return 'ts';
+    case 'ק': return 'k';
+    case 'ר': return 'ʁ';
+    case 'ש': return u.marks.has(M.SIN) ? 's' : 'ʃ';
+    case 'ת': return 't';
+    default: return '';
+  }
+}
+
+/** One word (no spaces, no maqaf) → letters with their marks. */
+function parseUnits(word) {
+  const units = [];
+  for (const ch of word) {
+    if (ch >= 'א' && ch <= 'ת') {
+      units.push({ ch, base: FINAL_FORM[ch] || ch, marks: new Set(), vowel: null });
+    } else if (units.length && ch >= 'ְ' && ch <= 'ׇ') {
+      const u = units[units.length - 1];
+      u.marks.add(ch);
+      if (VOWEL_OF[ch]) {
+        // Holam on a vav is decided later (it may belong to the letter before).
+        if (!(u.base === 'ו' && ch === M.HOLAM) && !u.vowel) u.vowel = VOWEL_OF[ch];
+      }
+    }
+    // Cantillation (U+0591–U+05AF) falls in the range above but has no
+    // meaning here; everything else (punctuation, Latin) is skipped.
+  }
+  return units;
+}
+
+/**
+ * Sounds for one word, as an array of symbols with the stress mark placed.
+ * `stressless` leaves the stress mark out (the first word of a maqaf pair).
+ */
+function wordSounds(units, opts, stressless) {
+  const n = units.length;
+
+  // Pass 1 — vowel letters. A vav or yod that only spells a vowel goes silent
+  // and hands its vowel to the letter before.
+  for (let i = 0; i < n; i++) {
+    const u = units[i];
+    const prev = i > 0 ? units[i - 1] : null;
+    if (u.base === 'ו') {
+      const hasHolam = u.marks.has(M.HOLAM);
+      const hasDagesh = u.marks.has(M.DAGESH);
+      if (hasDagesh && !u.vowel && !hasHolam) {
+        if (!prev) { u.mode = 'shureq-alone'; continue; }
+        if (!prev.vowel && !prev.silent) { prev.vowel = 'shureq'; u.silent = true; continue; }
+      }
+      if (hasHolam && !u.vowel) {
+        if (prev && !prev.vowel && !prev.silent) { prev.vowel = 'holam'; u.silent = true; continue; }
+        u.vowel = 'holam'; // vav carrying its own o: "vo"
+      }
+    } else if (u.base === 'י' && !u.vowel && !u.marks.has(M.DAGESH) && prev) {
+      const pv = effectiveVowel(units, i - 1);
+      const last = units[n - 1];
+      if (pv === 'hiriq' || pv === 'tsere' || pv === 'segol') u.silent = true;
+      else if ((pv === 'qamats' || pv === 'patah') && i === n - 2 && last.base === 'ו' && !last.vowel) u.silent = true; // -av
+    } else if (u.base === 'א' && !u.vowel && i > 0) {
+      u.silent = true;
+    } else if (u.base === 'ה' && i === n - 1 && !u.vowel && !u.marks.has(M.DAGESH)) {
+      u.silent = true;
+    } else if (u.base === 'ע' && (!u.vowel || u.vowel === 'shva') && i > 0) {
+      // Modern reading: a vowelless ayin is not heard.
+      u.silent = true;
+    } else if (u.base === 'א' && u.vowel === 'shva' && i > 0) {
+      u.silent = true;
+    }
+  }
+
+  // Pass 2 — sounds, shva, stress.
+  const out = [];
+  const sylls = []; // { start, vowelAt, kind, base }
+  let lastWasVowel = false;
+  let prevShvaSilent = false;
+  const lastSpoken = lastSpokenIndex(units);
+
+  for (let i = 0; i < n; i++) {
+    const u = units[i];
+    if (u.silent) continue;
+
+    if (u.mode === 'shureq-alone') {
+      sylls.push({ start: out.length, vowelAt: out.length, kind: 'shureq', base: u.base });
+      out.push('u');
+      lastWasVowel = true;
+      prevShvaSilent = false;
+      continue;
+    }
+
+    const isBgdkpt = BEGADKEFAT.has(u.base);
+    const hasDagesh = u.marks.has(M.DAGESH);
+    const isMappiq = u.base === 'ה' && hasDagesh;
+    const forte = hasDagesh && !isMappiq && (!isBgdkpt || (i > 0 && lastWasVowel));
+
+    let kind = u.vowel;
+    let shvaSilentHere = false;
+    if (kind === 'shva') {
+      const next = units[i + 1];
+      const vocal =
+        i < lastSpoken &&
+        !(i === lastSpoken - 1 && units[lastSpoken].vowel === 'shva') &&
+        (i === 0 ||
+          forte ||
+          prevShvaSilent ||
+          (next && next.base === u.base) ||
+          (i > 0 && units[i - 1].marks.has(M.METEG)));
+      if (!vocal) { kind = null; shvaSilentHere = true; }
+    }
+
+    const cons = Array.from(consonantOf(u, i));
+    const vowel = kind ? soundOfVowel(kind, opts.shva) : '';
+
+    // Furtive patah: a final ח, ע or הּ after another vowel is said "-ach".
+    const furtive =
+      i === n - 1 && kind === 'patah' && lastWasVowel &&
+      (u.base === 'ח' || u.base === 'ע' || isMappiq);
+    if (furtive) {
+      out.push('a', ...cons.filter((c) => c !== 'ʔ'));
+      lastWasVowel = false;
+      prevShvaSilent = false;
+      continue;
+    }
+
+    const start = out.length;
+    out.push(...cons);
+    if (vowel) {
+      sylls.push({ start, vowelAt: out.length, kind, base: u.base });
+      out.push(vowel);
+      lastWasVowel = true;
+    } else {
+      lastWasVowel = false;
+    }
+    prevShvaSilent = shvaSilentHere;
+  }
+
+  if (!stressless && sylls.length) {
+    let s = sylls.length - 1;
+    const endsInConsonant = !lastWasVowel;
+    const lastS = sylls[s];
+    if (sylls.length >= 2 && lastS.kind === 'segol' && endsInConsonant) {
+      s -= 1; // segolate nouns: chesed, melekh, nefesh
+    } else if (
+      sylls.length >= 2 && lastS.kind === 'hiriq' && lastS.base === 'י' &&
+      (sylls[s - 1].kind === 'patah' || sylls[s - 1].kind === 'qamats') && endsInConsonant
+    ) {
+      s -= 1; // -ayim: shamayim, mayim
+    }
+    // Never stress a reduced vowel.
+    while (s > 0 && /^(shva|hpatah|hsegol|hqamats)$/.test(sylls[s].kind)) s -= 1;
+    out.splice(sylls[s].start, 0, 'ˈ');
+  }
+  return out;
+}
+
+function effectiveVowel(units, i) {
+  // The vowel a letter ends up with, looking past a silent vowel letter.
+  for (let j = i; j >= 0; j--) {
+    if (units[j].vowel) return units[j].vowel;
+    if (!units[j].silent) return null;
+  }
+  return null;
+}
+
+function lastSpokenIndex(units) {
+  for (let j = units.length - 1; j >= 0; j--) if (!units[j].silent) return j;
+  return 0;
+}
+
+function consonantsOnly(word) {
+  return Array.from(word).filter((c) => c >= 'א' && c <= 'ת').join('');
+}
+
+/** Pointed Hebrew text → the page's sound string. */
+function hebrewToSounds(text, opts) {
+  const words = text.normalize('NFD').split(/[\s׃׀,.;:!?]+/).filter(Boolean);
+  const out = [];
+  for (const word of words) {
+    const parts = word.split(M.MAQAF).filter(Boolean);
+    const joined = [];
+    parts.forEach((part, k) => {
+      const stressless = k < parts.length - 1;
+      // The divine name is read as the vowels it carries point to: Adonai,
+      // or Elohim when it is pointed with hiriq (after Adonai in the text).
+      if (consonantsOnly(part) === 'יהוה') {
+        const sounds = part.includes(M.HIRIQ) ? ['e', 'l', 'o', 'h', 'i', 'm'] : ['a', 'd', 'o', 'n', 'a', 'j'];
+        if (!stressless) sounds.splice(3, 0, 'ˈ');
+        joined.push(...sounds);
+        return;
+      }
+      joined.push(...wordSounds(parseUnits(part), opts, stressless));
+    });
+    out.push(joined.join(''));
+  }
+  return out.join(' ');
+}
+
+// ── word list ───────────────────────────────────────────────────────────────
+
+// `say` is how the word is commonly said, with the stressed syllable in capitals.
+const WORDS = [
+  { he: 'שָׁלוֹם', num: 'H7965', say: 'sha-LOM' },
+  { he: 'חֶסֶד', num: 'H2617', say: 'CHE-sed', note: 'segolate: stress on the first syllable' },
+  { he: 'רוּחַ', num: 'H7307', say: 'RU-ach', note: 'furtive patah: the a comes before the ch' },
+  { he: 'אֱלֹהִים', num: 'H430', say: 'e-lo-HIM' },
+  { he: 'אֲדֹנָי', num: 'H136', say: 'a-do-NAI' },
+  { he: 'יְהוָה', num: 'H3068', say: 'a-do-NAI', note: 'read as Adonai, as its vowels direct' },
+  { he: 'בְּרֵאשִׁית', num: 'Gen 1:1', say: 'be-re-SHIT', note: 'silent aleph' },
+  { he: 'יִשְׂרָאֵל', num: 'H3478', say: 'yis-ra-EL' },
+  { he: 'עוֹלָם', num: 'H5769', say: 'o-LAM', note: 'starts with ayin' },
+  { he: 'עֵדֶן', num: 'H5731', say: 'E-den' },
+  { he: 'צְדָקָה', num: 'H6666', say: 'tse-da-KAH' },
+  { he: 'תּוֹרָה', num: 'H8451', say: 'to-RAH' },
+  { he: 'אֱמוּנָה', num: 'H530', say: 'e-mu-NAH' },
+  { he: 'כָּבוֹד', num: 'H3519', say: 'ka-VOD' },
+  { he: 'מֶלֶךְ', num: 'H4428', say: 'ME-lech' },
+  { he: 'חׇכְמָה', num: 'H2451', say: 'choch-MAH', note: 'qamats qatan: the first vowel is o' },
+  { he: 'מָשִׁיחַ', num: 'H4899', say: 'ma-SHI-ach' },
+  { he: 'בְּרִית', num: 'H1285', say: 'be-RIT' },
+  { he: 'נֶפֶשׁ', num: 'H5315', say: 'NE-fesh' },
+  { he: 'הַלְלוּ־יָהּ', num: 'Ps 150:1', say: 'ha-le-lu-YAH', note: 'maqaf pair, one stress' },
+  { he: 'אָמֵן', num: 'H543', say: 'a-MEN' },
+  { he: 'קָדוֹשׁ', num: 'H6918', say: 'ka-DOSH' },
+  { he: 'יְשׁוּעָה', num: 'H3444', say: 'ye-shu-AH' },
+  { he: 'חֵפֶץ', num: 'H2656', say: 'CHE-fets' },
+  { he: 'שַׁבָּת', num: 'H7676', say: 'sha-BAT' },
+  { he: 'שָׁמַיִם', num: 'H8064', say: 'sha-MA-yim', note: '-ayim: stress before the end' },
+];
+
+function soundOpts() {
+  return { shva: $('shva').value };
+}
+
+function playButtons(host, getIpa, sentEl) {
+  host.innerHTML = '';
+  for (const v of VOICES) {
+    const b = document.createElement('button');
+    b.textContent = '▶ ' + v.short;
+    b.addEventListener('click', () => speak(getIpa(), v, b, sentEl));
+    host.appendChild(b);
+  }
+}
+
+function renderWords() {
+  const host = $('words');
+  host.innerHTML = '';
+  for (const w of WORDS) {
+    const row = document.createElement('div');
+    row.className = 'word';
+    row.innerHTML =
+      '<div class="he" dir="rtl"></div>' +
+      '<div class="info">' +
+      '<div class="say"><span class="lbl"></span><span class="num"></span><span class="note"></span></div>' +
+      '<div class="ctl"><input type="text" class="ipa" spellcheck="false"><span class="btns row" style="gap: 6px;"></span></div>' +
+      '<div class="sent"></div>' +
+      '</div>';
+    row.querySelector('.he').textContent = w.he;
+    row.querySelector('.lbl').textContent = w.say;
+    row.querySelector('.num').textContent = w.num;
+    row.querySelector('.note').textContent = w.note || '';
+    const input = row.querySelector('input.ipa');
+    w.input = input;
+    input.value = hebrewToSounds(w.he, soundOpts());
+    playButtons(row.querySelector('.btns'), () => input.value, row.querySelector('.sent'));
+    host.appendChild(row);
+  }
+}
+
+function refreshSounds() {
+  for (const w of WORDS) if (w.input) w.input.value = hebrewToSounds(w.he, soundOpts());
+  $('freeIpa').value = hebrewToSounds($('freeHe').value, soundOpts());
+}
+
+// ── start ───────────────────────────────────────────────────────────────────
+
+function showSpeed() {
+  $('speedVal').textContent = parseFloat($('speed').value).toFixed(2) + '×';
+}
+
+renderVoices();
+renderWords();
+playButtons($('freeBtns'), () => $('freeIpa').value, $('freeSent'));
+$('freeIpa').value = hebrewToSounds($('freeHe').value, soundOpts());
+$('freeHe').addEventListener('input', () => {
+  $('freeIpa').value = hebrewToSounds($('freeHe').value, soundOpts());
+});
+$('shva').addEventListener('change', refreshSounds);
+$('speed').addEventListener('input', showSpeed);
+showSpeed();
+for (const v of VOICES) checkInstalled(v);
+</script>
+</body>
+</html>
