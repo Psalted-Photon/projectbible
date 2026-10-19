@@ -117,7 +117,7 @@
   import { applyChapterHighlights } from "../lib/highlightRenderer";
   import { isTextEntry } from "../lib/isTextEntry";
   import { openStrongsWord } from "../lib/openWork";
-  import { glossFor } from "../lib/strongs/entry";
+  import { displayId, glossFor } from "../lib/strongs/entry";
   import { cleanOffsetOf, originalAt } from "../lib/wordLinks";
   import { companionChapterLines, verseAtEnglishRef } from "../lib/companion";
   import { isOriginalLanguage, isHebrewText as isHebrewTranslation, isEnglishTranslation } from "../lib/translationKind";
@@ -1854,9 +1854,23 @@
   /** Voice id the user needs to download before a tap-to-speak will work. */
   let showTtsVoiceNeeded: string | null = null;
 
-  // Morphology cache state
-  let morphologyCache = new Map<number, DBMorphology[]>();
+  // Morphology cache state: word data for every chapter loaded into the
+  // reader (opened and scrolled into), filed by translation + book + chapter
+  // so a tap reads its own chapter's words, then by verse number.
+  let morphologyCache = new Map<string, Map<number, DBMorphology[]>>();
   let isIndexedPack = false;
+
+  function morphChapterKey(translation: string, book: string, chapter: number): string {
+    return `${translation.toLowerCase()}|${book}|${chapter}`;
+  }
+
+  /** Word data for the verse `el` sits in, from that verse's own chapter. */
+  function morphologyForVerse(el: Element, verse: number): DBMorphology[] | undefined {
+    const section = el.closest("[data-chapter-section]") as HTMLElement | null;
+    const book = section?.dataset.book || currentBook;
+    const chapter = Number(section?.dataset.chapter) || currentChapter;
+    return morphologyCache.get(morphChapterKey(currentTranslation, book, chapter))?.get(verse);
+  }
 
   // Interlinear (Greek/Hebrew) display state — toggled from the NavigationBar;
   // this component just reads the prefs to drive rendering.
@@ -2558,7 +2572,7 @@
         `<span class="il-translit">${escapeInterlinearText(translit)}</span>` +
         `<span class="il-lemma">${escapeInterlinearText(lemma)}</span>` +
         `<span class="il-parse" title="${escapeAttribute(rawParse)}">${escapeInterlinearText(parseText)}</span>` +
-        `<span class="il-strongs">${escapeInterlinearText(strongs)}</span>` +
+        `<span class="il-strongs">${escapeInterlinearText(displayId(strongs))}</span>` +
         `</span>`;
     });
     return html;
@@ -2596,8 +2610,9 @@
     }
   }
 
-  // Query the morphology store for one chapter without disturbing the global
-  // morphologyCache. Used to bake interlinear HTML for appended chapters.
+  // Query the morphology store for one chapter and file it in morphologyCache
+  // under that chapter, so taps in it find its words. Used for the opened
+  // chapter and for chapters appended by scrolling either way.
   async function fetchChapterMorphology(
     translation: string,
     book: string,
@@ -2634,6 +2649,7 @@
         if (!map.has(m.verse)) map.set(m.verse, []);
         map.get(m.verse)!.push(m);
       });
+      morphologyCache.set(morphChapterKey(translation, book, chapter), map);
     } catch (err) {
       console.warn("fetchChapterMorphology failed:", err);
     }
@@ -2653,16 +2669,17 @@
     const ds = ilWord.dataset;
 
     let morph: DBMorphology | null =
-      morphologyCache
-        .get(verseNumInt)
+      morphologyForVerse(ilWord, verseNumInt)
         ?.find((m) => (m.word_index ?? m.wordPosition) === idx) ?? null;
 
     if (!morph) {
-      // Appended chapters aren't in the global cache — reconstruct from dataset.
+      // Chapter's word data not cached (yet) — rebuild the word from the
+      // span's own data, which was baked from the right chapter.
+      const section = ilWord.closest("[data-chapter-section]") as HTMLElement | null;
       morph = {
         word_index: isNaN(idx) ? 0 : idx,
-        book: "",
-        chapter: 0,
+        book: section?.dataset.book || currentBook,
+        chapter: Number(section?.dataset.chapter) || currentChapter,
         verse: verseNumInt,
         text: ds.word || "",
         lemma: ds.lemma || "",
@@ -3033,7 +3050,7 @@
 
       // Load morphology cache if original language translation
       if (isOriginalLanguage(translation)) {
-        await loadMorphologyCache(translation, book, chapter);
+        const chapterMorph = await loadMorphologyCache(translation, book, chapter);
         const englishLines = await companionChapterLines(translation, book, chapter, processedVerses.map((v) => v.verse));
         if (ticket !== loadChapterTicket) return; // overtaken while loading morphology
         // Pre-build interlinear HTML so toggling the view is instant (no reload).
@@ -3042,7 +3059,7 @@
           ...c,
           verses: c.verses.map((v) => ({
             ...v,
-            interlinearHtml: buildInterlinearHtml(morphologyCache.get(v.verse)),
+            interlinearHtml: buildInterlinearHtml(chapterMorph.get(v.verse)),
             englishHtml: englishLines.get(v.verse),
           })),
         }));
@@ -3383,83 +3400,26 @@
     annotationPanelOpen = true;
   }
 
+  // Opening a chapter starts the reader over with just that chapter, so the
+  // word data of the chapters it replaces is dropped before this one is fetched.
   async function loadMorphologyCache(
     translation: string,
     book: string,
     chapter: number,
-  ) {
-    try {
-      morphologyCache.clear();
+  ): Promise<Map<number, DBMorphology[]>> {
+    morphologyCache.clear();
+    console.log(`🔤 Loading morphology for ${translation} ${book} ${chapter}...`);
 
-      console.log(
-        `🔤 Loading morphology for ${translation} ${book} ${chapter}...`,
-      );
+    const map = await fetchChapterMorphology(translation, book, chapter);
 
-      // Query morphology store for entire chapter
-      const { openDB } = await import("../adapters/db");
-      const db = await openDB();
+    // Detect if pack is indexed (schema version 2+): entries carry word_index
+    const firstEntry = map.values().next().value?.[0];
+    isIndexedPack = !!firstEntry && typeof firstEntry.word_index === "number";
 
-      const transaction = db.transaction("morphology", "readonly");
-      const store = transaction.objectStore("morphology");
-      const index = store.index("verse_ref");
-
-      // Normalize the display translation ID to match what ancient-languages.sqlite
-      // stores in its words table (always lowercase).
-      // e.g. 'BYZ' → 'byz', 'HEBREW-OSHB' → 'hebrew-oshb'
-      const MORPH_ID_ALIAS: Record<string, string> = {
-        SBLGNT: 'sblgnt',
-      };
-      const morphTranslation = MORPH_ID_ALIAS[translation] ?? translation.toLowerCase();
-
-      // Query for all verses in this chapter (verse 1-999)
-      const range = IDBKeyRange.bound(
-        [morphTranslation, book, chapter, 1],
-        [morphTranslation, book, chapter, 999],
-      );
-
-      const results: DBMorphology[] = await new Promise((resolve, reject) => {
-        const entries: DBMorphology[] = [];
-        const request = index.openCursor(range);
-
-        request.onsuccess = (e) => {
-          const cursor = (e.target as IDBRequest).result;
-          if (cursor) {
-            entries.push(cursor.value);
-            cursor.continue();
-          } else {
-            resolve(entries);
-          }
-        };
-        request.onerror = () => reject(request.error);
-      });
-
-      await fillMissingTransliterations(results);
-
-      // Organize by verse number
-      results.forEach((morphEntry) => {
-        const verseNum = morphEntry.verse;
-        if (!morphologyCache.has(verseNum)) {
-          morphologyCache.set(verseNum, []);
-        }
-        morphologyCache.get(verseNum)!.push(morphEntry);
-      });
-
-      // Detect if pack is indexed (schema version 2+)
-      // Check if first entry has word_index field
-      const firstEntry = results[0];
-      isIndexedPack = firstEntry && typeof firstEntry.word_index === "number";
-
-      console.log(
-        `   ✅ Loaded ${results.length} morphology entries, ${morphologyCache.size} verses cached`,
-      );
-      console.log(
-        `   📊 Pack type: ${isIndexedPack ? "Indexed (v2+)" : "Legacy (v1)"}`,
-      );
-    } catch (err) {
-      console.warn("Failed to load morphology cache:", err);
-      morphologyCache.clear();
-      isIndexedPack = false;
-    }
+    console.log(
+      `   ✅ Loaded morphology for ${map.size} verses (${isIndexedPack ? "Indexed (v2+)" : "Legacy (v1)"} pack)`,
+    );
+    return map;
   }
 
   async function verifyAndLoadChapter(
@@ -4760,7 +4720,7 @@
 
       // Look up morphology from cache
       const morph = findMorphologyForClick(
-        morphologyCache.get(verseNumInt),
+        morphologyForVerse(verseText, verseNumInt),
         clickInfo.index,
         clickInfo.text,
         isIndexedPack,
