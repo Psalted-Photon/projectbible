@@ -5277,7 +5277,20 @@
    */
   function selectionAnchor(fallbackX?: number, fallbackY?: number): ToastAnchor | null {
     const rects = selectionRange ? Array.from(selectionRange.getClientRects()) : [];
-    const solid = rects.filter((r) => r.width > 0 && r.height > 0);
+    let solid = rects.filter((r) => r.width > 0 && r.height > 0);
+
+    // A whole-verse selection runs on through a closing "[1]". The marker is
+    // raised, so on a one-line verse it is the topmost box and would pull the
+    // ring off the words and onto itself. Measure the words alone.
+    const marks = selectionMarkRects();
+    if (marks.length > 0) {
+      const words = solid.filter((r) => {
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        return !marks.some((m) => x >= m.left && x <= m.right && y >= m.top && y <= m.bottom);
+      });
+      if (words.length > 0) solid = words;
+    }
 
     if (solid.length > 0) {
       let first = solid[0];
@@ -5308,6 +5321,16 @@
       centerY: fallbackY,
       lineHeight: line,
     };
+  }
+
+  /** Boxes of the note markers ([1], [pl]) the current selection takes in. */
+  function selectionMarkRects(): DOMRect[] {
+    const range = selectionRange;
+    const root = range?.commonAncestorContainer;
+    if (!range || !(root instanceof Element)) return [];
+    return Array.from(root.querySelectorAll(".inline-note, .plural-marker"))
+      .filter((el) => range.intersectsNode(el))
+      .flatMap((el) => Array.from(el.getClientRects()));
   }
 
   /**
