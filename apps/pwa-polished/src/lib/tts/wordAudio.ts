@@ -35,6 +35,14 @@ const CARRIER_MID = ': προκεχειροτονημένοις: ναί: κατ�
 const SILENCE = 0.002;
 /** Shorter than this is not a pause worth cutting at. */
 const MIN_GAP_SECONDS = 0.06;
+/**
+ * A gap counts as a pause only if it runs at least this share of the clip's
+ * longest gap. The carrier's pauses are all about the same length, while the
+ * closure of a stop inside a word is far shorter — yet can still clear
+ * MIN_GAP_SECONDS. ῥυπόω's π did: the cut landed at "rip", the copies never
+ * agreed, and the rare render where they happened to played as "ip".
+ */
+const PAUSE_SHARE = 0.5;
 const FRAME_SECONDS = 0.005;
 
 /** The two copies must land within this of each other, or the render is rejected. */
@@ -115,7 +123,9 @@ export function measureCopies(
   samples: Float32Array,
   sampleRate: number
 ): { first: number; last: number; cutAt: number; gapEnd: number } | null {
-  const { end, gaps } = findEdges(samples, sampleRate);
+  const { end, gaps: allGaps } = findEdges(samples, sampleRate);
+  const longest = Math.max(0, ...allGaps.map((g) => g.to - g.from));
+  const gaps = allGaps.filter((g) => g.to - g.from >= PAUSE_SHARE * longest);
   if (gaps.length < 2) return null;
   const opening = gaps[0];
   const closing = gaps[gaps.length - 1];
