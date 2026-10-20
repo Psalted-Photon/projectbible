@@ -600,6 +600,55 @@ function formatEnding({ paras, report }: Ctx): void {
   report?.("literature", clip(head, 0, head.text.length, 80) + ` (+${last - lit - 1} paragraphs)`);
 }
 
+// --- Reading a formatted article --------------------------------------------
+
+const CLASSED_P_RE = /<p\b([^>]*)>([\s\S]*?)<\/p>/g;
+
+function classesOf(attrs: string): string[] {
+  return /\bclass="([^"]*)"/.exec(attrs)?.[1].split(/\s+/) ?? [];
+}
+
+/**
+ * The opening of a formatted article, for the Overview: its first paragraph,
+ * and when that is only pronunciation and word origins (GRACE's "gras:"), the
+ * first real paragraph after it as well.
+ */
+export function articleOpening(html: string): string {
+  const paras = [...html.matchAll(CLASSED_P_RE)].filter((m) => paraText(m[2]));
+  if (!paras.length) return "";
+  const first = paras[0];
+  if (!classesOf(first[1]).includes("isbe-bare")) return first[0];
+  // Real prose, not a line of the contents block a long article opens with
+  // ("Importance of the Distinction"): a sentence of some length. A long one
+  // counts however it ends; GRACE's trails off without a stop in the source.
+  const next = paras.slice(1).find((m) => {
+    const cls = classesOf(m[1]);
+    if (["isbe-h1", "isbe-h2", "isbe-by", "isbe-lit-h"].some((c) => cls.includes(c))) return false;
+    const text = paraText(m[2]);
+    return text.length >= 150 || (text.length >= 60 && /[.!?"')]$/.test(text));
+  });
+  return next ? first[0] + next[0] : first[0];
+}
+
+/**
+ * The headings of a formatted article in order, as the formatter marked them.
+ * `index` counts every heading, so it finds the nth p.isbe-h1/p.isbe-h2 on
+ * the page.
+ */
+export function articleHeadings(html: string): { level: 1 | 2; title: string; index: number }[] {
+  const out: { level: 1 | 2; title: string; index: number }[] = [];
+  for (const m of html.matchAll(CLASSED_P_RE)) {
+    const cls = classesOf(m[1]);
+    const level = cls.includes("isbe-h1") ? 1 : cls.includes("isbe-h2") ? 2 : null;
+    if (!level) continue;
+    // The same title the fold-out sections show: no trailing colon or stop.
+    const text = paraText(m[2]).replace(/^\|+\s*/, "");
+    const title = headingOf(text)?.title ?? text.replace(/[\s:.]+$/, "");
+    out.push({ level, title, index: out.length });
+  }
+  return out;
+}
+
 // --- Entry point ----------------------------------------------------------
 
 function plainText(html: string): string {

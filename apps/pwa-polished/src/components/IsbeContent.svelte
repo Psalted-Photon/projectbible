@@ -40,7 +40,9 @@
   import { isbeSource } from "../lib/library/source";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import { sanitizePackHtml } from "../lib/sanitizePackHtml";
-  import { formatArticle, P_RE, paraText, headingOf, normTitle } from "../lib/isbeFormat";
+  import {
+    formatArticle, articleOpening, articleHeadings, P_RE, paraText, headingOf, normTitle,
+  } from "../lib/isbeFormat";
   import { reveal } from "../lib/motion";
   import CloseX from "./CloseX.svelte";
 
@@ -470,6 +472,9 @@
   }
 
   $: hasArticle = !!entry && !!entry.bodyHtml;
+  // An article with no headings at all (most short ones, like ABBA) is shown
+  // whole in Overview, so it has no Article tab to go to.
+  $: hasArticleTab = hasArticle && articleHeadings(articleHtml).length > 0;
   $: hasMap = !!place && place.latitude != null && place.longitude != null;
   $: hasVerses = verses.length > 0;
 
@@ -567,6 +572,10 @@
   }
 
   async function selectTab(t: Tab) {
+    // A remembered or pinned view can still ask for the Article tab of an
+    // article that no longer has one. Worked out from articleHtml directly:
+    // on a fresh load this runs before the reactive hasArticleTab catches up.
+    if (t === "article" && !articleHeadings(articleHtml).length) t = "overview";
     activeTab = t;
     await tick();
     // Each tab is its own view, so it starts at the top. Carrying the last
@@ -820,8 +829,9 @@
         navigateToVerse(book, parseInt(ch, 10), parseInt(vs, 10) || 1);
         return;
       }
-      // Article scripture links get the same round trip as the verse list.
-      const here = crumb("article");
+      // Article scripture links get the same round trip as the verse list,
+      // back to whichever tab the link was on.
+      const here = crumb(activeTab);
       const depth = navigateToVerse(book, parseInt(ch, 10), parseInt(vs, 10) || 1);
       if (depth != null) isbeReturnStore.set({ ...here, depth });
       return;
@@ -844,7 +854,7 @@
 
   // Opening a section brings fresh link elements onto the page, which need the
   // marks applied again — they only live in the DOM.
-  $: if (activeTab === "article") {
+  $: if (activeTab === "article" || activeTab === "overview") {
     void expanded;
     void articleHtml;
     tick().then(applyVisitedMarks);
@@ -1071,6 +1081,33 @@
   // scripture links still need tinting.
   $: flatHtml = articleHtml ? colorScriptureLinks(articleHtml) : "";
 
+  // --- Overview ----------------------------------------------------------
+  // The formatted opening, links and all, and the article's top-level
+  // headings as a way in.
+  $: overviewHtml = articleHtml ? colorScriptureLinks(articleOpening(articleHtml)) : "";
+  $: contents = contentsOf(article, articleHtml);
+
+  /** Top level only: the Roman sections where there are any. */
+  function contentsOf(tree: ArticleTree | null, html: string): { title: string; index: number }[] {
+    if (tree) return tree.sections.map((s, index) => ({ title: s.title, index }));
+    const heads = articleHeadings(html);
+    const top = heads.some((h) => h.level === 1) ? heads.filter((h) => h.level === 1) : heads;
+    return top.map(({ title, index }) => ({ title, index }));
+  }
+
+  /** "In this article": open that section (or find that heading) in Article. */
+  async function openContentsItem(index: number) {
+    if (article) expanded = { ...expanded, [`${index}`]: true };
+    await selectTab("article");
+    await tick();
+    const target = article
+      ? articleEl?.querySelectorAll<HTMLElement>(":scope > .sec")[index]
+      : articleEl?.querySelectorAll<HTMLElement>("p.isbe-h1, p.isbe-h2")[index];
+    if (target && bodyEl) {
+      bodyEl.scrollTop += target.getBoundingClientRect().top - bodyEl.getBoundingClientRect().top - 8;
+    }
+  }
+
   // Which sections are open, keyed "0" for a top section and "0.2" for a child.
   let expanded: Record<string, boolean> = {};
   function toggleSection(key: string) {
@@ -1195,7 +1232,7 @@
 
     <div class="tabs">
     <button class:active={activeTab === "overview"} on:click={() => selectTab("overview")}>Overview</button>
-    {#if hasArticle}
+    {#if hasArticleTab}
       <button class:active={activeTab === "article"} on:click={() => selectTab("article")}>Article</button>
     {/if}
     {#if hasVerses}
@@ -1216,13 +1253,26 @@
         {#if hasMap}<div><span class="k">Coordinates</span><span>{place?.latitude?.toFixed(4)}, {place?.longitude?.toFixed(4)}</span></div>{/if}
         {#if hasVerses}<div><span class="k">Appears in</span><span>{verses.length} verse{verses.length === 1 ? "" : "s"}</span></div>{/if}
       </div>
-      {#if entry?.lead}
-        <p class="lead">{entry.lead}</p>
-      {/if}
-      {#if hasArticle}
+      {#if hasArticleTab}
+        <div class="article overview-text" bind:this={articleEl} on:click={onArticleClick} role="presentation">
+          {@html overviewHtml}
+        </div>
+        {#if contents.length}
+          <nav class="contents" aria-label="In this article">
+            <div class="contents-label">In this article</div>
+            {#each contents as c}
+              <button on:click={() => openContentsItem(c.index)}>{c.title}</button>
+            {/each}
+          </nav>
+        {/if}
         <button class="link-btn" on:click={() => selectTab("article")}>
           Read the full article{entry ? ` (${(entry.charCount / 1000).toFixed(0)}k chars)` : ""} <ArrowRight size="1em" weight="bold" class="ph-inline" />
         </button>
+      {:else if hasArticle}
+        <!-- No headings to find your way by: the whole article is the overview. -->
+        <div class="article overview-text" bind:this={articleEl} on:click={onArticleClick} role="presentation">
+          {@html flatHtml}
+        </div>
       {:else if !place}
         <p class="muted">No encyclopedia article for this entry.</p>
       {/if}
@@ -1486,9 +1536,38 @@
     color: var(--text-muted, #999);
     min-width: 96px;
   }
-  .lead {
-    line-height: 1.55;
+  .overview-text {
+    margin-bottom: 14px;
+  }
+  .contents {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     margin: 0 0 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color, #333);
+  }
+  .contents-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted, #999);
+    margin-bottom: 4px;
+  }
+  .contents button {
+    background: none;
+    border: none;
+    color: var(--color-primary, #4a90e2);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14.5px;
+    line-height: 1.35;
+    text-align: left;
+    padding: 5px 0;
+  }
+  .contents button:hover {
+    text-decoration: underline;
   }
   .link-btn {
     background: none;
