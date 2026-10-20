@@ -28,6 +28,8 @@
   import { fixedOrigin } from "../lib/fixedOrigin";
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import VerseRefRow from "./VerseRefRow.svelte";
+  import RepeatVersesPanel from "./RepeatVersesPanel.svelte";
+  import type { RepeatVersesScope } from "../lib/repeatVerses";
   import { readQueryAsRef } from "../lib/bibleRefs";
   import { booksInTranslation } from "../lib/translationBooks";
   import { defaultTranslationFor, translationForJump, testamentOf } from "../lib/testamentDefaults";
@@ -238,7 +240,9 @@
 
   // Repeat pills dropdown state
   let repeatDropdownWord: string | null = null; // which pill's dropdown is open
-  let repeatDropdownView: 'main' | 'scope' = 'main';
+  let repeatDropdownView: 'main' | 'scope' | 'versesScope' = 'main';
+  /** The "Show verses" list, hung under the pill it was opened from. */
+  let repeatVerses: { word: string; scope: RepeatVersesScope; anchor: HTMLElement | null } | null = null;
   let repeatDropdownPositioned = false;
   let repeatPillButtonRef: HTMLElement | null = null;
 
@@ -730,7 +734,8 @@
       !target.closest(".pill-search-area") &&
       !target.closest(".search-results-dropdown") &&
       !target.closest(".nav-repeat-pills") &&
-      !target.closest(".repeat-dropdown")
+      !target.closest(".repeat-dropdown") &&
+      !target.closest(".repeat-verses-panel")
     ) {
       translationDropdownOpen = false;
       referenceDropdownOpen = false;
@@ -741,6 +746,7 @@
       refsPackOpen = false;
       refsPackPositioned = false;
       closeRepeatDropdown();
+      repeatVerses = null;
       showResults = false;
     }
   }
@@ -756,6 +762,7 @@
 
   async function toggleRepeatPill(event: MouseEvent, word: string) {
     event.stopPropagation();
+    repeatVerses = null;
     if (repeatDropdownWord === word) {
       closeRepeatDropdown();
       return;
@@ -806,6 +813,21 @@
     }
     closeRepeatDropdown();
   }
+
+  function showRepeatVerses(scope: RepeatVersesScope) {
+    const word = repeatDropdownWord;
+    const anchor = repeatPillButtonRef;
+    closeRepeatDropdown();
+    if (word) repeatVerses = { word, scope, anchor };
+  }
+
+  function openRepeatVerse(book: string, chapter: number, verse: number) {
+    repeatVerses = null;
+    navigateToResult(book, chapter, verse);
+  }
+
+  // A word taken off the bar takes its list with it.
+  $: if (repeatVerses && !$repeatsStore.some((g) => g.word === repeatVerses?.word)) repeatVerses = null;
 
   function handleSearchInput(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -3041,9 +3063,20 @@
             <span>Highlight all</span>
             <CaretRight size={11} weight="bold" />
           </button>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => { repeatDropdownView = 'versesScope'; positionRepeatDropdown(); }}>
+            <span>Show verses</span>
+            <CaretRight size={11} weight="bold" />
+          </button>
           <button class="repeat-menu-item" on:click|stopPropagation={() => deselectRepeat(grp.word)}>
             Deselect all
           </button>
+        {:else if repeatDropdownView === 'versesScope'}
+          <button class="repeat-menu-item repeat-menu-back" on:click|stopPropagation={() => { repeatDropdownView = 'main'; positionRepeatDropdown(); }}>
+            <CaretRight size={11} weight="bold" style="transform: rotate(180deg);" />
+            <span>Show verses in…</span>
+          </button>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => showRepeatVerses('book')}>Current book</button>
+          <button class="repeat-menu-item" on:click|stopPropagation={() => showRepeatVerses('all')}>Every book</button>
         {:else}
           <button class="repeat-menu-item repeat-menu-back" on:click|stopPropagation={() => { repeatDropdownView = 'main'; positionRepeatDropdown(); }}>
             <CaretRight size={11} weight="bold" style="transform: rotate(180deg);" />
@@ -3053,6 +3086,25 @@
           <button class="repeat-menu-item" on:click|stopPropagation={() => selectRepeatScope('book')}>Current book</button>
         {/if}
       </div>
+    {/if}
+  {/if}
+
+  {#if repeatVerses}
+    {@const rv = repeatVerses}
+    {@const rvGroup = $repeatsStore.find((g) => g.word === rv.word)}
+    {#if rvGroup}
+      <RepeatVersesPanel
+        word={rvGroup.word}
+        label={rvGroup.label}
+        colorIndex={rvGroup.colorIndex}
+        translation={currentTranslation}
+        book={currentBook}
+        chapter={currentChapter}
+        scope={rv.scope}
+        anchor={rv.anchor}
+        onClose={() => (repeatVerses = null)}
+        onOpen={openRepeatVerse}
+      />
     {/if}
   {/if}
 
