@@ -57,6 +57,10 @@
   /** The reference is in English numbering, as every list's data is; a reference
    *  typed into the search bar is in the reader's own. */
   export let englishRef = true;
+  /** Words to mark in the preview, each match as group 1 (renderVersePreviewHtml). */
+  export let highlight: RegExp | null = null;
+  /** The mark's background; the search results' orange when not given. */
+  export let markColor: string | null = null;
 
   $: color = getBookColor(book);
   $: translation = $navigationStore.translation;
@@ -72,10 +76,15 @@
   }
 </script>
 
-<button class="ref-row" style="border-left-color:{color}" on:click={onOpen}>
+<button
+  class="ref-row"
+  class:own-mark={!!markColor}
+  style="border-left-color:{color};{markColor ? ` --ref-mark-bg:${markColor};` : ''}"
+  on:click={onOpen}
+>
   <span class="ref-row-label" style="color:{color}">{label ?? `${book} ${chapter}:${verse}`}</span>
   {#if text}
-    <span class="ref-row-text" dir="auto">{@html renderVersePreviewHtml(text, { maxLength: 150 })}</span>
+    <span class="ref-row-text" dir="auto">{@html renderVersePreviewHtml(text, { highlight, maxLength: 150 })}</span>
   {/if}
   <CompanionLine shown={translation} {book} {chapter} {verse} {englishRef} maxLength={150} />
 </button>
@@ -119,5 +128,16 @@
     font-size: 12.5px;
     line-height: 1.4;
     margin-top: 2px;
+  }
+  /* Same mark as search results unless the list brings its own color. */
+  .ref-row-text :global(mark) {
+    background: rgba(249, 115, 22, 0.35);
+    color: #fdba74;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+  .own-mark .ref-row-text :global(mark) {
+    background: var(--ref-mark-bg);
+    color: inherit;
   }
 </style>
