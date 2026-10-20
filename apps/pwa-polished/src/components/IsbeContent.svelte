@@ -40,6 +40,7 @@
   import { isbeSource } from "../lib/library/source";
   import { libraryPrefsStore } from "../stores/libraryPrefsStore";
   import { sanitizePackHtml } from "../lib/sanitizePackHtml";
+  import { formatArticle, P_RE, paraText, headingOf, normTitle } from "../lib/isbeFormat";
   import { reveal } from "../lib/motion";
   import CloseX from "./CloseX.svelte";
 
@@ -204,7 +205,11 @@
     if (place) placeNames = await getIsbePlaceNames(place.placeId);
     // Cross-reference linkification hits the name index, so it has to finish
     // before the article renders — otherwise the links would pop in late.
-    articleHtml = entry?.bodyHtml ? sanitizePackHtml(await linkifyCrossRefs(entry.bodyHtml)) : "";
+    // Formatting only wraps text, so it runs on the linked HTML and the
+    // sanitizer still has the last word.
+    articleHtml = entry?.bodyHtml
+      ? sanitizePackHtml(formatArticle(await linkifyCrossRefs(entry.bodyHtml)))
+      : "";
     loading = false;
 
     if (jumpTab) {
@@ -876,38 +881,6 @@
   // text in place rather than scrolling somewhere else.
   type Section = { title: string; html: string; children: Section[] };
   type ArticleTree = { preamble: string; sections: Section[] };
-
-  const P_RE = /<p\b[^>]*>([\s\S]*?)<\/p>/g;
-  // Same heading shape buildOutline uses in scripts/build-isbe-pack.mjs, minus
-  // its 120-item cap (which left Jerusalem's last three sections unreachable).
-  const HEAD_RE = /^((?:[IVXLC]+|\d+)\.)\s+(.{1,70}?)(?:[.:]|$)/;
-
-  function paraText(inner: string): string {
-    return inner
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&apos;/g, "'")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  function headingOf(text: string): { level: 1 | 2; title: string } | null {
-    // Headings occupy a paragraph of their own, so anything long is prose that
-    // merely happens to open with a number.
-    if (text.length > 100) return null;
-    const m = text.match(HEAD_RE);
-    if (!m || !/[A-Za-z]/.test(m[2]) || m[2] !== m[2].replace(/\s{2,}/g, " ")) return null;
-    return { level: /^\d/.test(m[1]) ? 2 : 1, title: `${m[1]} ${m[2].trim()}` };
-  }
-
-  // Titles differ in case and trailing punctuation between the contents block
-  // ("I. THE NAME") and the body ("I. The Name."), so compare them loosely.
-  function normTitle(t: string): string {
-    return t.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
-  }
 
   // Tint each scripture link with the color of the book it points at, the same
   // way the Verses tab colors its chips. Done as an inline style because the
