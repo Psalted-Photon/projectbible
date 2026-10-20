@@ -879,7 +879,7 @@
   // into a two-level tree so the article can render collapsed: the contents
   // list and the article become the same thing, and each heading opens its own
   // text in place rather than scrolling somewhere else.
-  type Section = { title: string; html: string; children: Section[] };
+  type Section = { title: string; level: 1 | 2; html: string; children: Section[] };
   type ArticleTree = { preamble: string; sections: Section[] };
 
   // Tint each scripture link with the color of the book it points at, the same
@@ -1045,12 +1045,12 @@
 
     for (const p of kept) {
       if (p.head?.level === 1) {
-        cur1 = { title: p.head.title, html: "", children: [] };
+        cur1 = { title: p.head.title, level: 1, html: "", children: [] };
         cur2 = null;
         sections.push(cur1);
         headings++;
       } else if (p.head?.level === 2) {
-        cur2 = { title: p.head.title, html: "", children: [] };
+        cur2 = { title: p.head.title, level: 2, html: "", children: [] };
         // Articles with no roman level at all (most of them) flatten to a
         // single-level accordion.
         (cur1 ? cur1.children : sections).push(cur2);
@@ -1239,6 +1239,7 @@
             <div class="sec">
               <button
                 class="sec-head"
+                class:h1={s.level === 1}
                 class:open={expanded[`${i}`]}
                 on:click={() => toggleSection(`${i}`)}
               >
@@ -1521,12 +1522,17 @@
     border-bottom: 1px solid var(--border-color, #333);
     color: var(--text-color, #fff);
     font-family: inherit;
-    font-size: 16px;
+    font-size: 15.5px;
     font-weight: 600;
     line-height: 1.35;
     text-align: left;
     padding: 10px 0 8px;
     cursor: pointer;
+  }
+  /* Roman sections (I., II.) step up a size from numbered ones (1., 2.). */
+  .sec-head.h1 {
+    font-size: 17px;
+    font-variant: small-caps;
   }
   .sec-head:hover {
     color: var(--color-primary, #4a90e2);
@@ -1540,8 +1546,8 @@
     transform: rotate(90deg);
   }
   .sec-head.sub {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 15.5px;
+    font-weight: 600;
     color: var(--text-secondary, #ccc);
     border-bottom: none;
     padding: 6px 0;
@@ -1611,6 +1617,36 @@
   }
   .article :global(.isbe-line + .isbe-line) {
     margin-top: 4px;
+  }
+  /* Headings in an article short enough to skip the fold-out sections, on
+     the same size steps as the section buttons. The source underlines some;
+     the heading style marks them already. */
+  .article :global(p.isbe-h1) {
+    font-size: 17px;
+    font-weight: 600;
+    font-variant: small-caps;
+    line-height: 1.35;
+    margin: 18px 0 8px;
+  }
+  .article :global(p.isbe-h2) {
+    font-size: 15.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 16px 0 6px;
+  }
+  .article :global(p.isbe-h1 u),
+  .article :global(p.isbe-h2 u) {
+    text-decoration: none;
+  }
+  /* "(1) Physical:" lead-ins, and the "(a)" ones under them. */
+  .article :global(.isbe-n) {
+    font-weight: 600;
+  }
+  .article :global(.isbe-l) {
+    font-style: italic;
+  }
+  .article :global(p.isbe-ind) {
+    padding-left: 18px;
   }
   /* The transliterated root a line of the panel is about. */
   .article :global(.isbe-tw) {

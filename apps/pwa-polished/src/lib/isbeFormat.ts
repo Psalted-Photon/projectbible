@@ -38,6 +38,12 @@ export function headingOf(text: string): { level: 1 | 2; title: string } | null 
   if (text.length > 100) return null;
   const m = text.match(HEAD_RE);
   if (!m || !/[A-Za-z]/.test(m[2]) || m[2] !== m[2].replace(/\s{2,}/g, " ")) return null;
+  // A byline is not a section: "C. H. Thomson" and "I. M. Price" open with
+  // what look like roman numerals. No article runs to section C or L, and a
+  // title is never a lone initial.
+  if (/^[IVXLC]/.test(m[1]) && (!/^X{0,3}(?:IX|IV|V?I{0,3})\.$/.test(m[1]) || /^[A-Z]$/.test(m[2]))) {
+    return null;
+  }
   return { level: /^\d/.test(m[1]) ? 2 : 1, title: `${m[1]} ${m[2].trim()}` };
 }
 
@@ -227,6 +233,7 @@ type Ctx = { paras: Para[]; report?: FormatReport };
 
 function applyRules(ctx: Ctx): void {
   formatOpening(ctx);
+  formatStructure(ctx);
 }
 
 /** The text of [start, end), shortened for a report line. */
@@ -403,6 +410,61 @@ function markRootWord(p: Para, start: number, end: number, report?: FormatReport
   if (!/^(?:, etc\.)?[,:] "/.test(rest) && !/[`']/.test(text)) return;
   const s = start + lead;
   if (mark(p, s, s + text.length, "isbe-tw")) report?.("root word", text);
+}
+
+// --- Headings and lead-ins -----------------------------------------------
+
+/**
+ * The paragraph's heading level, if it is a heading. Besides the "I." and
+ * "1." shapes, a short paragraph underlined whole in the source ("Regard for
+ * Old Age:", "B. IN WORSHIP") is a heading too.
+ */
+export function paraHeading(inner: string): 1 | 2 | null {
+  const text = paraText(inner).replace(/^\|+\s*/, "");
+  const head = headingOf(text);
+  if (head) return head.level;
+  if (/^\s*<u>[\s\S]*<\/u>[\s:.]*$/.test(inner) && text.length <= 100 && !/^LITERATURE\b/i.test(text)) {
+    return /^[IVXLC]+\.|^[A-Z]\.\s/.test(text) ? 1 : 2;
+  }
+  return null;
+}
+
+// "(1) Physical:" — a label is short, capitalized, and ends on a colon with a
+// space after it ("(6) In Eze 27:24" is a reference, not a label). One ending
+// on a stop counts only when it is the whole paragraph: "(1) The Commission."
+const LABEL_RE = /^\s+[A-Z][^.:;()"]{0,50}?(?::(?=\s|$)|\.\s*$)/;
+
+function formatStructure({ paras, report }: Ctx): void {
+  let numberedAbove = false;
+  for (const p of paras) {
+    const level = paraHeading(p.inner);
+    if (level) {
+      p.classes.push(level === 1 ? "isbe-h1" : "isbe-h2");
+      report?.(level === 1 ? "heading I." : "heading 1.", clip(p, 0, p.text.length, 80));
+      numberedAbove = false;
+      continue;
+    }
+    const at = p.text.search(/\S/);
+    if (at < 0) continue;
+    const lead = /^\((\d+|[a-z])\)/.exec(p.text.slice(at));
+    if (!lead) continue;
+    const label = LABEL_RE.exec(p.text.slice(at + lead[0].length));
+    const end = at + lead[0].length + (label ? label[0].length : 0);
+    if (/\d/.test(lead[1])) {
+      // A (1) paragraph is never indented: in BETHEL the "1." headings sit
+      // under it.
+      numberedAbove = true;
+      if (mark(p, at, end, "isbe-n")) report?.(label ? "(1) with label" : "(1) bare", clip(p, at, end + 40));
+    } else {
+      if (mark(p, at, end, "isbe-l")) report?.(label ? "(a) with label" : "(a) bare", clip(p, at, end + 40));
+      // Indented under a (1) above it in the same section; an orphan (a),
+      // like GRACE's, stays at the margin.
+      if (numberedAbove) {
+        p.classes.push("isbe-ind");
+        report?.("(a) indented", clip(p, at, at + 60));
+      }
+    }
+  }
 }
 
 // --- Entry point ----------------------------------------------------------
