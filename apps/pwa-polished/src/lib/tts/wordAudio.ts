@@ -21,7 +21,11 @@ import { hebrewWordSounds } from './hebrewSounds.js';
  * A colon is the longest pause espeak offers (~0.37s); it cannot be told to
  * wait longer, and stacking punctuation does nothing (`,,,` is one token).
  */
-const CARRIER_MID = ': προκεχειροτονημένοις: ναί: καταδυναστευομένους: ';
+const FILLER_WORDS = ['προκεχειροτονημένοις', 'ναί', 'καταδυναστευομένους'];
+const CARRIER_MID = `: ${FILLER_WORDS.join(': ')}: `;
+
+/** The carrier's filler said on its own, to learn how long it takes to say. */
+export const FILLER_TEXT = `${FILLER_WORDS.join(': ')}.`;
 
 /**
  * True silence, not "quiet".
@@ -35,15 +39,11 @@ const CARRIER_MID = ': προκεχειροτονημένοις: ναί: κατ�
 const SILENCE = 0.002;
 /** Shorter than this is not a pause worth cutting at. */
 const MIN_GAP_SECONDS = 0.06;
-/**
- * A gap counts as a pause only if it runs at least this share of the clip's
- * longest gap. The carrier's pauses are all about the same length, while the
- * closure of a stop inside a word is far shorter — yet can still clear
- * MIN_GAP_SECONDS. ῥυπόω's π did: the cut landed at "rip", the copies never
- * agreed, and the rare render where they happened to played as "ip".
- */
-const PAUSE_SHARE = 0.5;
 const FRAME_SECONDS = 0.005;
+
+/** Two filler-only renders must land within this of each other to be trusted. */
+const FILLER_AGREE_RATIO = 0.1;
+export const FILLER_ATTEMPTS = 4;
 
 /** The two copies must land within this of each other, or the render is rejected. */
 const AGREE_RATIO = 0.25;
@@ -63,15 +63,18 @@ export function carrierFor(word: string): string {
  * pause is whatever the voice learned — a full stop is the one every
  * recording ends on, so it is the pause the voice surely knows.
  */
+const SOUNDS_FILLER_WORDS: string[][] = ['הַמִּתְהַלְּכִים', 'כֵּן', 'וּבְמִשְׁפְּטֵיהֶם'].map(
+  (word) => hebrewWordSounds(word) ?? []
+);
 const SOUNDS_CARRIER_MID: string[] = [
   '.', ' ',
-  ...(hebrewWordSounds('הַמִּתְהַלְּכִים') ?? []),
-  '.', ' ',
-  ...(hebrewWordSounds('כֵּן') ?? []),
-  '.', ' ',
-  ...(hebrewWordSounds('וּבְמִשְׁפְּטֵיהֶם') ?? []),
-  '.', ' ',
+  ...SOUNDS_FILLER_WORDS.flatMap((sounds) => [...sounds, '.', ' ']),
 ];
+
+/** The Hebrew filler said on its own, as FILLER_TEXT is for Greek. */
+export const SOUNDS_FILLER: string[] = SOUNDS_FILLER_WORDS.flatMap((sounds, i) =>
+  i === 0 ? sounds : ['.', ' ', ...sounds]
+).concat('.');
 
 export function soundsCarrierFor(sounds: string[]): string[] {
   return [...sounds, ...SOUNDS_CARRIER_MID, ...sounds, '.'];
@@ -114,21 +117,90 @@ function findEdges(samples: Float32Array, sampleRate: number): Edges {
   return { start: first * FRAME_SECONDS, end: (last + 1) * FRAME_SECONDS, gaps };
 }
 
+const gapLength = (gap: { from: number; to: number }): number => gap.to - gap.from;
+
+/** Seconds of actual speech in a clip — first sound to last, less every pause. */
+export function talkingTime(samples: Float32Array, sampleRate: number): number | null {
+  const { start, end, gaps } = findEdges(samples, sampleRate);
+  if (end <= start) return null;
+  return end - start - gaps.reduce((sum, gap) => sum + gapLength(gap), 0);
+}
+
+/**
+ * The filler's talking time from several renders, or null if no two agree.
+ * One render can come out odd; two that match are trusted, and averaged.
+ */
+export function settleFiller(runs: number[]): number | null {
+  for (let i = 0; i < runs.length; i++) {
+    for (let j = i + 1; j < runs.length; j++) {
+      if (Math.abs(runs[i] - runs[j]) <= FILLER_AGREE_RATIO * Math.max(runs[i], runs[j])) {
+        return (runs[i] + runs[j]) / 2;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * The word's length according to each copy, or null when the clip has no
- * recognizable shape. The first copy ends at the first real pause; the last
- * copy begins at the last one.
+ * recognizable shape.
+ *
+ * Without `fillerTalk` the first copy ends at the first pause and the last
+ * copy begins at the last one. That is right for most words, but a word with
+ * a full stop inside it (the π in ῥυπόω) goes silent there too, so the cut
+ * landed mid-word and played as "ip".
+ *
+ * With `fillerTalk` — how long the filler takes to say on its own — the
+ * clip's talking time less the filler, halved, is how long one copy of the
+ * word takes. Each copy ends at whichever pause leaves it closest to that.
+ * A word with no inner stop still ends at its first pause, since every later
+ * pause adds a whole filler word. (An earlier attempt ranked pauses by length
+ * against the clip's longest; one long filler pause hid the real one, and
+ * words came out with the filler trailing after them.)
  */
 export function measureCopies(
   samples: Float32Array,
-  sampleRate: number
+  sampleRate: number,
+  fillerTalk?: number | null
 ): { first: number; last: number; cutAt: number; gapEnd: number } | null {
-  const { end, gaps: allGaps } = findEdges(samples, sampleRate);
-  const longest = Math.max(0, ...allGaps.map((g) => g.to - g.from));
-  const gaps = allGaps.filter((g) => g.to - g.from >= PAUSE_SHARE * longest);
+  const { start, end, gaps } = findEdges(samples, sampleRate);
   if (gaps.length < 2) return null;
-  const opening = gaps[0];
-  const closing = gaps[gaps.length - 1];
+  let opening = gaps[0];
+  let closing = gaps[gaps.length - 1];
+
+  if (fillerTalk) {
+    const pauses = gaps.reduce((sum, gap) => sum + gapLength(gap), 0);
+    const expected = (end - start - pauses - fillerTalk) / 2;
+    if (expected > 0) {
+      // Talking time of the first copy if it ended at gap i, and of the last
+      // copy if it began at gap i.
+      const before: number[] = [];
+      let paused = 0;
+      for (const gap of gaps) {
+        before.push(gap.from - start - paused);
+        paused += gapLength(gap);
+      }
+      const after: number[] = [];
+      paused = 0;
+      for (let i = gaps.length - 1; i >= 0; i--) {
+        after[i] = end - gaps[i].to - paused;
+        paused += gapLength(gaps[i]);
+      }
+      let open = 0;
+      for (let i = 1; i < gaps.length; i++) {
+        if (Math.abs(before[i] - expected) < Math.abs(before[open] - expected)) open = i;
+      }
+      let close = gaps.length - 1;
+      for (let i = gaps.length - 2; i >= 0; i--) {
+        if (Math.abs(after[i] - expected) < Math.abs(after[close] - expected)) close = i;
+      }
+      if (open < close) {
+        opening = gaps[open];
+        closing = gaps[close];
+      }
+    }
+  }
+
   return {
     first: opening.from,
     last: end - closing.to,

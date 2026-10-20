@@ -31,6 +31,11 @@ import {
   measureCopies,
   copiesAgree,
   cutWord,
+  talkingTime,
+  settleFiller,
+  FILLER_TEXT,
+  SOUNDS_FILLER,
+  FILLER_ATTEMPTS,
   WORD_ATTEMPTS,
 } from './wordAudio.js';
 import { opfsFolder, fetchWithProgress, configureOrt, encodeWav } from './ttsRuntime.js';
@@ -91,6 +96,7 @@ export async function installVoiceData(
   await store.write(voiceModelName(voiceId), model);
   sessions.delete(voiceId);
   configs.delete(voiceId);
+  forgetFillers(voiceId);
 }
 
 export async function removeVoice(voiceId: string): Promise<void> {
@@ -98,6 +104,7 @@ export async function removeVoice(voiceId: string): Promise<void> {
   await store.remove(voiceConfigName(voiceId));
   sessions.delete(voiceId);
   configs.delete(voiceId);
+  forgetFillers(voiceId);
 }
 
 /** All voice ids with a model file in OPFS (built-in and custom alike). */
@@ -233,11 +240,9 @@ export async function synthesizeWord(
 ): Promise<ArrayBuffer> {
   const config = await getConfig(voiceId);
   const espeakVoice = speech?.espeakVoice || config.espeak.voice;
-  const text = carrierFor(word.trim());
-
-  const clip = await cutFromCarrier(voiceId, async () => {
+  const subs = speech?.substitutions;
+  const idsFor = async (text: string): Promise<number[]> => {
     const result = await phonemize(text, espeakVoice);
-    const subs = speech?.substitutions;
     if (subs && Object.keys(subs).length > 0 && config.phoneme_id_map) {
       const rewritten = result.phonemes.map((p) => subs[p] ?? p);
       if (rewritten.some((p, i) => p !== result.phonemes[i])) {
@@ -245,6 +250,12 @@ export async function synthesizeWord(
       }
     }
     return result.phonemeIds;
+  };
+  const text = carrierFor(word.trim());
+
+  const clip = await cutFromCarrier(voiceId, () => idsFor(text), {
+    key: `${voiceId}|${espeakVoice}|${JSON.stringify(subs ?? {})}`,
+    ids: () => idsFor(FILLER_TEXT),
   });
   if (clip) return clip;
   throw new TtsError('SYNTH_FAILED', `Could not pronounce "${word}" cleanly`);
@@ -267,7 +278,13 @@ export async function synthesizeSoundsWord(
   const map = config.phoneme_id_map;
   if (!map) throw new TtsError('SYNTH_FAILED', `Voice ${voiceId} has no phoneme table`);
   const ids = idsFromPhonemes(soundsCarrierFor(sounds), map);
-  const clip = await cutFromCarrier(voiceId, async () => ids, pace);
+  const fillerIds = idsFromPhonemes(SOUNDS_FILLER, map);
+  const clip = await cutFromCarrier(
+    voiceId,
+    async () => ids,
+    { key: `${voiceId}|sounds`, ids: async () => fillerIds },
+    pace
+  );
   if (clip) return clip;
   const alone = await render(voiceId, idsFromPhonemes([...sounds, '.'], map), pace);
   return encodeWav(alone, config.audio.sample_rate);
@@ -294,18 +311,60 @@ async function render(voiceId: string, phonemeIds: number[], pace = 1): Promise<
 }
 
 /**
+ * How long the carrier's filler takes to say on its own, per voice, reading
+ * and speed — kept for the session, since it is the same for every word.
+ * Null when no two renders agreed; that is not kept, so the next word retries.
+ */
+const fillerTalks = new Map<string, Promise<number | null>>();
+
+function forgetFillers(voiceId: string): void {
+  for (const key of fillerTalks.keys()) {
+    if (key.startsWith(`${voiceId}|`)) fillerTalks.delete(key);
+  }
+}
+
+function fillerTalk(
+  voiceId: string,
+  filler: { key: string; ids: () => Promise<number[]> },
+  pace: number
+): Promise<number | null> {
+  const key = `${filler.key}|${pace}`;
+  const cached = fillerTalks.get(key);
+  if (cached) return cached;
+  const measuring = (async () => {
+    const sampleRate = (await getConfig(voiceId)).audio.sample_rate;
+    const runs: number[] = [];
+    for (let attempt = 0; attempt < FILLER_ATTEMPTS; attempt++) {
+      const talk = talkingTime(await render(voiceId, await filler.ids(), pace), sampleRate);
+      if (talk !== null) runs.push(talk);
+      const settled = settleFiller(runs);
+      if (settled !== null) return settled;
+    }
+    return null;
+  })().catch(() => null);
+  fillerTalks.set(key, measuring);
+  void measuring.then((talk) => {
+    if (talk === null) fillerTalks.delete(key);
+  });
+  return measuring;
+}
+
+/**
  * Render a word-in-carrier until the two copies agree, and return the first
- * copy cut out — or null if no attempt came out clean.
+ * copy cut out — or null if no attempt came out clean. The filler is timed on
+ * its own first, so the cut knows how long the word should be.
  */
 async function cutFromCarrier(
   voiceId: string,
   idsForAttempt: () => Promise<number[]>,
+  filler: { key: string; ids: () => Promise<number[]> },
   pace = 1
 ): Promise<ArrayBuffer | null> {
   const sampleRate = (await getConfig(voiceId)).audio.sample_rate;
+  const filled = await fillerTalk(voiceId, filler, pace);
   for (let attempt = 0; attempt < WORD_ATTEMPTS; attempt++) {
     const samples = await render(voiceId, await idsForAttempt(), pace);
-    const measured = measureCopies(samples, sampleRate);
+    const measured = measureCopies(samples, sampleRate, filled);
     if (!measured) continue;
     if (!copiesAgree(measured.first, measured.last)) continue;
     return encodeWav(cutWord(samples, sampleRate, measured.cutAt, measured.gapEnd), sampleRate);
