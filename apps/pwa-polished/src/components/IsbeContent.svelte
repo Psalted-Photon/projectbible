@@ -1648,6 +1648,47 @@
   .article :global(p.isbe-ind) {
     padding-left: 18px;
   }
+  /* Version names ("the King James Version", "…, margin") step back so they
+     stop competing with what is being said. */
+  .article :global(.isbe-ver) {
+    font-size: 0.88em;
+    color: var(--text-muted, #999);
+  }
+  /* Quoted words and Scripture; a `paraphrase' also steps back a shade, so it
+     reads differently from a direct quote. */
+  .article :global(.isbe-q) {
+    font-style: italic;
+  }
+  .article :global(.isbe-pq) {
+    font-style: italic;
+    color: var(--text-secondary, #ccc);
+  }
+  .article :global(p.isbe-by) {
+    text-align: right;
+    font-size: 13px;
+    font-style: italic;
+    color: var(--text-muted, #999);
+    margin-top: 16px;
+  }
+  .article :global(p.isbe-lit-h) {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary, #ccc);
+    margin: 18px 0 4px;
+  }
+  .article :global(p.isbe-lit-h u),
+  .article :global(p.isbe-lit > u:first-child) {
+    text-decoration: none;
+  }
+  .article :global(p.isbe-lit) {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--text-secondary, #ccc);
+  }
+  .article :global(.isbe-lit-word) {
+    font-weight: 600;
+  }
   /* The transliterated root a line of the panel is about. */
   .article :global(.isbe-tw) {
     font-weight: 600;

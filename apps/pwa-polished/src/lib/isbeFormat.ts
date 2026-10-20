@@ -234,6 +234,8 @@ type Ctx = { paras: Para[]; report?: FormatReport };
 function applyRules(ctx: Ctx): void {
   formatOpening(ctx);
   formatStructure(ctx);
+  formatEnding(ctx);
+  for (const p of ctx.paras) formatCues(p, ctx.report);
 }
 
 /** The text of [start, end), shortened for a report line. */
@@ -384,8 +386,8 @@ function splitRoots(p: Para, start: number, end: number, report?: FormatReport):
 }
 
 // Transliterations are lowercase, or open with ISBE's capital T for teth
-// ("Tame'", "Tanaph"): "ga`al, \"defile\"", "miaino, miasma, miasmos, \"stain\"".
-const ROOT_WORD = "(?:[a-z`']|T[a-z])[A-Za-z`'\-]*";
+// ("Tame'", "Tanaph"): ga`al, "defile"; miaino, miasma, miasmos, "stain".
+const ROOT_WORD = "(?:[a-z`']|T[a-z])[A-Za-z`'\\-]*";
 const ROOT_WORDS_RE = new RegExp(`^(${ROOT_WORD}(?:, ${ROOT_WORD})*)(?=[,:])`);
 /** English that can head a line in place of a root. */
 const NOT_ROOTS = new Set([
@@ -404,7 +406,7 @@ function markRootWord(p: Para, start: number, end: number, report?: FormatReport
   const stop = words.findIndex((w) => NOT_ROOTS.has(w.toLowerCase()));
   const text = (stop < 0 ? words : words.slice(0, stop)).join(", ");
   if (!text) return;
-  // A root comes with its meaning in quotes ("ga`al, \"defile\""), or looks
+  // A root comes with its meaning in quotes (ga`al, "defile"), or looks
   // transliterated itself ("Tame', the principal root").
   const rest = line.slice(text.length);
   if (!/^(?:, etc\.)?[,:] "/.test(rest) && !/[`']/.test(text)) return;
@@ -465,6 +467,137 @@ function formatStructure({ paras, report }: Ctx): void {
       }
     }
   }
+}
+
+// --- Cues inside sentences -----------------------------------------------
+
+// ISBE spells every version out in full, and names one in most sentences that
+// quote Scripture. Set smaller and muted, they stop competing with the text.
+// The longer names are tried first, so "the Revised Version (British and
+// American)" is taken whole rather than as "the Revised Version".
+const VERSION_RE = new RegExp(
+  "\\b[Tt]he (?:King James Version|American Standard Revised Version"
+    + "|Revised Version \\(British and American\\)|American Revised Version|Revised Version)"
+    + "(?:,? margin\\b)?",
+  "g",
+);
+
+function within(p: Para, k: number, cls: string): boolean {
+  return p.marks.some((m) => m.start <= k && k < m.end && m.open.includes(cls));
+}
+
+function formatCues(p: Para, report?: FormatReport): void {
+  const text = p.text;
+  const versions: [number, number][] = [];
+  for (const m of text.matchAll(VERSION_RE)) {
+    const s = m.index!;
+    if (mark(p, s, s + m[0].length, "isbe-ver")) {
+      versions.push([s, s + m[0].length]);
+      report?.("version name", m[0]);
+    }
+  }
+
+  // "margin" alone is an ordinary word; inside a parenthesis it is the
+  // version's margin: (Jer 3:9, margin "pollute").
+  let depth = 0;
+  const depthAt: number[] = [];
+  for (let k = 0; k < text.length; k++) {
+    depthAt.push(depth);
+    if (text[k] === "(") depth++;
+    else if (text[k] === ")") depth = Math.max(0, depth - 1);
+  }
+  for (const m of text.matchAll(/\bmargin\b/g)) {
+    const s = m.index!;
+    if (depthAt[s] > 0 && !versions.some(([a, b]) => a <= s && s < b)) {
+      if (mark(p, s, s + 6, "isbe-ver")) report?.("margin in parentheses", clip(p, Math.max(0, s - 40), s + 6));
+    }
+  }
+
+  // Double quotes pair up within the paragraph. An odd count means one is
+  // stray (GRACE's stray quote after "the Graces."), and pairing would put every quote after
+  // it inside out, so the paragraph is left alone. In the word-origins panel
+  // a quote is a meaning, which reads as plain text.
+  const quotes: number[] = [];
+  for (let k = 0; k < text.length; k++) if (text[k] === '"') quotes.push(k);
+  if (quotes.length % 2) {
+    if (quotes.length) report?.("quotes left alone (odd count)", clip(p, 0, text.length, 100));
+  } else {
+    for (let i = 0; i < quotes.length; i += 2) {
+      const s = quotes[i];
+      const e = quotes[i + 1] + 1;
+      if (within(p, s, "isbe-origin") || within(p, e - 1, "isbe-origin")) continue;
+      if (mark(p, s, e, "isbe-q")) report?.("quote", clip(p, s, e, 100));
+    }
+  }
+
+  // ISBE writes its paraphrases `like this', which should look different from
+  // a direct quote. A backtick inside a word, or opening a transliterated one
+  // (ga`al, `alal, `anah), stands for a Hebrew letter instead; those never
+  // come with a closing quote and a space-separated phrase in between.
+  for (let k = text.indexOf("`"); k >= 0; k = text.indexOf("`", k + 1)) {
+    if (k > 0 && !/[\s(\["]/.test(text[k - 1])) continue;
+    if (!/[A-Za-z]/.test(text[k + 1] ?? "")) continue;
+    let close = -1;
+    for (let j = k + 2; j < text.length && j - k <= 400; j++) {
+      const c = text[j];
+      if (c === "`" || c === '"') break;
+      // An apostrophe followed by a letter is inside a word: "Jacob's".
+      if (c === "'" && /[A-Za-z.,!?)]/.test(text[j - 1]) && !/[A-Za-z]/.test(text[j + 1] ?? "")) {
+        close = j;
+        break;
+      }
+    }
+    if (close < 0 || !/\s/.test(text.slice(k + 1, close))) continue;
+    if (within(p, k, "isbe-origin")) continue;
+    if (mark(p, k, close + 1, "isbe-pq")) report?.("paraphrase", clip(p, k, close + 1, 100));
+  }
+}
+
+// --- The end of the article -----------------------------------------------
+
+// "J. E. Harry", "Willis J. Beecher", "Archibald M'Caig", "Alex. Macalister".
+const NAME_WORD = "(?:[A-Z]\\.|[A-Z][A-Za-z'\\-]*[a-z]\\.?|de|von|van|der|du|la)";
+const NAME = `${NAME_WORD}(?: ${NAME_WORD})+`;
+const BYLINE_RE = new RegExp(`^\\s*${NAME}(?:(?:, and |, | and |; )${NAME})*\\s*$`);
+
+function formatEnding({ paras, report }: Ctx): void {
+  const filled = paras.filter((p) => p.text.trim());
+  let last = filled.length;
+
+  // The author's name on the last line becomes a byline.
+  const by = filled[filled.length - 1];
+  if (by && filled.length > 1 && BYLINE_RE.test(by.text) && !/^\s*(?:See|Compare)\b/.test(by.text)
+    && !by.inner.includes("<a") && !paraHeading(by.inner)) {
+    by.classes.push("isbe-by");
+    report?.("byline", by.text.trim());
+    last--;
+  }
+
+  // The bibliography under the last LITERATURE line, set smaller. Only the
+  // last one counts, and only when no heading follows it: a fold-out
+  // article's contents block often ends with a bare "LITERATURE" too.
+  let lit = -1;
+  for (let i = last - 1; i >= 0; i--) {
+    if (paraHeading(filled[i].inner)) break;
+    // "LITERATURE", or "Literature" on its own; a sentence that happens to
+    // open with the word is prose.
+    if (/^\s*(?:LITERATURE\b|Literature(?=[.:]|\s*$))/.test(filled[i].text)) {
+      lit = i;
+      break;
+    }
+  }
+  if (lit < 0) return;
+  const head = filled[lit];
+  const word = /^\s*LITERATURE\b[.:]?/i.exec(head.text)!;
+  if (!head.text.slice(word[0].length).trim()) {
+    head.classes.push("isbe-lit-h");
+  } else {
+    // "LITERATURE. Smith, …" — the list starts on the same line.
+    head.classes.push("isbe-lit");
+    mark(head, 0, word[0].length, "isbe-lit-word");
+  }
+  for (let i = lit + 1; i < last; i++) filled[i].classes.push("isbe-lit");
+  report?.("literature", clip(head, 0, head.text.length, 80) + ` (+${last - lit - 1} paragraphs)`);
 }
 
 // --- Entry point ----------------------------------------------------------
