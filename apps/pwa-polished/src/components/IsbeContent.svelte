@@ -1584,6 +1584,40 @@
   .article :global(a.visited) {
     opacity: 0.5;
   }
+  /* --- Article formatting (lib/isbeFormat.ts) ---
+     All of it wraps the source text in spans and classes; none of it adds or
+     drops a word. Colors come from the theme so it follows the reader. */
+  /* "de-fil', de-fil'-ment" — the respelled pronunciation, on its own line. */
+  .article :global(.isbe-pron) {
+    display: block;
+    font-size: 13px;
+    font-style: italic;
+    color: var(--text-muted, #999);
+    margin-bottom: 6px;
+  }
+  /* The word origins: the parenthesis after the pronunciation. */
+  .article :global(.isbe-origin) {
+    display: block;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--text-secondary, #ccc);
+    background: color-mix(in srgb, var(--text-color, #fff) 6%, transparent);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 2px 0 10px;
+  }
+  .article :global(.isbe-line) {
+    display: block;
+  }
+  .article :global(.isbe-line + .isbe-line) {
+    margin-top: 4px;
+  }
+  /* The transliterated root a line of the panel is about. */
+  .article :global(.isbe-tw) {
+    font-weight: 600;
+    font-style: italic;
+    color: var(--text-color, #fff);
+  }
   .vb-ref.visited .vb-ref-label,
   .vb-ref.visited .vb-ref-text {
     opacity: 0.5;
