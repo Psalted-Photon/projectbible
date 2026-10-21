@@ -537,8 +537,10 @@
   }
 
   /* Original / Modern */
+  /* Never shrinks: it clips its overflow, so squeezing it would cut "Modern" short. */
   .dr-mode {
     display: flex;
+    flex-shrink: 0;
     height: calc(30px * var(--bar-scale, 1));
     border: 1px solid var(--reader-rule, rgba(255, 255, 255, 0.12));
     border-radius: calc(7px * var(--bar-scale, 1));
@@ -547,9 +549,10 @@
   .dr-mode button {
     background: none;
     border: none;
-    padding: 0 calc(9px * var(--bar-scale, 1));
+    padding: 0 calc(6px * var(--bar-scale, 1));
     font-size: calc(0.72rem * var(--bar-scale, 1));
     font-weight: 600;
+    white-space: nowrap;
     color: var(--reader-text-dimmer, rgba(255, 255, 255, 0.5));
     cursor: pointer;
   }
@@ -565,7 +568,7 @@
       gap: calc(2px * var(--bar-scale, 1));
     }
     .dr-mode button {
-      padding: 0 calc(6px * var(--bar-scale, 1));
+      padding: 0 calc(4px * var(--bar-scale, 1));
       font-size: calc(0.68rem * var(--bar-scale, 1));
     }
   }
