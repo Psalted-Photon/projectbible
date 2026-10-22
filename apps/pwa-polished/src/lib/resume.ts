@@ -23,17 +23,6 @@ export const SESSION_KEY = 'projectbible_session';
  */
 export const QUICK_RETURN_MS = 2 * 60 * 1000;
 
-/** This launch follows the app being left moments ago — a fold, most likely. */
-export function isQuickReturn(): boolean {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    const savedAt = raw ? JSON.parse(raw)?.savedAt : null;
-    return typeof savedAt === 'number' && Date.now() - savedAt < QUICK_RETURN_MS;
-  } catch {
-    return false;
-  }
-}
-
 export interface ResumeEntry {
   /**
    * What the reader's own saved state named when this was taken. A resume

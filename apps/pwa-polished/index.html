@@ -60,6 +60,35 @@
       padding-right: env(safe-area-inset-right);
     }
     
+    /* The launch splash's first frame: exactly where src/lib/launchSplash.ts
+       draws its big iris, so the hand-over can't be seen. Under #loading, so a
+       launch error is readable. Grounds are CREAM and NIGHT in lib/wordmark.ts. */
+    #boot-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: #fffaed;
+    }
+    :root[data-ground="night"] #boot-splash {
+      background: #0b0e14;
+    }
+    :root[data-boot="skip"] #boot-splash {
+      display: none;
+    }
+    #boot-splash img {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: min(62vw, 52vh, 340px);
+      height: min(62vw, 52vh, 340px);
+      margin-left: calc(min(62vw, 52vh, 340px) / -2);
+      margin-top: calc(min(62vw, 52vh, 340px) / -2);
+      filter: brightness(0);
+    }
+    :root[data-ground="night"] #boot-splash img {
+      filter: none;
+    }
+
     #loading {
       position: fixed;
       top: 50%;
@@ -322,12 +351,16 @@
   </style>
 </head>
 <body>
+  <!-- Launch error display, the CSP watcher, and the splash's ground. Runs
+       before the splash's first frame below. See public/startup.js. -->
+  <script src="/startup.js"></script>
+  <!-- The launch splash's first frame, drawn by the page itself so Android's
+       own splash comes down at once. src/lib/launchSplash.ts takes it over. -->
+  <div id="boot-splash" aria-hidden="true"><img src="/iris-mono.png" alt="" draggable="false"></div>
   <!-- Empty on purpose: the launch splash is the only thing a launch shows.
        startup.js writes a launch error in here. -->
   <div id="loading"></div>
   <div id="app"></div>
-  <!-- Launch error display and the CSP watcher. See public/startup.js. -->
-  <script src="/startup.js"></script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -2,8 +2,35 @@
 // is still loading. A file rather than a script written into index.html: the
 // Content-Security-Policy in vercel.json does not allow scripts in the page.
 
+// The launch splash's first frame (#boot-splash in index.html) is drawn from
+// the page itself, so something is on screen the moment the page is — Android
+// keeps its own splash, the app icon on a square, up until the page draws.
+// This runs before that frame and settles two things for it and for
+// src/lib/launchSplash.ts, which takes it over:
+//   data-ground  cream before noon, night after: the grounds of the wordmark
+//                schedule in src/lib/wordmark.ts
+//   data-boot    "skip" when the app was closed under two seconds ago (a fold
+//                handing the app to the other screen): no splash at all
+(function() {
+  var root = document.documentElement;
+  root.dataset.ground = new Date().getHours() < 12 ? 'cream' : 'night';
+  try {
+    var raw = localStorage.getItem('projectbible_session');
+    var savedAt = raw ? JSON.parse(raw).savedAt : null;
+    if (typeof savedAt === 'number' && Date.now() - savedAt < 2000) root.dataset.boot = 'skip';
+  } catch (e) {
+    // Blocked storage: the splash plays.
+  }
+})();
+
+function hideBootSplash() {
+  var boot = document.getElementById('boot-splash');
+  if (boot) boot.remove();
+}
+
 // Global error handler
 window.addEventListener('error', function(e) {
+  hideBootSplash();
   document.getElementById('loading').innerHTML =
     '<h2 style="color: #f44336;">ERROR</h2>' +
     '<p style="margin-top: 20px; font-size: 16px;">' + e.message + '</p>' +
@@ -11,6 +38,7 @@ window.addEventListener('error', function(e) {
 });
 
 window.addEventListener('unhandledrejection', function(e) {
+  hideBootSplash();
   document.getElementById('loading').innerHTML =
     '<h2 style="color: #f44336;">PROMISE ERROR</h2>' +
     '<p style="margin-top: 20px; font-size: 16px;">' + e.reason + '</p>';

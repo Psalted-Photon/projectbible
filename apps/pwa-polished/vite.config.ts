@@ -244,6 +244,8 @@ export default defineConfig({
       includeAssets: [
         'notification-badge-96.png',
         'pb-gem.png',
+        // The launch splash's black-and-white iris, drawn on every launch.
+        'iris-mono.png',
         // The wordmark's face: drawn by the launch splash on first paint.
         'fonts/milonga-400.woff2',
         'fonts/berry-rotunda.woff2',

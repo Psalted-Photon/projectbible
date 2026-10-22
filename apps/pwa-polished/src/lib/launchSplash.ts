@@ -17,21 +17,20 @@
  * cap, so a launch that never finishes cannot hide the page forever.
  *
  * With Motion reduced or off the iris does not travel: the one-color iris
- * gives way to the finished wordmark in place. A quick return (a fold handing
- * the app to the other screen) shows no splash at all; the logo was seen a
- * minute ago.
+ * gives way to the finished wordmark in place. Opening the app again under
+ * two seconds after closing it (a fold handing it to the other screen) shows
+ * no splash at all; public/startup.js decides that, as data-boot="skip".
  *
- * This is the in-page splash. The one the phone draws before the page loads is
- * the manifest's icon on its background color, and is not ours to time.
+ * Step 1 starts before this code has loaded: index.html draws the same big
+ * iris as #boot-splash, because Android keeps its own splash (the app icon on
+ * a square) up until the page draws something. This takes it over in place.
  */
 
 import { mount, unmount } from 'svelte';
 import Wordmark from '../components/Wordmark.svelte';
 import { CREAM, NIGHT, WORDMARKS, wordmarkAt } from './wordmark';
-import { IRIS_MONO_SVG } from './irisMono';
-import { isQuickReturn } from './resume';
 
-/** How long the one-color iris sits alone before it moves. */
+/** How long the one-color iris sits alone before it moves, from the page's start. */
 const MONO_MS = 1000;
 /** The flight onto the "ı". */
 const FLIGHT_MS = 800;
@@ -40,6 +39,8 @@ const SQUASH_MS = 280;
 const RIPPLE_MS = 650;
 /** The finished wordmark, held once the iris has landed. */
 const HOLD_MS = 1500;
+/** The longest the splash waits for the black-and-white iris before showing anyway. */
+const MONO_WAIT_MS = 600;
 /** The longest the letters wait for their font before showing anyway. */
 const FONT_WAIT_MS = 2500;
 /** The most the splash stays, whatever the app is doing. */
@@ -61,12 +62,13 @@ function capped(work: Promise<unknown>, ms: number): Promise<void> {
 }
 
 export function showLaunchSplash(): LaunchSplash {
-  if (isQuickReturn()) return NONE;
+  if (document.documentElement.dataset.boot === 'skip') return NONE;
 
+  // The first frame index.html drew, swapped for this one once it is ready.
+  const boot = document.getElementById('boot-splash');
   const code = wordmarkAt();
   const look = WORDMARKS[code];
-  // The one-color iris and the ring stand out from the ground, whatever color
-  // the letters are.
+  // The landing ring stands out from the ground, whatever color the letters are.
   const contrast = look.ground === CREAM ? NIGHT : CREAM;
   const level = document.documentElement.dataset.motion ?? 'full';
 
@@ -95,8 +97,9 @@ export function showLaunchSplash(): LaunchSplash {
   const dot = holder.querySelector<HTMLImageElement>('.iris');
   if (dot) dot.style.visibility = 'hidden';
 
-  // The big iris: the one-color shape, with the color art on top of it at no
-  // opacity. The two crosses are the same shape, so the change is a fade.
+  // The big iris: the art traced to black and white (public/iris-mono.png,
+  // white, darkened on a cream ground), with the color art on top of it at no
+  // opacity. Both come from the same art, so the change is a fade.
   const big = 'min(62vw,52vh,340px)';
   const flyer = document.createElement('div');
   flyer.style.cssText = [
@@ -107,13 +110,15 @@ export function showLaunchSplash(): LaunchSplash {
     `height:${big}`,
     `margin-left:calc(${big} / -2)`,
     `margin-top:calc(${big} / -2)`,
-    `color:${contrast}`,
     'transform-origin:50% 50%',
     'will-change:transform',
   ].join(';');
-  flyer.innerHTML = IRIS_MONO_SVG;
-  const svg = flyer.firstElementChild as SVGElement;
-  svg.style.cssText = 'display:block;width:100%;height:100%';
+  const mono = document.createElement('img');
+  mono.src = '/iris-mono.png';
+  mono.alt = '';
+  mono.draggable = false;
+  mono.style.cssText = `display:block;width:100%;height:100%${look.ground === CREAM ? ';filter:brightness(0)' : ''}`;
+  flyer.appendChild(mono);
   const color = document.createElement('img');
   color.src = '/pb-gem.png';
   color.alt = '';
@@ -122,7 +127,14 @@ export function showLaunchSplash(): LaunchSplash {
   flyer.appendChild(color);
   cover.appendChild(flyer);
 
-  document.body.appendChild(cover);
+  // Swapped in once the black-and-white iris is ready to draw, so the swap
+  // never shows an empty ground. It is precached, so this is a moment at most.
+  const monoReady = capped(mono.decode(), MONO_WAIT_MS);
+  void monoReady.then(() => {
+    if (gone) return;
+    document.body.appendChild(cover);
+    boot?.remove();
+  });
 
   let gone = false;
   let played = false;
@@ -131,6 +143,7 @@ export function showLaunchSplash(): LaunchSplash {
   function remove(): void {
     if (gone) return;
     gone = true;
+    boot?.remove();
     cover.style.opacity = '0';
     setTimeout(() => {
       void unmount(mark);
@@ -153,7 +166,8 @@ export function showLaunchSplash(): LaunchSplash {
   async function play(): Promise<void> {
     const font = capped(document.fonts?.load('400 1em Milonga') ?? Promise.resolve(), FONT_WAIT_MS);
     const art = capped(color.decode(), FONT_WAIT_MS);
-    await Promise.all([wait(MONO_MS), font, art]);
+    await monoReady;
+    await Promise.all([wait(MONO_MS - performance.now()), font, art]);
     if (gone) return;
 
     if (level !== 'full' || !dot || typeof flyer.animate !== 'function') {

@@ -15,6 +15,9 @@
  *   noon – 6pm         bonbe       conbe
  *   6pm – midnight     conbg       bonbg
  *
+ * So the ground is cream before noon and black after; public/startup.js relies
+ * on that to draw the splash's first frame before this code loads.
+ *
  * Every size here is in em, taken from the 200px artboards the wordmark was
  * drawn on, so the whole word scales with the font size it is given.
  */
