@@ -724,23 +724,13 @@ function makeReaderTrail(r: Reader): ReaderTrail {
       trail.set(emptyTrail());
     },
     /**
-     * A book or chapter picked by hand, off the dropdown. It never clears the
-     * trail: home stays the start of the road.
-     *
-     * At the end of the trail, with nothing ahead, where you were is left
-     * behind as a crumb and the pick is a fresh spot — even from home with no
-     * trail at all. Walked back, with crumbs still ahead, the spot you are on
-     * just moves, like a tab, and the crumbs ahead stay where they are.
+     * A book or chapter picked by hand, off the dropdown. It never adds a
+     * crumb: only following a link does. The spot you are on just moves, like
+     * a tab, and the crumbs behind and ahead stay where they are.
      */
     moveByHand: (translation, book, chapter) => {
       if (!r.driver) return;
-      const t = get(trail);
-      if (t.ahead.length === 0) {
-        const left = crumbForHere(r, r.driver.state(), t.current);
-        trail.set({ back: [...t.back, left], ahead: [], current: null });
-      } else {
-        trail.set({ ...t, current: null });
-      }
+      trail.update((t) => ({ ...t, current: null }));
       r.driver.move(translation, book, chapter);
     },
   };

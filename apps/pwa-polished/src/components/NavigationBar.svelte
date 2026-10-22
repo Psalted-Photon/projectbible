@@ -712,8 +712,7 @@
         highlightedVerse: null,
       });
     } else {
-      // No mark. The trail stays: at its end the spot you leave becomes a
-      // crumb; walked back, the crumb you are on moves (see moveByHand).
+      // No mark, and no new crumb: the spot you are on just moves (see moveByHand).
       myTrail.moveByHand(currentTranslation, bookName, chapter);
     }
     referenceDropdownOpen = false;
