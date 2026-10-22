@@ -9,9 +9,13 @@
 // Logo.png and re-running is all a future logo change needs.
 //
 // The "any" icons carry their own rounded corners, because Windows and desktop
-// installs show the image exactly as drawn. The maskable and Apple icons stay
-// full-bleed squares: Android and iOS cut their own shape, and iOS fills any
-// transparent corner with black.
+// installs show the image exactly as drawn. The Apple icon stays a full-bleed
+// square: iOS cuts its own shape and fills any transparent corner with black.
+//
+// The maskable icon's tile covers only the part Android's home screen shows
+// (its inner 72/108), rounded, with nothing around it. The home screen never
+// shows that outer ring, but Chrome's launch screen draws the whole image
+// uncut, and a full-bleed tile there is a hard-cornered square.
 //
 // Also written from the same master: favicon.ico (the iris alone, no tile),
 // pb-gem.png (the spinner and the email header), and the one-color
@@ -36,6 +40,9 @@ const SOURCE = join(PUBLIC, 'Logo.png');
 
 const CREAM = { r: 0xff, g: 0xfa, b: 0xed };
 
+// Android's adaptive-icon safe zone, as a share of the icon's width.
+const ANDROID_SAFE_ZONE = 72 / 108;
+
 // Iris diameter as a share of the canvas.
 //
 // 93% on the "any" icons is the design's own tile. The iris is a circle, so it
@@ -48,19 +55,22 @@ const CREAM = { r: 0xff, g: 0xfa, b: 0xed };
 // iris is a circle, so its furthest pixel from center is simply half its
 // diameter; assertMaskableFits() below measures it rather than trusting the
 // arithmetic.
+//
+// `tile` is the rounded tile's width as a share of the canvas (1 when absent).
+// On the maskable icon it is the safe zone plus a hair, so the home screen's
+// own shape always lands on cream, never on the transparent ring.
 const TARGETS = [
   { file: 'pwa-64x64.png',                size: 64,  fill: 0.93, rounded: true },
   { file: 'pwa-192x192.png',              size: 192, fill: 0.93, rounded: true },
   { file: 'pwa-512x512.png',              size: 512, fill: 0.93, rounded: true },
-  { file: 'maskable-icon-512x512.png',    size: 512, fill: 0.62 },
+  { file: 'maskable-icon-512x512.png',    size: 512, fill: 0.62, rounded: true, tile: ANDROID_SAFE_ZONE + 0.01 },
   { file: 'apple-touch-icon-180x180.png', size: 180, fill: 0.88 }
 ];
 
-// Corner radius of the rounded tile, as a share of its width.
+// Corner radius of the rounded tile, as a share of its width. At 0.22 the
+// rounded square still holds any shape a launcher inscribes in it (a squircle's
+// corner reaches 84% of the way out along the diagonal; this reaches 87%).
 const CORNER_RADIUS = 0.22;
-
-// Android's adaptive-icon safe zone, as a share of the icon's width.
-const ANDROID_SAFE_ZONE = 72 / 108;
 
 // At favicon sizes legibility beats margin, and the tab supplies its own
 // background, so these are the bare iris with a transparent surround.
@@ -72,7 +82,7 @@ function irisAt(diameter) {
 }
 
 /** One icon: the iris centered on a cream tile, square or rounded. */
-async function renderIcon(size, fill, rounded) {
+async function renderIcon(size, fill, rounded, tileShare = 1) {
   const d = Math.max(1, Math.round(size * fill));
   const layer = await irisAt(d).png().toBuffer();
   const tile = await sharp({
@@ -85,10 +95,12 @@ async function renderIcon(size, fill, rounded) {
     // 24-bit RGB is kept: the iris is a smooth gradient and a palette bands it.
     return sharp(tile).png({ compressionLevel: 9, effort: 10 }).toBuffer();
   }
-  const r = size * CORNER_RADIUS;
+  const w = size * tileShare;
+  const at = (size - w) / 2;
+  const r = w * CORNER_RADIUS;
   const mask = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
-    `<rect width="${size}" height="${size}" rx="${r}" ry="${r}" fill="#fff"/></svg>`
+    `<rect x="${at}" y="${at}" width="${w}" height="${w}" rx="${r}" ry="${r}" fill="#fff"/></svg>`
   );
   return sharp(tile)
     .ensureAlpha()
@@ -191,10 +203,11 @@ async function renderMonoArt(size) {
     .toBuffer();
 }
 
-for (const { file, size, fill, rounded } of TARGETS) {
-  writeFileSync(join(PUBLIC, file), await renderIcon(size, fill, rounded));
+for (const { file, size, fill, rounded, tile } of TARGETS) {
+  writeFileSync(join(PUBLIC, file), await renderIcon(size, fill, rounded, tile));
   console.log('  ' + file.padEnd(30) + (size + 'x' + size).padEnd(9) +
-    'iris ' + (fill * 100).toFixed(0) + '%' + (rounded ? ', rounded' : ''));
+    'iris ' + (fill * 100).toFixed(0) + '%' + (rounded ? ', rounded' : '') +
+    (tile ? ', tile ' + (tile * 100).toFixed(0) + '%' : ''));
 }
 
 const images = [];
@@ -229,6 +242,7 @@ async function assertMaskableFits(file) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * c;
+      if (data[i + 3] < 128) continue;   // the transparent ring round the tile
       const off = Math.abs(data[i] - CREAM.r) + Math.abs(data[i + 1] - CREAM.g) + Math.abs(data[i + 2] - CREAM.b);
       if (off < 90) continue;
       const d = Math.hypot(x - cx, y - cy);
