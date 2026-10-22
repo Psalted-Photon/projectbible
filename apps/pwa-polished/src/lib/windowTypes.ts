@@ -1,7 +1,8 @@
 /**
  * windowTypes.ts
  *
- * The thirteen things a window can show, and how each one starts out.
+ * The thirteen things a window can show, in four groups, and how each one
+ * starts out.
  *
  * Three places offer this list: the tile grid in a brand-new window, the apps
  * button on the bar, and the swap button in a window's header. They used to be
@@ -30,34 +31,57 @@ export type WindowChoice =
   | 'bible' | 'map' | 'timeline' | 'connections' | 'notes' | 'isbe' | 'person' | 'naves' | 'strongs'
   | 'commentaries' | 'journal' | 'art' | 'harmony';
 
+/**
+ * The four shelves the list is sorted into, in the order you study a passage:
+ * read it, look it up, see it, mark it down. "Mark" in the older sense too, of
+ * looking closely (Psalm 37:37).
+ */
+export type WindowGroup = 'read' | 'lookup' | 'see' | 'mark';
+
+export const WINDOW_GROUPS: Array<{ key: WindowGroup; label: string }> = [
+  { key: 'read',   label: 'Read it' },
+  { key: 'lookup', label: 'Look it up' },
+  { key: 'see',    label: 'See it' },
+  { key: 'mark',   label: 'Mark it' },
+];
+
 export interface WindowTypeInfo {
   type: WindowChoice;
   icon: PanelIconName;
   label: string;
   accent: string;
+  group: WindowGroup;
 }
 
 /**
  * Accents are borrowed from colors the app already uses — the book-category
  * ramp in bibleData.ts and the nav bar's badge palette — so the list reads as
  * part of the same app rather than a new color scheme.
+ *
+ * Listed group by group, in the order each group shows them.
  */
 export const WINDOW_TYPES: WindowTypeInfo[] = [
-  { type: 'bible',        icon: 'bible',        label: 'Bible',        accent: '#a67c52' },
-  { type: 'map',          icon: 'map',          label: 'Map',          accent: '#61f1ff' },
-  { type: 'timeline',     icon: 'timeline',     label: 'Timeline',     accent: '#f0c040' },
-  { type: 'connections',  icon: 'connections',  label: 'Connections',  accent: '#a45be9' },
-  { type: 'commentaries', icon: 'commentary',   label: 'Commentary',   accent: '#a3e635' },
-  { type: 'notes',        icon: 'notes',        label: 'Notes',        accent: '#fde047' },
-  { type: 'journal',      icon: 'journal',      label: 'Journal',      accent: '#f2893e' },
-  { type: 'isbe',         icon: 'encyclopedia', label: 'Encyclopedia', accent: '#4a90e2' },
-  { type: 'naves',        icon: 'topical',      label: 'Topical',      accent: '#a78bfa' },
-  { type: 'person',       icon: 'people',       label: 'People',       accent: '#2dd4bf' },
+  { type: 'bible',        icon: 'bible',        label: 'Bible',        accent: '#a67c52', group: 'read' },
+  { type: 'harmony',      icon: 'harmony',      label: 'Harmonies',    accent: '#4a9ec9', group: 'read' },
+  { type: 'connections',  icon: 'connections',  label: 'Connections',  accent: '#a45be9', group: 'read' },
+  { type: 'commentaries', icon: 'commentary',   label: 'Commentary',   accent: '#a3e635', group: 'read' },
+  { type: 'isbe',         icon: 'encyclopedia', label: 'Encyclopedia', accent: '#4a90e2', group: 'lookup' },
+  { type: 'person',       icon: 'people',       label: 'People',       accent: '#2dd4bf', group: 'lookup' },
+  { type: 'naves',        icon: 'topical',      label: 'Topical',      accent: '#a78bfa', group: 'lookup' },
   // Strong's own Greek green, the color its Greek numbers are drawn in.
-  { type: 'strongs',      icon: 'strongs',      label: 'Strong’s',     accent: '#4caf50' },
-  { type: 'art',          icon: 'art',          label: 'Art',          accent: '#fb7185' },
-  { type: 'harmony',      icon: 'harmony',      label: 'Harmonies',    accent: '#4a9ec9' },
+  { type: 'strongs',      icon: 'strongs',      label: 'Strong’s',     accent: '#4caf50', group: 'lookup' },
+  { type: 'map',          icon: 'map',          label: 'Map',          accent: '#61f1ff', group: 'see' },
+  { type: 'timeline',     icon: 'timeline',     label: 'Timeline',     accent: '#f0c040', group: 'see' },
+  { type: 'art',          icon: 'art',          label: 'Art',          accent: '#fb7185', group: 'see' },
+  { type: 'notes',        icon: 'notes',        label: 'Notes',        accent: '#fde047', group: 'mark' },
+  { type: 'journal',      icon: 'journal',      label: 'Journal',      accent: '#f2893e', group: 'mark' },
 ];
+
+/** The types in each group, groups in order. Every picker draws from this. */
+export const WINDOW_TYPES_BY_GROUP = WINDOW_GROUPS.map((g) => ({
+  ...g,
+  types: WINDOW_TYPES.filter((t) => t.group === g.key),
+}));
 
 /** What a window of this type starts out showing. */
 export function initialContentFor(type: Exclude<WindowChoice, 'harmony'>): Record<string, any> {
