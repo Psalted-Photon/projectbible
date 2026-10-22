@@ -1,7 +1,7 @@
 <script lang="ts">
   import { windowStore } from "../lib/stores/windowStore";
   import {
-    WINDOW_TYPES,
+    WINDOW_TYPES_BY_GROUP,
     initialContentFor,
     openHarmonyView,
     type WindowChoice,
@@ -37,16 +37,23 @@
 </script>
 
 <div class="content-selector">
-  <div class="button-grid">
-    {#each WINDOW_TYPES as tile (tile.type)}
-      <button
-        class="content-button {tile.type}"
-        style="--accent: {tile.accent}"
-        on:click={() => handleContentSelect(tile.type)}
-      >
-        <span class="badge"><PanelIcon name={tile.icon} /></span>
-        <span class="label">{tile.label}</span>
-      </button>
+  <div class="groups">
+    {#each WINDOW_TYPES_BY_GROUP as g (g.key)}
+      <section class="group" aria-label={g.label}>
+        <h3 class="group-label">{g.label}</h3>
+        <div class="button-grid">
+          {#each g.types as tile (tile.type)}
+            <button
+              class="content-button {tile.type}"
+              style="--accent: {tile.accent}"
+              on:click={() => handleContentSelect(tile.type)}
+            >
+              <span class="badge"><PanelIcon name={tile.icon} /></span>
+              <span class="label">{tile.label}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
     {/each}
   </div>
 
@@ -77,10 +84,28 @@
     box-sizing: border-box;
   }
 
+  /* The four groups as one block, so the auto margin centers them together. */
+  .groups {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+    margin-top: auto;
+  }
+
+  .group-label {
+    margin: 0 0 6px 2px;
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: #8f8f8f;
+  }
+
   /* auto-fill measures the panel, not the viewport, which is the only thing
      that works here: a panel's width is an inline percentage set by the drag,
      so no media query can see it. Narrow side panel lands on 2 columns, a wide
-     bottom panel on 5, and all nine tiles stay on screen either way.
+     bottom panel on 5, and every group's tiles stay on screen either way.
 
      The min() guards the floor: a bare minmax(96px, …) keeps its 96px minimum
      even once the panel is narrower than that, and the grid starts overflowing
@@ -91,7 +116,6 @@
     grid-template-columns: repeat(auto-fill, minmax(min(96px, 100%), 1fr));
     gap: 10px;
     width: 100%;
-    margin-top: auto;
   }
 
   .content-button {
