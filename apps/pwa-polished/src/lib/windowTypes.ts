@@ -1,8 +1,8 @@
 /**
  * windowTypes.ts
  *
- * The thirteen things a window can show, in four groups, and how each one
- * starts out.
+ * The fourteen things the window pickers offer, in four groups, and how each
+ * one starts out.
  *
  * Three places offer this list: the tile grid in a brand-new window, the apps
  * button on the bar, and the swap button in a window's header. They used to be
@@ -19,17 +19,22 @@ import { libraryPrefsStore, resumeTarget } from '../stores/libraryPrefsStore';
 import { parallelStore } from '../stores/parallelStore';
 import { localDateStr } from '../stores/clockStore';
 import { showNotice } from '../stores/noticeStore';
+import { familyTreeStore } from '../stores/familyTreeStore';
 import { DEFAULT_TRANSLATION } from './bibleData';
 import type { PanelIconName } from '../components/icons/PanelIcon.svelte';
 
 /**
- * `harmony` is not a WindowContentType and never becomes one: it is the one
- * choice that does not fill a window. It opens the full-screen Harmonies view
- * instead, after asking which set.
+ * `harmony` and `tree` are not WindowContentTypes and never become ones: they
+ * are the two choices that do not fill a window. Harmony opens the full-screen
+ * Harmonies view, after asking which set; tree opens the whole family tree, the
+ * same viewer People's Family Tree button opens.
  */
 export type WindowChoice =
   | 'bible' | 'map' | 'timeline' | 'connections' | 'notes' | 'isbe' | 'person' | 'naves' | 'strongs'
-  | 'commentaries' | 'journal' | 'art' | 'harmony';
+  | 'commentaries' | 'journal' | 'art' | 'harmony' | 'tree';
+
+/** The choices that do fill a window. */
+export type WindowContentChoice = Exclude<WindowChoice, 'harmony' | 'tree'>;
 
 /**
  * The four shelves the list is sorted into, in the order you study a passage:
@@ -73,6 +78,8 @@ export const WINDOW_TYPES: WindowTypeInfo[] = [
   { type: 'map',          icon: 'map',          label: 'Map',          accent: '#61f1ff', group: 'see' },
   { type: 'timeline',     icon: 'timeline',     label: 'Timeline',     accent: '#f0c040', group: 'see' },
   { type: 'art',          icon: 'art',          label: 'Art',          accent: '#fb7185', group: 'see' },
+  // The green of the tree badge on People's rows.
+  { type: 'tree',         icon: 'tree',         label: 'Family Tree',  accent: '#22c55e', group: 'see' },
   { type: 'notes',        icon: 'notes',        label: 'Notes',        accent: '#fde047', group: 'mark' },
   { type: 'journal',      icon: 'journal',      label: 'Journal',      accent: '#f2893e', group: 'mark' },
 ];
@@ -84,7 +91,7 @@ export const WINDOW_TYPES_BY_GROUP = WINDOW_GROUPS.map((g) => ({
 }));
 
 /** What a window of this type starts out showing. */
-export function initialContentFor(type: Exclude<WindowChoice, 'harmony'>): Record<string, any> {
+export function initialContentFor(type: WindowContentChoice): Record<string, any> {
   if (type === 'bible') {
     // Genesis, so the Old Testament default when there is one.
     const translation =
@@ -136,6 +143,11 @@ export function initialContentFor(type: Exclude<WindowChoice, 'harmony'>): Recor
   return {};
 }
 
+/** The whole family tree, nobody picked — what People's header button opens. */
+export function openFamilyTree() {
+  familyTreeStore.open({ focusId: null });
+}
+
 /** The notice the edge swipe also gives at the cap. */
 export function showWindowLimitNotice() {
   showNotice(`Up to ${MAX_WINDOWS} windows. Close one to open another.`, 'info');
@@ -146,7 +158,7 @@ export function showWindowLimitNotice() {
  * in portrait, beside it in landscape. Harmonies isn't a window, so callers
  * send it to the set picker instead. Returns false at the window cap.
  */
-export function openWindowOfType(type: Exclude<WindowChoice, 'harmony'>): boolean {
+export function openWindowOfType(type: WindowContentChoice): boolean {
   // Worked out before the window exists: a commentary checks whether it is
   // the first one open, and the empty window doesn't count either way.
   const state = initialContentFor(type);
@@ -164,7 +176,7 @@ export function openWindowOfType(type: Exclude<WindowChoice, 'harmony'>): boolea
  * than merged in, so a map's center or a Bible's chapter doesn't ride along
  * into the new type.
  */
-export function swapWindowContent(windowId: string, type: Exclude<WindowChoice, 'harmony'>) {
+export function swapWindowContent(windowId: string, type: WindowContentChoice) {
   const win = get(windowStore).find((w) => w.id === windowId);
   if (!win || win.contentType === type) return;
   windowStore.replaceWindowContent(windowId, type as WindowContentType, initialContentFor(type));

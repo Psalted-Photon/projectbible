@@ -4,6 +4,7 @@
     WINDOW_TYPES_BY_GROUP,
     initialContentFor,
     openHarmonyView,
+    openFamilyTree,
     type WindowChoice,
     type HarmonyChoice,
   } from "../lib/windowTypes";
@@ -30,6 +31,12 @@
     // and openHarmony closes this window rather than filling it.
     if (contentType === 'harmony') {
       showHarmonyPicker = true;
+      return;
+    }
+    // The family tree is full-screen too, so this empty window goes with it.
+    if (contentType === 'tree') {
+      openFamilyTree();
+      windowStore.closeWindow(windowId);
       return;
     }
     windowStore.setWindowContent(windowId, contentType, initialContentFor(contentType));

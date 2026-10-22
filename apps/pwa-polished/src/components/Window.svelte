@@ -2,7 +2,7 @@
   import { ArrowLineLeft, ArrowLineUp, ArrowLineDown, ArrowLineRight } from "phosphor-svelte";
   import { windowStore, type WindowState, type WindowEdge } from "../lib/stores/windowStore";
   import { pendingCloseEdge } from "../stores/paneStore";
-  import { swapWindowContent, openHarmonyView, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
+  import { swapWindowContent, openHarmonyView, openFamilyTree, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
   import { onMount } from 'svelte';
   import WindowTypeMenu from "./WindowTypeMenu.svelte";
   import HarmonyPicker from "./HarmonyPicker.svelte";
@@ -65,6 +65,11 @@
     const type = e.detail;
     if (type === 'harmony') {
       showHarmonyPicker = true;
+      return;
+    }
+    // The tree opens over everything; this window keeps what it was showing.
+    if (type === 'tree') {
+      openFamilyTree();
       return;
     }
     swapWindowContent(window.id, type);

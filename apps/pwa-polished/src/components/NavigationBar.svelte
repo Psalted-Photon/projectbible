@@ -66,7 +66,7 @@
   import { checkupDot } from "../lib/packCheckup";
   import WindowTypeMenu from "./WindowTypeMenu.svelte";
   import HarmonyPicker from "./HarmonyPicker.svelte";
-  import { openWindowOfType, openHarmonyView, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
+  import { openWindowOfType, openHarmonyView, openFamilyTree, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
   import {
     sleepRemaining,
     stopAtChapterEnd,
@@ -209,6 +209,10 @@
     const type = e.detail;
     if (type === 'harmony') {
       showHarmonyPicker = true;
+      return;
+    }
+    if (type === 'tree') {
+      openFamilyTree();
       return;
     }
     openWindowOfType(type);

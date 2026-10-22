@@ -1,7 +1,7 @@
 <script lang="ts" context="module">
   export type PanelIconName =
     | 'bible' | 'map' | 'timeline' | 'connections' | 'commentary' | 'notes' | 'journal'
-    | 'encyclopedia' | 'topical' | 'people' | 'strongs' | 'art' | 'harmony';
+    | 'encyclopedia' | 'topical' | 'people' | 'strongs' | 'art' | 'harmony' | 'tree';
 
   /**
    * Line art drawn for the window picker — one entry per panel type, each a list
@@ -9,7 +9,7 @@
    * the library panes: no fills, stroke only, round caps and joins, so a single
    * drawing carries both the dark halo and the white line (see the markup).
    *
-   * The thirteen have to stay legible at 20px and, more importantly, tell each other
+   * The fourteen have to stay legible at 20px and, more importantly, tell each other
    * apart at 20px — hence three different book silhouettes rather than three
    * books: the Bible is open and spread, the journal is closed and clasped, the
    * encyclopedia is a shelf of volumes.
@@ -124,6 +124,15 @@
       'M5.6 8.6h3.4M14.8 8.6h3.4',
       'M5.6 12h3.4M14.8 12h3.4',
       'M5.6 15.4h3.4M14.8 15.4h3.4',
+    ],
+    // Phosphor's Tree, traced as lines: a cloud of a canopy, the trunk running
+    // up into it and a branch off each side — the same tree People's Family
+    // Tree button wears.
+    tree: [
+      'M12 16.9c-1.1.7-2.4 1.1-3.9 1.1-3.2-.1-5.8-2.8-5.8-6 0-2.4 1.5-4.5 3.6-5.4C6.8 4.1 9.2 2.3 12 2.3s5.2 1.8 6.1 4.3c2.1.9 3.6 3 3.6 5.4 0 3.2-2.6 5.9-5.8 6-1.5 0-2.8-.4-3.9-1.1',
+      'M12 8.3v13.4',
+      'M12 11.2l4.4-2.2',
+      'M12 13.9l-4.4-2.2',
     ],
   };
 </script>
