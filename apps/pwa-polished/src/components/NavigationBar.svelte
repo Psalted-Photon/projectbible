@@ -15,7 +15,7 @@
   import { askConfirm } from "../stores/confirmStore";
   import PackDropdownSection from "./PackDropdownSection.svelte";
   import { packInstallFinished } from "../adapters/db-manager";
-  import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
+  import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, bookTitle, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import { fadeAway, growFrom, reveal } from "../lib/motion";
   import {
@@ -2973,7 +2973,7 @@
                 <span class="expand-icon motion-caret" class:open={expandedBooks.has(book.name)}>
                   <CaretRight size={10} weight="bold" />
                 </span>
-                <span class="book-name">{book.name}</span>
+                <span class="book-name">{bookTitle(book.name)}</span>
               </button>
 
               {#if expandedBooks.has(book.name)}

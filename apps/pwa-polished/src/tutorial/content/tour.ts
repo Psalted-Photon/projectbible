@@ -213,10 +213,11 @@ export const PART_ONE: TourStep[] = [
       const section = document.querySelector<HTMLElement>(
         `.main-content .chapter-section[data-book="${CSS.escape(normalizeBookName(book))}"][data-chapter="${chapter}"]`,
       );
-      const header = section?.querySelector('.chapter-header h1');
-      if (!header) return null;
+      // Chapter 1 carries two headings: the book's name and "Chapter 1".
+      const headers = Array.from(section?.querySelectorAll('.chapter-header h1') ?? []);
+      if (!headers.length) return null;
       const numbers = Array.from(section!.querySelectorAll('.verse-number')).slice(0, 2);
-      return [header, ...numbers];
+      return [...headers, ...numbers];
     },
     pad: 10,
     passThrough: false,

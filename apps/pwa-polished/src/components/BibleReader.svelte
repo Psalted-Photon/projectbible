@@ -201,7 +201,7 @@
     hideHebrewPartSlashes,
   } from "../lib/verseRendering";
   import { parseRefString } from "../lib/parseRefString";
-  import { BIBLE_BOOKS, normalizeBookName, DEFAULT_TRANSLATION } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, bookTitle, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { getSettings, getInterlinearSettings, getTtsSettings, getNavBarPinned } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
   import { ttsCurrentVerse } from "../stores/audioStore";
@@ -7006,14 +7006,21 @@
         {@const chSoloRuns = showSoloMarking ? soloRunsIn(chapterData.book, chapterData.chapter) : []}
         <div class="chapter-section" class:flat-titles={!themedTitles} data-chapter-section data-book={chapterData.book} data-chapter={chapterData.chapter}>
           <div class="chapter-header">
-            <h1 style="--title-shadow:{getBookColor(chapterData.book)}">{chapterData.book} {chapterData.chapter}</h1>
+            {#if chapterData.chapter === 1}
+              <!-- A book opens with its own name, large, and "Chapter 1" under
+                   it at the usual heading size. Later chapters keep "Psalm 2". -->
+              <h1 class="book-title" style="--title-shadow:{getBookColor(chapterData.book)}">{bookTitle(chapterData.book)}</h1>
+              <h1 style="--title-shadow:{getBookColor(chapterData.book)}">Chapter 1</h1>
+            {:else}
+              <h1 style="--title-shadow:{getBookColor(chapterData.book)}">{chapterData.book} {chapterData.chapter}</h1>
+            {/if}
             <ReaderConnectionsStrip book={chapterData.book} chapter={chapterData.chapter} />
             {#if chapterData.chapter === 1}
               <div class="intro-row">
               <button
                 class="book-intro-btn"
                 on:click={() => openBookIntroPanel(chapterData.book)}
-                title="Introduction to {chapterData.book}"
+                title="Introduction to {bookTitle(chapterData.book)}"
               ><Info size={15} weight="bold" />Introduction</button>
               {#each (introPillsByBook.get(chapterData.book) ?? []) as rec (rec.word)}
                 <div class="intro-repeat-wrap">
@@ -7057,7 +7064,7 @@
                 <button
                   class="book-intro-info"
                   on:click={() => openBookIntroPanel(chapterData.book)}
-                  title="Introduction to {chapterData.book}"
+                  title="Introduction to {bookTitle(chapterData.book)}"
                   aria-label="Introduction to {chapterData.book}"
                 ><Info size={18} weight="bold" /></button>
               </div>
@@ -7431,6 +7438,12 @@
     font-weight: 600;
     color: var(--reader-text, #f0f0f0);
     text-shadow: -1.5px 1.5px 0 var(--title-shadow, transparent);
+  }
+
+  .chapter-header h1.book-title {
+    font-size: 2.4rem;
+    line-height: 1.15;
+    text-shadow: -2px 2px 0 var(--title-shadow, transparent);
   }
 
   .chapter-section.flat-titles .chapter-header h1 {
@@ -8249,6 +8262,10 @@
 
     .chapter-header h1 {
       font-size: 2rem;
+    }
+
+    .chapter-header h1.book-title {
+      font-size: 3.2rem;
     }
 
     .verse-number {

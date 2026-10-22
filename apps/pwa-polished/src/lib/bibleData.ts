@@ -121,6 +121,16 @@ export function normalizeBookName(book: string): string {
   return BOOK_NAME_ALIASES[book] ?? book;
 }
 
+/**
+ * The name of the whole book, for book lists and book titles. Each chapter is
+ * "a psalm" ("Psalm 2"), but the book is the collection, so it reads "Psalms".
+ * Display only: the canonical name stays "Psalm" everywhere it is stored.
+ */
+export function bookTitle(book: string): string {
+  const name = normalizeBookName(book);
+  return name === 'Psalm' ? 'Psalms' : name;
+}
+
 export interface ChapterRef {
   book: string;
   chapter: number;
