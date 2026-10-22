@@ -85,8 +85,8 @@ applyInitialSettings();
 // Initialize app with progressive loading
 async function initApp() {
   // Drawn first, so the wordmark is what a launch shows. It comes down once
-  // the app (or the first-launch download screen) is up and a full second has
-  // passed — see lib/launchSplash.ts.
+  // the app (or the first-launch download screen) is up and the iris has
+  // landed and held — see lib/launchSplash.ts.
   const splash = showLaunchSplash();
 
   console.log('🚀 Starting app initialization...');
@@ -155,8 +155,8 @@ async function initApp() {
       </div>
     `;
 
-    // The download screen is drawn; the splash can come down once its second
-    // is up, since this download can take a while.
+    // The download screen is drawn; the splash can come down once it has
+    // played, since this download can take a while.
     splash.dismiss();
 
     // Never throws: a device that could not get the text still reaches the

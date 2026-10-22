@@ -322,7 +322,9 @@
   </style>
 </head>
 <body>
-  <div id="loading">Loading irisBible...</div>
+  <!-- Empty on purpose: the launch splash is the only thing a launch shows.
+       startup.js writes a launch error in here. -->
+  <div id="loading"></div>
   <div id="app"></div>
   <!-- Launch error display and the CSP watcher. See public/startup.js. -->
   <script src="/startup.js"></script>
