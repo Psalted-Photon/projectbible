@@ -362,6 +362,8 @@
   let loadChapterTicket = 0;
   let lastScrollTop = 0;
   let scrollResetPending = false; // Consume the synthetic scroll event fired by our own scrollTo({top:0})
+  /** Past the landing's own 360ms re-check, so adding the chapter above cannot disturb it. */
+  const PRELOAD_PREVIOUS_MS = 500;
   // How far up the navbar travels to get out of the way. Slightly further than
   // the bar is tall, so its shadow clears the top edge too. The bar size
   // scales the bar, so it scales this too.
@@ -3082,9 +3084,20 @@
       await loadAndApplyHighlights(book, chapter);
       if (ticket !== loadChapterTicket) return; // overtaken while loading highlights
 
+      // Arrive with the next chapter already below. A line near the end of its
+      // chapter would otherwise land with nothing under it, and the next chapter
+      // only comes from a scroll event that the landing does not produce.
+      if (resetScroll) {
+        await loadNextChapter();
+        if (ticket !== loadChapterTicket) return; // overtaken while loading the next chapter
+      }
+
       if (resetScroll && readerElement) {
-        // Set flag BEFORE tick so any clamp-induced scroll event is consumed
-        scrollResetPending = true;
+        // Set flag BEFORE tick so any clamp-induced scroll event is consumed.
+        // Only when there is a scroll to undo: already at the top, the reset
+        // below fires nothing, and a flag left standing would swallow the
+        // scroll event of the landing instead.
+        scrollResetPending = readerElement.scrollTop > 0;
         dropAnchor(); // the line noted belongs to the page being replaced
         await tick(); // flush DOM so scrollHeight reflects the new single-chapter content
         lastScrollTop = 0;
@@ -3110,6 +3123,12 @@
         // this is what makes a link mark survive leaving and coming back, which
         // it never used to.
         reapplyVerseHighlights(readerElement, windowId);
+        // The chapter before comes last, once the landing has had time to
+        // correct itself: adding text above moves scrollTop, and the re-check
+        // in scrollToTarget would read that as the reader scrolling.
+        window.setTimeout(() => {
+          if (ticket === loadChapterTicket && !dragArmed) void loadPreviousChapter();
+        }, PRELOAD_PREVIOUS_MS);
       }
     } catch (err: unknown) {
       if (ticket !== loadChapterTicket) return; // a newer load owns the screen
@@ -3712,13 +3731,20 @@
   }
 
   // On large screens the entire chapter may fit in the viewport with no scrollbar,
-  // so scroll events never fire and loadNextChapter is never triggered.
+  // so scroll events never fire and loadNextChapter is never triggered. A
+  // landing near the end of a short run of chapters has the same problem: the
+  // page is as far down as it goes and nothing is left to scroll.
   // After a chapter loads (or after a next-chapter is appended), call this to
-  // proactively fill the viewport by loading additional chapters as needed.
+  // keep adding chapters until a full screen of text sits below the viewport.
+  // Measured against the actual screen, so it holds in any size or orientation.
   async function checkViewportFill() {
     if (!readerElement) return;
     await tick();
-    if (readerElement.scrollHeight <= readerElement.clientHeight + 200) {
+    // A load in progress calls this again when it finishes, once it has landed.
+    if (loading || !readerElement) return;
+    const below =
+      readerElement.scrollHeight - readerElement.scrollTop - readerElement.clientHeight;
+    if (below < readerElement.clientHeight) {
       loadNextChapter();
     }
   }
