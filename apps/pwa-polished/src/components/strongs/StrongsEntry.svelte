@@ -16,6 +16,7 @@
   import { navigationStore } from "../../stores/navigationStore";
   import { isOriginalLanguage, greekPartnerFor } from "../../lib/translationKind";
   import { parseOsisRef } from "../../lib/parseRefString";
+  import { getBookColor } from "../../lib/bibleData";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../../lib/morphologyExpander";
   import {
     languageColor,
@@ -209,10 +210,11 @@
       .replace(/<i>([\s\S]*?)<\/i>/gi, "<em>$1</em>")
       // Line breaks (various SWORD spellings)
       .replace(/<BR\s*\/>/gi, "<br>")
-      // Scripture refs → clickable buttons
+      // Scripture refs → clickable buttons, in their book's color
       .replace(
         /<ref='([^']+)'>([\s\S]*?)<\/ref>/gi,
-        '<button class="scripture-ref" data-ref="$1">$2</button>',
+        (_m, ref: string, label: string) =>
+          `<button class="scripture-ref" data-ref="${ref}" style="color:${refColor(ref)}">${label}</button>`,
       )
       // Numbered items: __ at start of a segment → indented block
       .replace(/(^|\n|<br>)__(\d+\.)/g, '$1<span class="strongs-item">$2</span> ')
@@ -221,6 +223,13 @@
       .split(/(<[^>]+>)/)
       .map((part) => (part.startsWith("<") ? part : linkNumbers(part)))
       .join("");
+  }
+
+  /** The book's category color for an OSIS ref. A list like "Heb.5.4; 7.11" is
+   *  colored by its first reference. */
+  function refColor(osisRef: string): string {
+    const parsed = parseOsisRef(osisRef.split(";")[0]);
+    return parsed ? getBookColor(parsed.book) : "var(--color-primary, #4a90e2)";
   }
 
   /**
