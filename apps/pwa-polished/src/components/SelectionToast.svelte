@@ -115,6 +115,12 @@
       </button>
     {/if}
 
+    {#if verseLocked || mode === 'verse'}
+      <button class="action-btn" on:click={() => handleAction('connections')}>
+        Connections
+      </button>
+    {/if}
+
     {#if singleWord}
       <button class="action-btn" on:click={() => handleAction('repeats')}>
         Repeats

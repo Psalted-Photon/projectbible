@@ -48,7 +48,7 @@ import {
   type Viewport,
 } from './layout';
 import { BOOK_RGB, bookIndexAt, rgbOf, type ConnectionsPalette } from './palette';
-import { inSpans, type FlightFrame, type Span } from './lights';
+import { linkTouches, litEvery, type FlightFrame, type Span } from './lights';
 import type { SetLayer } from './sets';
 
 /** Pan and zoom: the picture is scaled by `k` around the canvas centre and moved by x/y. */
@@ -270,7 +270,7 @@ const batchCache = new WeakMap<ConnectionsData, BatchCache>();
 /** A lit set as a comparable string, so a cache hit is a string compare. */
 function litKeyOf(lit: Span[] | undefined): string {
   if (!lit?.length) return '';
-  return lit.map((s) => `${s.start}-${s.end}`).join(',');
+  return lit.map((s) => `${s.start}-${s.end}${s.every ? 'e' : ''}`).join(',');
 }
 
 function batchesFor(
@@ -292,21 +292,24 @@ function batchesFor(
   }
 
   const starts = bookStarts(data);
-  const { order, skipped: culled } = orderFor(data, config);
+  // A verse sent over from the reader shows every link it has, so the vote
+  // floor and the arc limit are set aside and each link is looked at in turn.
+  const every = litEvery(spans);
+  const { order, skipped: culled } = every ? { order: null, skipped: 0 } : orderFor(data, config);
   let skipped = culled;
   let lo = Infinity;
   let hi = -Infinity;
 
   const batches = new Map<number, Batch>();
   const mask = sets?.mask ?? null;
-  const total = order.length;
+  const total = order ? order.length : data.count;
   for (let n = 0; n < total; n++) {
-    const i = order[n];
+    const i = order ? order[n] : n;
     const from = data.from[i];
     const to = data.toStart[i];
     // An arc counts as lit if either foot is in the lit set, so a tapped book
     // shows what it reaches and what reaches it. Unlit arcs are not drawn.
-    if (!(inSpans(spans, from) || inSpans(spans, to))) {
+    if (!linkTouches(spans, from, to, data.toEnd[i])) {
       skipped++;
       continue;
     }

@@ -188,6 +188,7 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
       { kind: 'action', id: 'notes', label: 'Notes', icon: 'notes', accent: '#d1e3f5' },
       { kind: 'action', id: 'share', label: 'Share', icon: 'share', accent: '#7dd3fc' },
       { kind: 'action', id: 'translation', label: 'Translation', icon: 'translation', accent: '#e879f9' },
+      { kind: 'action', id: 'connections', label: 'Connections', icon: 'connections', accent: '#a3e635' },
       {
         kind: 'action',
         id: 'extend',
@@ -223,6 +224,11 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
   actions.push({ kind: 'action', id: 'highlight', label: 'Highlight', icon: 'highlight', accent: '#fde047' });
   actions.push({ kind: 'action', id: 'notes', label: 'Notes', icon: 'notes', accent: '#d1e3f5' });
   actions.push({ kind: 'action', id: 'share', label: 'Share', icon: 'share', accent: '#7dd3fc' });
+  // A verse's connections, so only once the whole verse is selected. A word or
+  // a phrase has none of its own to show.
+  if (o.mode === 'verse') {
+    actions.push({ kind: 'action', id: 'connections', label: 'Connections', icon: 'connections', accent: '#a3e635' });
+  }
   if (singleWord) {
     actions.push({ kind: 'action', id: 'repeats', label: 'Repeats', icon: 'repeats', accent: '#a78bfa' });
   }

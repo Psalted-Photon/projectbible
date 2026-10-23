@@ -97,6 +97,15 @@ export const SELECTION_TIPS: Tip[] = [
     body: 'Copy or send the verse, with its translation and a link back to it.',
   },
   {
+    id: 'ring-connections',
+    area,
+    target: BUTTONS,
+    text: 'Connections',
+    needs: 'connections',
+    title: 'Connections',
+    body: 'Only on a whole verse. Opens Connections showing every arc that leaves this verse or lands on it. Select several verses and they show together.',
+  },
+  {
     id: 'ring-repeats',
     area,
     target: BUTTONS,

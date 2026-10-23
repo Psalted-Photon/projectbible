@@ -12,6 +12,7 @@
   import SpeakerHigh from 'phosphor-svelte/lib/SpeakerHigh';
   import ShareNetwork from 'phosphor-svelte/lib/ShareNetwork';
   import Translate from 'phosphor-svelte/lib/Translate';
+  import Rainbow from 'phosphor-svelte/lib/Rainbow';
   import {
     BADGE,
     ringRadius,
@@ -99,6 +100,7 @@
     extend: ArrowsOutLineHorizontal,
     speak: SpeakerHigh,
     translation: Translate,
+    connections: Rainbow,
   };
 
   // The sweep runs in list order, which seatAngles already returns as one

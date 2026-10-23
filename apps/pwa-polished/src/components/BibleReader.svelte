@@ -188,6 +188,8 @@
   import * as parallelSync from "../lib/parallelSync";
   import { soloRunsIn, segmentBySoloRuns } from "../lib/parallelIndex";
   import { openMapWindow } from "../lib/openMapWindow";
+  import { openConnectionsWindow } from "../lib/openConnectionsWindow";
+  import { toEnglish } from "../lib/versification";
   import { searchQuery, triggerSearch } from "../stores/searchStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
@@ -6281,6 +6283,33 @@
         showToast = false;
         extendArmed = false;
         return;
+      case "connections": {
+        // Only the whole-verse rings offer this. A verse-number tap holds its
+        // verses in the segments; a word turned to Verse holds just its own.
+        if (!verseSel && selectionMode !== 'verse') break;
+        const readerVerses =
+          selectionMode === 'verse'
+            ? selectedVerseNumber !== null
+              ? [selectedVerseNumber]
+              : []
+            : [...new Set(selectedSegments.map(s => s.verse))];
+        // Connections are counted in English numbering, which this translation
+        // may not share: Hebrew Malachi 3:19 is English 4:1.
+        const englishRefs = readerVerses.map(verse => {
+          const mapped = toEnglish(currentTranslation, { book: currentBook, chapter: currentChapter, verse });
+          return mapped.find(r => r.part !== 'title') ?? mapped[0] ?? { book: currentBook, chapter: currentChapter, verse };
+        });
+        if (englishRefs.length === 0) break;
+        // A rare selection runs across two English chapters (Hebrew Numbers 17
+        // starts in English 16): it goes with the chapter of the first verse.
+        const englishChapter = englishRefs[0].chapter;
+        const sent = englishRefs.filter(r => r.chapter === englishChapter).map(r => r.verse);
+        // Left open if the six-window cap turned us down, so the tap visibly
+        // did nothing rather than quietly dismissing the menu for nothing.
+        if (!openConnectionsWindow(currentBook, englishChapter, sent)) return;
+        showToast = false;
+        break;
+      }
       case "repeats":
         toggleRepeats(text);
         break;

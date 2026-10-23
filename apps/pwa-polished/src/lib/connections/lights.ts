@@ -30,6 +30,13 @@ import type { ConnectionsData } from './data';
 export interface Span {
   start: number;
   end: number;
+  /**
+   * Show every connection this stretch has. The vote floor and arc limit are
+   * set aside, and a link aimed at a stretch that runs through it counts, not
+   * only one that starts in it. For a verse sent over from the reader, where
+   * a missing arc reads as a missing connection.
+   */
+  every?: boolean;
 }
 
 /** What is lit, and when its volley was loosed. */
@@ -85,6 +92,26 @@ export function inSpans(spans: Span[] | undefined, position: number): boolean {
   if (!spans?.length) return true;
   for (let i = 0; i < spans.length; i++) {
     if (position >= spans[i].start && position < spans[i].end) return true;
+  }
+  return false;
+}
+
+/** Is everything lit marked to show every connection? */
+export function litEvery(spans: Span[] | undefined): boolean {
+  return !!spans?.length && spans.every((s) => s.every);
+}
+
+/**
+ * Does a link touch the lit spans? Either foot in one will do. A target
+ * stretch (`toStart` to `toEnd`) counts as a foot only where the span is
+ * marked `every`; elsewhere it is its first verse, as it always has been.
+ */
+export function linkTouches(spans: Span[] | undefined, from: number, toStart: number, toEnd: number): boolean {
+  if (!spans?.length) return true;
+  for (let i = 0; i < spans.length; i++) {
+    const s = spans[i];
+    if (from >= s.start && from < s.end) return true;
+    if (s.every ? toStart < s.end && toEnd >= s.start : toStart >= s.start && toStart < s.end) return true;
   }
   return false;
 }
@@ -164,7 +191,7 @@ export function countReach(data: ConnectionsData, span: Span): { out: number; in
     const f = data.from[i];
     const t = data.toStart[i];
     if (f >= span.start && f < span.end) out++;
-    if (t >= span.start && t < span.end) incoming++;
+    if (span.every ? t < span.end && data.toEnd[i] >= span.start : t >= span.start && t < span.end) incoming++;
   }
   return { out, in: incoming };
 }

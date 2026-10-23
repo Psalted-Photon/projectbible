@@ -577,6 +577,61 @@
     };
   }
 
+  /**
+   * Light verses of one chapter, with their card. The reader sends these when
+   * verses are selected there. Each stretch is marked to show every connection,
+   * so none is lost to the vote floor or the arc limit; verses that touch join
+   * into one stretch, and a gap stays a gap. Verses the chapter does not have
+   * are dropped, and with none left the whole chapter is lit instead.
+   */
+  function lightVerses(book: string, chapter: number, verses: number[]) {
+    const whole = chapterSpan(book, chapter);
+    if (!whole || !data) return;
+    const picked = [...new Set(verses)]
+      .filter((v) => Number.isInteger(v) && v >= 1 && whole.start + v - 1 < whole.end)
+      .sort((a, b) => a - b);
+    if (!picked.length) {
+      lightChapter(book, chapter);
+      return;
+    }
+
+    const runs: number[][] = [];
+    for (const v of picked) {
+      const run = runs[runs.length - 1];
+      if (run && run[run.length - 1] === v - 1) run.push(v);
+      else runs.push([v]);
+    }
+    const spans: Span[] = runs.map((run) => ({
+      start: whole.start + run[0] - 1,
+      end: whole.start + run[run.length - 1],
+      every: true,
+    }));
+
+    // Sets showing would hide every arc that touches none of them.
+    if (shown.length) setShown([], false);
+    pickedBook = '';
+    light(spans);
+
+    let out = 0;
+    let incoming = 0;
+    for (const span of spans) {
+      const reach = countReach(data, span);
+      out += reach.out;
+      incoming += reach.in;
+    }
+    const title = `${book} ${chapter}:${runs
+      .map((run) => (run.length === 1 ? `${run[0]}` : `${run[0]}–${run[run.length - 1]}`))
+      .join(', ')}`;
+    card = {
+      kind: 'span',
+      title,
+      meta: out + incoming === 0 ? 'No connections' : reachMeta({ out, in: incoming }),
+      open: { book, chapter, verse: picked[0] },
+      label: title,
+      items: itemsOf(spans),
+    };
+  }
+
   /** The first verse of the chapter under a screen point, or null off the line. */
   function positionAt(at: { x: number; y: number }): number | null {
     if (!data) return null;
@@ -1827,15 +1882,20 @@
   // ===== A chapter sent from the reader strip =====
 
   /**
-   * openConnectionsWindow drops a chapter here. It is taken once the data is
-   * in and the saved view restored: the Arcs tab, the whole Bible in view, no
-   * opening volley, and the chapter lit with its card, the same as a tap on
-   * its bar. Then it is cleared, so a reload does not send it again.
+   * openConnectionsWindow drops a chapter here, or verses of one. It is taken
+   * once the data is in and the saved view restored: the Arcs tab, the whole
+   * Bible in view, no opening volley, and the chapter lit with its card, the
+   * same as a tap on its bar. Verses are lit the same way, with every
+   * connection they have. Then it is cleared, so a reload does not send it
+   * again.
    */
-  $: handoff = windowState?.contentState?.target as { seq?: unknown; book?: unknown; chapter?: unknown } | null | undefined;
+  $: handoff = windowState?.contentState?.target as
+    | { seq?: unknown; book?: unknown; chapter?: unknown; verses?: unknown }
+    | null
+    | undefined;
   $: if (handoff && data && !loading) takeHandoff(handoff);
 
-  function takeHandoff(target: { book?: unknown; chapter?: unknown }) {
+  function takeHandoff(target: { book?: unknown; chapter?: unknown; verses?: unknown }) {
     remember({ target: null });
     if (typeof target.book !== 'string' || typeof target.chapter !== 'number') return;
     if (tab !== 'arcs') setTab('arcs');
@@ -1844,7 +1904,9 @@
     rangeFrom = null;
     view = { x: 0, y: 0, k: 1 };
     remember({ view: { ...view } });
-    lightChapter(target.book, target.chapter);
+    const verses = Array.isArray(target.verses) ? target.verses.filter((v): v is number => typeof v === 'number') : [];
+    if (verses.length) lightVerses(target.book, target.chapter, verses);
+    else lightChapter(target.book, target.chapter);
   }
 
   // ===== Loading =====

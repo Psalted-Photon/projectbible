@@ -223,6 +223,7 @@ A window that draws every cross-reference in the Bible at once: 344,799 links fr
 - **Save as image** — any tab as a large picture with its title and the irisBible mark, to save or share.
 - **Black or cream** behind the picture, whatever the theme. Pan, zoom, and full screen too.
 - **Connections strip in the reader** — under each chapter title, a thin line of the whole Bible with an arc to everywhere that chapter reaches. Tap it to open the Arcs tab with that chapter already lit. It shows only when the pack is installed, and Settings has a switch to turn it off.
+- **Connections button on a selected verse** — select a whole verse (tap its number, or tap a word and choose Verse) and the ring has a Connections button. It opens the Arcs tab with only that verse lit, showing every arc that leaves it or lands on it, whatever their votes. Select several verses and they light together.
 
 ## 9. Search
 
