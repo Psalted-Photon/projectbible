@@ -161,6 +161,39 @@ export function cleanOffsetOf(
   return found.at < 0 ? null : { offset: found.at, text };
 }
 
+/**
+ * The other way round from cleanOffsetOf, read off the same markup: each run
+ * of the verse's clean text, with where it starts there (`clean`) and in the
+ * element's textContent (`dom`). Notes and plural markers have no run.
+ */
+export function domPiecesOfClean(verseTextEl: Element): { clean: number; dom: number; length: number }[] {
+  const pieces: { clean: number; dom: number; length: number }[] = [];
+  let clean = 0;
+  let dom = 0;
+  const walk = (n: Node) => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      const length = n.nodeValue?.length ?? 0;
+      pieces.push({ clean, dom, length });
+      clean += length;
+      dom += length;
+      return;
+    }
+    if (!(n instanceof Element)) return;
+    if (n.classList.contains('inline-note')) {
+      dom += n.textContent?.length ?? 0;
+      return;
+    }
+    if (n.classList.contains('plural-marker')) {
+      dom += n.textContent?.length ?? 0;
+      clean += 1;
+      return;
+    }
+    n.childNodes.forEach(walk);
+  };
+  walk(verseTextEl);
+  return pieces;
+}
+
 /** The Strong's numbers tagged in one verse of an original-language text. */
 function verseNumbers(source: string, book: string, chapter: number, verse: number): Promise<string[]> {
   return readTransaction<{ strongsId?: string }[]>('morphology', (store) =>

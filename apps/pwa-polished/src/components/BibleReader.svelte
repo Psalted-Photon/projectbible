@@ -117,7 +117,7 @@
   import { applyChapterHighlights } from "../lib/highlightRenderer";
   import { isTextEntry } from "../lib/isTextEntry";
   import { openStrongsWord } from "../lib/openWork";
-  import { displayId, glossFor } from "../lib/strongs/entry";
+  import { classicId, displayId, glossFor } from "../lib/strongs/entry";
   import { cleanOffsetOf, originalAt } from "../lib/wordLinks";
   import { companionChapterLines, verseAtEnglishRef } from "../lib/companion";
   import { isOriginalLanguage, isHebrewText as isHebrewTranslation, isEnglishTranslation } from "../lib/translationKind";
@@ -148,7 +148,14 @@
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import { applyRepeatsToSection, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
-  import { crossPlanKey, hasCrossRepeats, originalChapterPlan, paintOriginalPlan, type CrossPlan } from "../lib/repeatCrossover";
+  import {
+    crossPlanKey,
+    englishChapterPlan,
+    hasCrossRepeats,
+    originalChapterPlan,
+    paintCrossPlan,
+    type CrossPlan,
+  } from "../lib/repeatCrossover";
   import { applyPlaceMarkersToAllSections, loadPlacePhrases } from "../lib/placeMarkerRenderer";
   import { repeatCountsStore } from "../stores/repeatCountsStore";
   import { countWordsInBook } from "../lib/repeatCounts";
@@ -5681,8 +5688,14 @@
 
   // Toggle a word in the persistent, global Repeats overlay. The reactive
   // statement on $repeatsStore re-applies the in-text highlights everywhere.
+  // A Greek or Hebrew word brings its number, so it can light its other forms
+  // and the English that translates it (repeatCrossover.ts).
   function toggleRepeats(word: string) {
-    repeatsStore.toggle(word, { translation: currentTranslation });
+    const strongs =
+      isOriginalLanguage(currentTranslation) && selectedMorphology?.strongsId
+        ? classicId(selectedMorphology.strongsId)
+        : undefined;
+    repeatsStore.toggle(word, strongs ? { translation: currentTranslation, strongs } : { translation: currentTranslation });
   }
 
   // Re-paint repeat highlights (and, on top, place markers) across all rendered
@@ -5724,30 +5737,34 @@
     applyRepeatsToSection(section, groups);
     const book = section.dataset.book;
     const chapter = Number(section.dataset.chapter);
-    if (!book || !chapter || !isOriginalLanguage(currentTranslation)) return;
+    if (!book || !chapter) return;
     const plan = crossPlans.get(crossPlanFor(book, chapter, groups));
     if (!plan?.size) return;
-    paintOriginalPlan(
-      section,
-      (verse) => plan.get(verse),
-      (verseText, verse, index, text) =>
-        findMorphologyForClick(morphologyForVerse(verseText, verse), index, text, isIndexedPack, true)?.strongsId ?? null,
+    paintCrossPlan(section, plan, (verseText, verse, index, text) =>
+      findMorphologyForClick(morphologyForVerse(verseText, verse), index, text, isIndexedPack, true)?.strongsId ?? null,
     );
   }
 
   /** Work out the plans the rendered chapters lack. True when any new one came in. */
   async function loadCrossPlans(groups: RepeatGroup[]): Promise<boolean> {
-    if (!isOriginalLanguage(currentTranslation) || !hasCrossRepeats(groups)) return false;
     const translation = currentTranslation;
+    const original = isOriginalLanguage(translation);
+    if (!hasCrossRepeats(groups, original)) return false;
     let added = false;
     for (const c of chapters) {
       const key = crossPlanFor(c.book, c.chapter, groups);
       if (crossPlans.has(key)) continue;
-      // Plain text finds each word's number in the chapter's word data.
-      if (!morphologyCache.has(morphChapterKey(translation, c.book, c.chapter))) {
-        await fetchChapterMorphology(translation, c.book, c.chapter);
+      const verses = c.verses.map((v) => v.verse);
+      let plan: CrossPlan;
+      if (original) {
+        // Plain text finds each word's number in the chapter's word data.
+        if (!morphologyCache.has(morphChapterKey(translation, c.book, c.chapter))) {
+          await fetchChapterMorphology(translation, c.book, c.chapter);
+        }
+        plan = await originalChapterPlan(translation, c.book, c.chapter, verses, groups);
+      } else {
+        plan = await englishChapterPlan(translation, c.book, c.chapter, verses, groups);
       }
-      const plan = await originalChapterPlan(translation, c.book, c.chapter, c.verses.map((v) => v.verse), groups);
       if (translation !== currentTranslation) return false;
       crossPlans.set(key, plan);
       if (crossPlans.size > CROSS_PLAN_CACHE) crossPlans.delete(crossPlans.keys().next().value!);

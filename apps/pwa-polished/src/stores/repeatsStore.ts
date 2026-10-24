@@ -23,20 +23,33 @@ export interface RepeatGroup {
    * (repeatCrossover.ts). Older Repeats have none and read as NET.
    */
   translation?: string;
+  /**
+   * A Greek or Hebrew Repeat's Strong's number (classic, G0225). It lights
+   * every form of the word in the original, and the English its Word Links
+   * tie to it.
+   */
+  strongs?: string;
 }
 
 /** Where a Repeat came from, when it is made. */
 export interface RepeatOrigin {
   translation?: string;
+  strongs?: string;
 }
 
 const REPEATS_STORAGE_KEY = 'projectbible_repeats';
 
-/** Normalize a word for repeat matching — mirrors the in-text match logic. */
+/**
+ * Normalize a word for repeat matching — mirrors the in-text match logic.
+ * Letters of every script are kept and accents dropped, so a Greek or Hebrew
+ * word matches its own spelling: ἀληθείᾳ and ἀληθεία are both αληθεια.
+ */
 export function normalizeRepeatWord(word: string): string {
   return word
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
     .toLowerCase()
-    .replace(/[^\w\s]/g, '')
+    .replace(/[^\p{L}\p{N}_\s]/gu, '')
     .trim();
 }
 

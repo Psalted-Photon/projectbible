@@ -352,9 +352,12 @@ async function restoreHighlights(data: BackupData): Promise<PartResult> {
     });
     marksTaken.add(verseKey(row));
   }
-  for (const group of list<{ label?: unknown; translation?: unknown }>(data.repeats)) {
+  for (const group of list<{ label?: unknown; translation?: unknown; strongs?: unknown }>(data.repeats)) {
     if (typeof group?.label !== 'string') continue;
-    repeatsStore.add(group.label, typeof group.translation === 'string' ? { translation: group.translation } : {});
+    repeatsStore.add(group.label, {
+      ...(typeof group.translation === 'string' ? { translation: group.translation } : {}),
+      ...(typeof group.strongs === 'string' ? { strongs: group.strongs } : {}),
+    });
   }
 
   return result;
