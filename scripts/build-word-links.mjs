@@ -19,7 +19,9 @@
  *   (WEB Genesis 1:1 tags "In" as heaven). A tag is kept only when its number
  *   is in that verse's Greek (BYZ for WEB, SBLGNT for NET) or Hebrew, and the
  *   English word is one that number can mean. A number whose tags all fail
- *   gets a link only when its meaning matches exactly one word in the verse.
+ *   gets a link only when its meaning matches exactly one word in the verse,
+ *   or as many words as the Greek or Hebrew uses it (3 John 1:3's two
+ *   "truth"s for its two G0225s).
  *
  * Offsets are measured on the verse's clean text exactly as the app measures
  * it (scripts/lib/clean-text.mjs), and each source is checked against the
@@ -459,12 +461,10 @@ function originalNumbers(path, translationId) {
   const out = new Map();
   for (const r of db.prepare('SELECT book, chapter, verse, strongs FROM words WHERE translation_id = ?').iterate(translationId)) {
     const k = verseKey(r.book, r.chapter, r.verse);
-    let set = out.get(k);
-    if (!set) out.set(k, (set = new Set()));
-    for (const part of (r.strongs ?? '').split(/[\s,+/]+/)) {
-      const id = classicId(part);
-      if (id) set.add(id);
-    }
+    let counts = out.get(k);
+    if (!counts) out.set(k, (counts = new Map()));
+    const ids = new Set((r.strongs ?? '').split(/[\s,+/]+/).map(classicId).filter(Boolean));
+    for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   db.close();
   return out;
@@ -567,10 +567,18 @@ function filterTags(entries, { scheme, greek }) {
   for (const v of entries) {
     const ref = { book: v.book, chapter: v.chapter, verse: v.verse };
     const english = toEnglish(scheme, ref);
-    const inVerse = new Set();
+    // Each number in the Greek or Hebrew, with how many words use it.
+    const inVerse = new Map();
+    const seen = new Set();
+    const tally = (words, lang, r) => {
+      const k = verseKey(r.book, r.chapter, r.verse);
+      if (seen.has(`${lang}|${k}`)) return;
+      seen.add(`${lang}|${k}`);
+      for (const [id, n] of words.get(k) ?? []) inVerse.set(id, (inVerse.get(id) ?? 0) + n);
+    };
     for (const e of english) {
-      for (const h of fromEnglish('hebrew', e)) for (const id of hebrew.get(verseKey(h.book, h.chapter, h.verse)) ?? []) inVerse.add(id);
-      for (const g of fromEnglish(greek.scheme, e)) for (const id of greekWords.get(verseKey(g.book, g.chapter, g.verse)) ?? []) inVerse.add(id);
+      for (const h of fromEnglish('hebrew', e)) tally(hebrew, 'hebrew', h);
+      for (const g of fromEnglish(greek.scheme, e)) tally(greekWords, 'greek', g);
     }
     const kjvHere = new Map();
     for (const e of english) {
@@ -598,20 +606,28 @@ function filterTags(entries, { scheme, greek }) {
     }
 
     // Numbers with no link left: one only when its meaning matches exactly
-    // one word in the verse, and no other number claims that word.
+    // one word in the verse, or exactly as many words as the original uses
+    // the number, and no other number claims those words. Two one-word
+    // claims on the same word both lose; a several-word claim gives way to
+    // any other claim it touches, all its words together.
     const linked = new Set(links.flatMap((l) => l.ids.split('+')));
     const claims = [];
-    for (const id of inVerse) {
+    for (const [id, count] of inVerse) {
       if (linked.has(id) || NEVER_MARKED.has(id)) continue;
       const spans = meaningSpans(v.text, patternOf(id), kjvHere.get(id));
-      if (spans.length !== 1) continue;
-      if (links.some((l) => overlaps(l, spans[0]))) continue;
-      claims.push({ ...spans[0], ids: id });
+      if (spans.length !== 1 && spans.length !== count) continue;
+      if (spans.some((sp) => links.some((l) => overlaps(l, sp)))) continue;
+      claims.push({ id, spans });
     }
+    const contested = (c, others) =>
+      others.some((o) => o !== c && o.spans.some((a) => c.spans.some((b) => overlaps(a, b))));
+    const singles = claims.filter((c) => c.spans.length === 1);
     for (const c of claims) {
-      if (claims.some((o) => o !== c && overlaps(o, c))) continue;
-      links.push(c);
-      added.push({ where, id: c.ids, word: v.text.slice(c.s, c.e) });
+      if (c.spans.length === 1 ? contested(c, singles) : contested(c, claims)) continue;
+      for (const sp of c.spans) {
+        links.push({ ...sp, ids: c.id });
+        added.push({ where, id: c.id, word: v.text.slice(sp.s, sp.e) });
+      }
     }
 
     if (links.length) rows.push({ book: v.book, chapter: v.chapter, verse: v.verse, links: mergeSpans(links) });
@@ -624,7 +640,7 @@ function filterTags(entries, { scheme, greek }) {
   console.log(`  never marked:         ${dropped.stop.length.toLocaleString()} (the article, "and", the object marker)`);
   console.log(`  not in the verse:     ${dropped.notInVerse.length.toLocaleString()} (number missing from the Greek or Hebrew)`);
   console.log(`  wrong meaning:        ${dropped.meaning.length.toLocaleString()} (English word isn't one the number means)`);
-  console.log(`Added by meaning:       ${added.length.toLocaleString()} (one clear match in the verse)`);
+  console.log(`Added by meaning:       ${added.length.toLocaleString()} (one clear match in the verse, or one per use in the original)`);
   const show = (title, list) => {
     console.log(`\n${title}:`);
     for (const x of sample(list, 20)) console.log(`  ${x.where.padEnd(22)} ${x.id}  "${x.word}"`);
