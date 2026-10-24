@@ -352,8 +352,9 @@ async function restoreHighlights(data: BackupData): Promise<PartResult> {
     });
     marksTaken.add(verseKey(row));
   }
-  for (const group of list<{ label?: unknown }>(data.repeats)) {
-    if (typeof group?.label === 'string') repeatsStore.add(group.label);
+  for (const group of list<{ label?: unknown; translation?: unknown }>(data.repeats)) {
+    if (typeof group?.label !== 'string') continue;
+    repeatsStore.add(group.label, typeof group.translation === 'string' ? { translation: group.translation } : {});
   }
 
   return result;

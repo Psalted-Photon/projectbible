@@ -17,6 +17,17 @@ export interface RepeatGroup {
   label: string;
   /** Index into REPEAT_COLORS. */
   colorIndex: number;
+  /**
+   * The translation the word was marked in. An English Repeat lights the
+   * Greek or Hebrew behind the word as this translation's Word Links read it
+   * (repeatCrossover.ts). Older Repeats have none and read as NET.
+   */
+  translation?: string;
+}
+
+/** Where a Repeat came from, when it is made. */
+export interface RepeatOrigin {
+  translation?: string;
 }
 
 const REPEATS_STORAGE_KEY = 'projectbible_repeats';
@@ -76,14 +87,14 @@ function createRepeatsStore() {
     subscribe,
 
     /** Add a word (no-op if already present or at capacity). Returns the new group or null. */
-    add(rawWord: string): RepeatGroup | null {
+    add(rawWord: string, origin: RepeatOrigin = {}): RepeatGroup | null {
       const word = normalizeRepeatWord(rawWord);
       if (!word) return null;
       let added: RepeatGroup | null = null;
       update((groups) => {
         if (groups.some((g) => g.word === word)) return groups;
         if (groups.length >= MAX_REPEAT_GROUPS) return groups;
-        added = { word, label: rawWord.trim(), colorIndex: nextFreeColorIndex(groups) };
+        added = { word, label: rawWord.trim(), colorIndex: nextFreeColorIndex(groups), ...origin };
         const next = [...groups, added];
         persist(next);
         return next;
@@ -92,7 +103,7 @@ function createRepeatsStore() {
     },
 
     /** Toggle a word on/off — used by the selection toast "Repeats" action. */
-    toggle(rawWord: string): void {
+    toggle(rawWord: string, origin: RepeatOrigin = {}): void {
       const word = normalizeRepeatWord(rawWord);
       if (!word) return;
       update((groups) => {
@@ -102,7 +113,7 @@ function createRepeatsStore() {
           next = groups.filter((g) => g.word !== word);
         } else {
           if (groups.length >= MAX_REPEAT_GROUPS) return groups;
-          next = [...groups, { word, label: rawWord.trim(), colorIndex: nextFreeColorIndex(groups) }];
+          next = [...groups, { word, label: rawWord.trim(), colorIndex: nextFreeColorIndex(groups), ...origin }];
         }
         persist(next);
         return next;

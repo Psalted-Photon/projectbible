@@ -147,7 +147,8 @@
   import type { RepeatGroup } from "../stores/repeatsStore";
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightAllRequest } from "../stores/repeatBulkStore";
-  import { applyRepeatsToSection, applyRepeatsToAllSections, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
+  import { applyRepeatsToSection, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
+  import { crossPlanKey, hasCrossRepeats, originalChapterPlan, paintOriginalPlan, type CrossPlan } from "../lib/repeatCrossover";
   import { applyPlaceMarkersToAllSections, loadPlacePhrases } from "../lib/placeMarkerRenderer";
   import { repeatCountsStore } from "../stores/repeatCountsStore";
   import { countWordsInBook } from "../lib/repeatCounts";
@@ -2746,9 +2747,11 @@
     clickedIndex: number,
     clickedText: string,
     isIndexed: boolean,
+    // Repeats look up every word in a chapter; only taps are worth logging.
+    quiet = false,
   ): DBMorphology | null {
     if (!verseMorphs || verseMorphs.length === 0) {
-      if (DEBUG_MORPHOLOGY) morphStats.misses++;
+      if (DEBUG_MORPHOLOGY && !quiet) morphStats.misses++;
       return null;
     }
 
@@ -2776,7 +2779,7 @@
         if (directOk || compoundOk) {
           morphStats.hits++;
           morphStats.indexMatches++;
-          if (DEBUG_MORPHOLOGY) {
+          if (DEBUG_MORPHOLOGY && !quiet) {
             console.log(
               `✅ Morphology match by word_index: ${clickedIndex}`,
               byIndex,
@@ -2784,7 +2787,7 @@
           }
           return byIndex;
         }
-        if (DEBUG_MORPHOLOGY) {
+        if (DEBUG_MORPHOLOGY && !quiet) {
           console.log(
             `⚠️ word_index ${clickedIndex} text mismatch: entry="${byIndex.text}" clicked="${clickedText}" — falling through to text fallbacks`,
           );
@@ -2797,7 +2800,7 @@
     if (byText) {
       morphStats.hits++;
       morphStats.textFallback++;
-      if (DEBUG_MORPHOLOGY) {
+      if (DEBUG_MORPHOLOGY && !quiet) {
         console.log(`✅ Morphology match by text: "${clickedText}"`, byText);
       }
       return byText;
@@ -2813,7 +2816,7 @@
     if (byText) {
       morphStats.hits++;
       morphStats.textFallback++;
-      if (DEBUG_MORPHOLOGY) {
+      if (DEBUG_MORPHOLOGY && !quiet) {
         console.log(
           `✅ Morphology match by normalized text: "${clickedText}" → "${normClicked}"`,
           byText,
@@ -2835,7 +2838,7 @@
     if (byText) {
       morphStats.hits++;
       morphStats.textFallback++;
-      if (DEBUG_MORPHOLOGY) {
+      if (DEBUG_MORPHOLOGY && !quiet) {
         console.log(
           `✅ Morphology match by compound part: "${clickedText}" in "${byText.text}"`,
           byText,
@@ -2845,7 +2848,7 @@
     }
 
     morphStats.misses++;
-    if (DEBUG_MORPHOLOGY) {
+    if (DEBUG_MORPHOLOGY && !quiet) {
       console.log(
         `❌ No morphology match for index ${clickedIndex}, text "${clickedText}", normalized "${normClicked}"`,
       );
@@ -3251,7 +3254,7 @@
         // re-apply the repeats overlay on top.
         clearRepeatsInSection(section);
         applyChapterHighlights(section, vHl, wHl, currentTranslation);
-        applyRepeatsToSection(section, get(repeatsStore));
+        paintRepeatsIn(section, get(repeatsStore));
       }
       // Derive book-intro pills from the (now-synced) highlights.
       await refreshBookIntroPills();
@@ -5679,24 +5682,88 @@
   // Toggle a word in the persistent, global Repeats overlay. The reactive
   // statement on $repeatsStore re-applies the in-text highlights everywhere.
   function toggleRepeats(word: string) {
-    repeatsStore.toggle(word);
+    repeatsStore.toggle(word, { translation: currentTranslation });
   }
 
   // Re-paint repeat highlights (and, on top, place markers) across all rendered
   // chapter sections. Called reactively whenever the repeats store, the place-marker
   // setting, or the rendered chapters change. Repeats are applied first; the place
   // markers only wrap pure-text runs, so the two never nest or corrupt each other.
+  //
+  // Repeats that cross languages (repeatCrossover.ts) need lookups first: each
+  // chapter's plan is worked out once, cached, and the whole paint runs again
+  // when new plans arrive. A newer repaint cancels an older one's late paint,
+  // so a fast switch never paints the wrong chapter.
   async function repaintRepeats(groups: RepeatGroup[], placeMarkers: boolean) {
+    const token = ++crossRepeatToken;
     await tick();
     if (!readerElement) return;
-    applyRepeatsToAllSections(readerElement, groups);
+    paintAllRepeats(groups, placeMarkers);
+    if ((await loadCrossPlans(groups)) && token === crossRepeatToken && readerElement) {
+      paintAllRepeats(groups, placeMarkers);
+    }
+  }
+
+  function paintAllRepeats(groups: RepeatGroup[], placeMarkers: boolean) {
+    const sections = readerElement.querySelectorAll<HTMLElement>("[data-chapter-section]");
+    if (sections.length) sections.forEach((section) => paintRepeatsIn(section, groups));
+    else applyRepeatsToSection(readerElement, groups);
     applyPlaceMarkersToAllSections(readerElement, placeMarkers);
   }
 
+  const crossPlans = new Map<string, CrossPlan>();
+  const CROSS_PLAN_CACHE = 60;
+  let crossRepeatToken = 0;
+
+  function crossPlanFor(book: string, chapter: number, groups: RepeatGroup[]): string {
+    return `${currentTranslation.toLowerCase()}|${book}|${chapter}|${crossPlanKey(groups)}`;
+  }
+
+  /** One section's Repeats: spelling matches, then the cross-language plan if it's ready. */
+  function paintRepeatsIn(section: HTMLElement, groups: RepeatGroup[]) {
+    applyRepeatsToSection(section, groups);
+    const book = section.dataset.book;
+    const chapter = Number(section.dataset.chapter);
+    if (!book || !chapter || !isOriginalLanguage(currentTranslation)) return;
+    const plan = crossPlans.get(crossPlanFor(book, chapter, groups));
+    if (!plan?.size) return;
+    paintOriginalPlan(
+      section,
+      (verse) => plan.get(verse),
+      (verseText, verse, index, text) =>
+        findMorphologyForClick(morphologyForVerse(verseText, verse), index, text, isIndexedPack, true)?.strongsId ?? null,
+    );
+  }
+
+  /** Work out the plans the rendered chapters lack. True when any new one came in. */
+  async function loadCrossPlans(groups: RepeatGroup[]): Promise<boolean> {
+    if (!isOriginalLanguage(currentTranslation) || !hasCrossRepeats(groups)) return false;
+    const translation = currentTranslation;
+    let added = false;
+    for (const c of chapters) {
+      const key = crossPlanFor(c.book, c.chapter, groups);
+      if (crossPlans.has(key)) continue;
+      // Plain text finds each word's number in the chapter's word data.
+      if (!morphologyCache.has(morphChapterKey(translation, c.book, c.chapter))) {
+        await fetchChapterMorphology(translation, c.book, c.chapter);
+      }
+      const plan = await originalChapterPlan(translation, c.book, c.chapter, c.verses.map((v) => v.verse), groups);
+      if (translation !== currentTranslation) return false;
+      crossPlans.set(key, plan);
+      if (crossPlans.size > CROSS_PLAN_CACHE) crossPlans.delete(crossPlans.keys().next().value!);
+      added = true;
+    }
+    return added;
+  }
+
   // Re-apply the overlays whenever the tracked words change, the place-marker
-  // setting toggles, or a new chapter scrolls into view (referencing chapters
-  // keeps it reactive).
-  $: if (readerElement && chapters) void repaintRepeats($repeatsStore, showPlaceMarkers && placePhrasesLoaded);
+  // setting toggles, a new chapter scrolls into view (referencing chapters
+  // keeps it reactive), or interlinear turns on or off, which rebuilds every
+  // verse's text.
+  $: if (readerElement && chapters) {
+    void isInterlinearActive;
+    void repaintRepeats($repeatsStore, showPlaceMarkers && placePhrasesLoaded);
+  }
 
   // A repeat pill requested "Highlight All" — open the modal in bulk mode.
   $: if ($repeatHighlightAllRequest) {
@@ -6932,7 +6999,7 @@
       if (section) {
         clearRepeatsInSection(section);
         applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
-        applyRepeatsToSection(section, get(repeatsStore));
+        paintRepeatsIn(section, get(repeatsStore));
       }
     }}
     on:remove={async () => {
@@ -6980,7 +7047,7 @@
         if (section) {
           clearRepeatsInSection(section);
           applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
-          applyRepeatsToSection(section, get(repeatsStore));
+          paintRepeatsIn(section, get(repeatsStore));
         }
       }
     }}

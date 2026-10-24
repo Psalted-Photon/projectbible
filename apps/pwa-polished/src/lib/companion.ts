@@ -84,7 +84,8 @@ function isMissing(stored: string | undefined): boolean {
   return cleanVersePreviewText(stored) === '';
 }
 
-async function piecesIn(translation: string, source: string, ref: VerseRef): Promise<CompanionPiece[] | null> {
+/** `translation`'s verses for one verse of `source`, unmarked. Null when it has none. */
+export async function piecesIn(translation: string, source: string, ref: VerseRef): Promise<CompanionPiece[] | null> {
   const targets = convertRef(source, translation, ref);
   if (!targets.length) return null;
   const pieces: CompanionPiece[] = [];

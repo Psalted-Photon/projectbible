@@ -299,13 +299,15 @@ export function collectTextNodes(root: Node): { node: Text; start: number }[] {
  * left alone (a footnote marker inside a highlighted phrase stays unhighlighted,
  * which is what you want anyway).
  *
- * Returns an empty array if the range could not be located at all.
+ * Returns an empty array if the range could not be located at all. Text that
+ * `skip` turns down is left unwrapped.
  */
 export function wrapCharRange(
   root: HTMLElement,
   start: number,
   length: number,
-  className: string
+  className: string,
+  skip?: (node: Text) => boolean,
 ): HTMLSpanElement[] {
   if (length <= 0) return [];
 
@@ -318,6 +320,7 @@ export function wrapCharRange(
   for (const { node, start: nodeStart } of textNodes) {
     const nodeEnd = nodeStart + node.length;
     if (nodeEnd <= start || nodeStart >= end) continue;
+    if (skip?.(node)) continue;
 
     const localStart = Math.max(0, start - nodeStart);
     const localEnd = Math.min(node.length, end - nodeStart);
