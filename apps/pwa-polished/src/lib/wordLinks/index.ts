@@ -192,8 +192,9 @@ async function originalNumbers(translation: string, book: string, chapter: numbe
 /**
  * The Greek or Hebrew word behind an English word: the number linked at
  * `at.offset` in the verse's clean text. A translation the Word Links pack
- * doesn't cover falls back to meaning, and answers only when exactly one
- * number in the original verse means the word tapped. Null when unsure.
+ * doesn't cover, or a word its links skip, falls back to meaning, and answers
+ * only when exactly one number in the original verse means the word tapped.
+ * Null when unsure.
  */
 export async function originalAt(
   translation: string,
@@ -203,9 +204,8 @@ export async function originalAt(
   at: { offset: number; text: string },
 ): Promise<string | null> {
   const links = await getVerseLinks(translation, book, chapter, verse);
-  if (links) {
-    return linkAtOffset(links, at.offset)?.ids.find((id) => !isNeverMarked(id)) ?? null;
-  }
+  const link = links ? linkAtOffset(links, at.offset) : null;
+  if (link) return link.ids.find((id) => !isNeverMarked(id)) ?? null;
   const hits: string[] = [];
   for (const id of await originalNumbers(translation, book, chapter, verse)) {
     if (await meansAt(id, at.text, at.offset)) hits.push(id);
