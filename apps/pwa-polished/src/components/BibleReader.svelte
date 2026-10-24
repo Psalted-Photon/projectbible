@@ -7164,6 +7164,7 @@
                 {#each chapterData.verses.slice(seg.start, seg.end) as { verse, text, html, interlinearHtml, englishHtml, heading, headingLevel, paraStart, poetryLevel, stanzaBreak }, segIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
                 {@const verseIdx = seg.start + segIdx}
                 {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
+                {@const verseShown = (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text))}
                 {#if heading && showSectionHeadings && !(seg.run && segIdx === 0)}
                   <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
                 {/if}
@@ -7246,10 +7247,14 @@
                   {/if}
                   </span>
                   <span class="verse-body">
-                  <span class="verse-text"
+                  <!-- Keyed on what it shows: new text gets a fresh span. Repeats,
+                       highlights and place markers swap text nodes for their own
+                       spans, and {@html} only removes the nodes it put there, so
+                       updating in place would leave the old words beside the new. -->
+                  {#key verseShown}<span class="verse-text"
                     class:interlinear={isInterlinearActive && !!interlinearHtml}
-                    >{@html (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text))}</span
-                  >
+                    >{@html verseShown}</span
+                  >{/key}
                   {#if verseNotesMap.has(annotationKey(chapterData.book, chapterData.chapter, verse)) && $userProfileStore.isSignedIn}
                     <span
                       class="verse-note-icon"
