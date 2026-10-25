@@ -21,12 +21,18 @@
  *   English word is one that number can mean. A number whose tags all fail
  *   gets a link only when its meaning matches exactly one word in the verse,
  *   or as many words as the Greek or Hebrew uses it (3 John 1:3's two
- *   "truth"s for its two G0225s).
+ *   "truth"s for its two G0225s). When its meanings match too many, its
+ *   headword alone gets the same test (3 John 1:12: G0225 "truth", G0227
+ *   "true").
+ * - A tag whose English isn't among the number's meanings still counts when
+ *   it is a word built on one (faithful → faithfulness), or a word BSB and KJV
+ *   give that number at least 3 times and 3% of the time. Run kjv and bsb
+ *   before web and net.
  *
  * Offsets are measured on the verse's clean text exactly as the app measures
  * it (scripts/lib/clean-text.mjs), and each source is checked against the
  * shipped pack. Rebuilding the KJV, WEB, BSB or NET pack means running this
- * again, as with align-red-letter.mjs.
+ * again, as with align-red-letter.mjs (and web and net again after kjv or bsb).
  *
  * The pack also carries original_forms: every Greek and Hebrew spelling in the
  * ancient-languages pack, folded the way the Strong's list folds it, with the
@@ -41,7 +47,7 @@ import { produceUSFXVerses } from '../packages/packtools/src/parsers/build-usfx-
 import { WORD_OPEN, WORD_SEP, WORD_CLOSE } from '../packages/packtools/src/parsers/usfm-scanner.mjs';
 import { readBooks as readNetBooks } from './build-net-pack.mjs';
 import { cleanWithIndex, locateVerbatim } from './lib/clean-text.mjs';
-import { FUNCTION_WORDS, NEVER_MARKED, inflect, patternFor, vocabularyOf } from './lib/gloss-match.mjs';
+import { FUNCTION_WORDS, NEVER_MARKED, derive, headwordsOf, inflect, patternFor, vocabularyOf } from './lib/gloss-match.mjs';
 import { fromEnglish, toEnglish } from './lib/versification.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -470,24 +476,51 @@ function originalNumbers(path, translationId) {
   return out;
 }
 
-/** Each number's vocabulary as a pattern, with its split meanings' renderings. */
+/**
+ * Each number's vocabulary as a pattern, with its split meanings' renderings;
+ * its headword alone as a pattern; and the words built on its one-word
+ * meanings (derive()).
+ */
 function lexiconPatterns() {
   const db = new Database(LEXICAL_PATH, { readonly: true });
   const phrases = new Map();
+  const headwords = new Map();
+  const add = (map, id, list) => map.set(id, [...(map.get(id) ?? []), ...list]);
   for (const table of ['greek_strongs_entries', 'hebrew_strongs_entries']) {
     for (const r of db.prepare(`SELECT id, shortDefinition, kjvUsage FROM ${table}`).iterate()) {
       const id = classicId(r.id);
       if (!id) continue;
-      const list = phrases.get(id) ?? [];
-      list.push(...vocabularyOf(r));
-      phrases.set(id, list);
+      add(phrases, id, vocabularyOf(r));
+      add(headwords, id, headwordsOf(r));
     }
   }
   db.close();
-  const patterns = new Map();
-  return (id) => {
-    if (!patterns.has(id)) patterns.set(id, patternFor([...new Set(phrases.get(id) ?? [])]));
-    return patterns.get(id);
+  const cached = (map) => {
+    const patterns = new Map();
+    return (id) => {
+      if (!patterns.has(id)) patterns.set(id, patternFor([...new Set(map.get(id) ?? [])]));
+      return patterns.get(id);
+    };
+  };
+  const oneWord = (id) => (phrases.get(id) ?? []).filter((p) => !/[ -]/.test(p));
+  const derived = new Map();
+  const forms = new Map();
+  return {
+    patternOf: cached(phrases),
+    headwordPatternOf: cached(headwords),
+    derivedOf: (id) => {
+      if (!derived.has(id)) derived.set(id, new Set(oneWord(id).flatMap(derive)));
+      return derived.get(id);
+    },
+    // A plain list, not a pattern: a pattern compiled for every number in
+    // every verse runs V8 out of room for compiled code.
+    wordFormsOf: (id) => {
+      if (!forms.has(id)) {
+        const words = (phrases.get(id) ?? []).flatMap((p) => p.toLowerCase().split(/[ -]/));
+        forms.set(id, new Set(words.filter((w) => w.length >= 3 && !FUNCTION_WORDS.has(w)).flatMap(inflect)));
+      }
+      return forms.get(id);
+    },
   };
 }
 
@@ -532,6 +565,51 @@ function kjvVocabulary() {
   return out;
 }
 
+/**
+ * The words BSB and KJV give each number across the Bible, kept when they
+ * give it as a one-word link at least 3 times and 3% of the time, with their
+ * endings.
+ */
+function commonRenderings() {
+  const out = new Map();
+  if (!existsSync(OUT_PATH)) return out;
+  const db = new Database(OUT_PATH, { readonly: true });
+  const counts = new Map();
+  const totals = new Map();
+  for (const t of ['bsb', 'kjv']) {
+    const pack = new Database(SOURCES[t].pack, { readonly: true });
+    const getText = pack.prepare('SELECT text FROM verses WHERE book = ? AND chapter = ? AND verse = ?');
+    for (const r of db.prepare('SELECT book, chapter, verse, links FROM word_links WHERE translation_id = ?').iterate(t)) {
+      const { text } = cleanWithIndex(getText.get(r.book, r.chapter, r.verse)?.text ?? '');
+      for (const part of r.links.split(';')) {
+        const [s, len, ids] = part.split(',');
+        const words = (text.slice(+s, +s + +len).toLowerCase().match(/[\p{L}']+/gu) ?? []).filter(
+          (w) => w.length >= 3 && !FUNCTION_WORDS.has(w) && !AUXILIARIES.has(w),
+        );
+        for (const id of ids.split('+')) {
+          totals.set(id, (totals.get(id) ?? 0) + 1);
+          // Only a link that is one word: "gave ... to drink" doesn't make
+          // "gave" a word for "water".
+          if (words.length !== 1) continue;
+          const byWord = counts.get(id) ?? new Map();
+          byWord.set(words[0], (byWord.get(words[0]) ?? 0) + 1);
+          counts.set(id, byWord);
+        }
+      }
+    }
+    pack.close();
+  }
+  db.close();
+  for (const [id, byWord] of counts) {
+    const set = new Set();
+    for (const [w, n] of byWord) {
+      if (n >= 3 && n / totals.get(id) >= 0.03) for (const form of inflect(w)) set.add(form);
+    }
+    if (set.size) out.set(id, set);
+  }
+  return out;
+}
+
 /** Where a number's English sits in `text`: its vocabulary, then KJV's words for it here. */
 function meaningSpans(text, pattern, kjvWords) {
   const spans = [];
@@ -554,13 +632,23 @@ function filterTags(entries, { scheme, greek }) {
   console.log('\nReading the Greek and Hebrew words...');
   const hebrew = originalNumbers(ANCIENT_PATH, 'hebrew-oshb');
   const greekWords = originalNumbers(greek.db, greek.id);
-  const patternOf = lexiconPatterns();
+  const { patternOf, headwordPatternOf, derivedOf, wordFormsOf } = lexiconPatterns();
   const kjv = kjvVocabulary();
   if (!kjv.size) console.warn('⚠️  No KJV links in the pack yet; run --only kjv first for the fullest check.');
+  const common = commonRenderings();
+  if (!common.size) console.warn('⚠️  No BSB or KJV links in the pack yet; run --only kjv and --only bsb first.');
+  // A word built on a meaning, or one BSB and KJV commonly give the number.
+  const widerCache = new Map();
+  const widerWords = (id) => {
+    if (!widerCache.has(id)) widerCache.set(id, new Set([...derivedOf(id), ...(common.get(id) ?? [])]));
+    return widerCache.get(id);
+  };
 
   const dropped = { stop: [], notInVerse: [], meaning: [] };
   const kept = [];
+  const keptWider = [];
   const added = [];
+  const addedByHeadword = [];
   let tagsRead = 0;
   const rows = [];
 
@@ -598,10 +686,21 @@ function filterTags(entries, { scheme, greek }) {
         const note = { where, id, word };
         if (NEVER_MARKED.has(id)) { dropped.stop.push(note); continue; }
         if (!inVerse.has(id)) { dropped.notInVerse.push(note); continue; }
-        const hit = meaningSpans(word, patternOf(id), kjvHere.get(id))[0];
+        let hit = meaningSpans(word, patternOf(id), kjvHere.get(id))[0];
+        const wider = !hit;
+        if (wider) hit = meaningSpans(word, null, widerWords(id))[0];
+        // A looser match gives way to a number in the verse that means the
+        // word outright (1 Chronicles 2:17 "father": H0001, not H3205 beget).
+        if (hit && wider) {
+          const found = word.slice(hit.s, hit.e).toLowerCase();
+          const outright = [...inVerse.keys()].some((other) =>
+            other !== id && !NEVER_MARKED.has(other) && (wordFormsOf(other).has(found) || !!kjvHere.get(other)?.has(found)));
+          if (outright) hit = undefined;
+        }
         if (!hit) { dropped.meaning.push(note); continue; }
         links.push({ s: tag.s + hit.s, e: tag.s + hit.e, ids: id });
         kept.push({ ...note, word: word.slice(hit.s, hit.e) });
+        if (wider) keptWider.push(kept[kept.length - 1]);
       }
     }
 
@@ -614,19 +713,29 @@ function filterTags(entries, { scheme, greek }) {
     const claims = [];
     for (const [id, count] of inVerse) {
       if (linked.has(id) || NEVER_MARKED.has(id)) continue;
-      const spans = meaningSpans(v.text, patternOf(id), kjvHere.get(id));
+      let spans = meaningSpans(v.text, patternOf(id), kjvHere.get(id));
+      let byHeadword = false;
+      if (spans.length > count) {
+        spans = meaningSpans(v.text, headwordPatternOf(id), null);
+        byHeadword = true;
+      }
       if (spans.length !== 1 && spans.length !== count) continue;
       if (spans.some((sp) => links.some((l) => overlaps(l, sp)))) continue;
-      claims.push({ id, spans });
+      claims.push({ id, spans, byHeadword });
     }
     const contested = (c, others) =>
       others.some((o) => o !== c && o.spans.some((a) => c.spans.some((b) => overlaps(a, b))));
-    const singles = claims.filter((c) => c.spans.length === 1);
+    // A claim by headword gives way to any claim it touches, as a several-word
+    // one does, and never knocks out a claim by full meaning.
+    const regular = claims.filter((c) => !c.byHeadword);
+    const singles = regular.filter((c) => c.spans.length === 1);
     for (const c of claims) {
-      if (c.spans.length === 1 ? contested(c, singles) : contested(c, claims)) continue;
+      const lost = c.byHeadword ? contested(c, claims) : c.spans.length === 1 ? contested(c, singles) : contested(c, regular);
+      if (lost) continue;
       for (const sp of c.spans) {
         links.push({ ...sp, ids: c.id });
         added.push({ where, id: c.id, word: v.text.slice(sp.s, sp.e) });
+        if (c.byHeadword) addedByHeadword.push(added[added.length - 1]);
       }
     }
 
@@ -636,19 +745,23 @@ function filterTags(entries, { scheme, greek }) {
   const droppedCount = dropped.stop.length + dropped.notInVerse.length + dropped.meaning.length;
   console.log(`Tags checked:           ${tagsRead.toLocaleString()}`);
   console.log(`Kept:                   ${kept.length.toLocaleString()} (${pct(kept.length, tagsRead)})`);
+  console.log(`  by wider meaning:     ${keptWider.length.toLocaleString()} (a word built on a meaning, or one BSB and KJV give it)`);
   console.log(`Dropped:                ${droppedCount.toLocaleString()}`);
   console.log(`  never marked:         ${dropped.stop.length.toLocaleString()} (the article, "and", the object marker)`);
   console.log(`  not in the verse:     ${dropped.notInVerse.length.toLocaleString()} (number missing from the Greek or Hebrew)`);
   console.log(`  wrong meaning:        ${dropped.meaning.length.toLocaleString()} (English word isn't one the number means)`);
   console.log(`Added by meaning:       ${added.length.toLocaleString()} (one clear match in the verse, or one per use in the original)`);
+  console.log(`  by headword:          ${addedByHeadword.length.toLocaleString()} (its meanings matched too many words; its headword alone didn't)`);
   const show = (title, list) => {
     console.log(`\n${title}:`);
     for (const x of sample(list, 20)) console.log(`  ${x.where.padEnd(22)} ${x.id}  "${x.word}"`);
   };
   show('20 kept', kept);
+  show('20 kept by wider meaning', keptWider);
   show('20 dropped for meaning', dropped.meaning);
   show('20 dropped as not in the verse', dropped.notInVerse);
   show('20 added by meaning', added);
+  show('20 added by headword', addedByHeadword);
   return rows;
 }
 

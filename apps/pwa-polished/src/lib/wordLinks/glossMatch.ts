@@ -158,10 +158,18 @@ function vocabularyOf(entry: { strongs?: string; kjvUsage?: string; shortDefinit
     if (r.marker || r.text.startsWith('[')) continue;
     phrases.push(...expand(r.text));
   }
+  phrases.push(...headwordsOf(entry));
+  // "the Lord" marks "LORD", not the article in front of it.
+  return phrases.map((p) => p.replace(/^(the|a|an)\s+/i, '')).filter(usable);
+}
+
+/** The short definition's English alone: the tie-break when two numbers both mean a word. */
+function headwordsOf(entry: { shortDefinition?: string } | null): string[] {
+  if (!entry) return [];
+  const phrases: string[] = [];
   for (const piece of (entry.shortDefinition ?? '').split(/[,;:/]/)) {
     phrases.push(...expand(piece.trim().replace(/^to\s+/i, '')));
   }
-  // "the Lord" marks "LORD", not the article in front of it.
   return phrases.map((p) => p.replace(/^(the|a|an)\s+/i, '')).filter(usable);
 }
 
@@ -181,11 +189,16 @@ function patternFor(phrases: string[]): RegExp | null {
 }
 
 const patterns = new Map<string, Promise<RegExp | null>>();
+const headwordPatterns = new Map<string, Promise<RegExp | null>>();
 
-/** The English a number can show up as, read once per number. */
-function patternOf(strongsId: string): Promise<RegExp | null> {
+/** A number's English from `vocabulary`, read once per number into `cache`. */
+function cachedPattern(
+  cache: Map<string, Promise<RegExp | null>>,
+  vocabulary: typeof vocabularyOf,
+  strongsId: string,
+): Promise<RegExp | null> {
   const id = classicId(strongsId);
-  let found = patterns.get(strongsId);
+  let found = cache.get(strongsId);
   if (!found) {
     found = (async () => {
       if (isNeverMarked(id)) return null;
@@ -193,21 +206,36 @@ function patternOf(strongsId: string): Promise<RegExp | null> {
       // renderings it shares.
       const ids = strongsId === id ? [id] : [strongsId, id];
       const entries = await Promise.all(ids.map((i) => lookupStrongs(i).catch(() => null)));
-      return patternFor(entries.flatMap((e) => vocabularyOf(e)));
+      return patternFor(entries.flatMap((e) => vocabulary(e)));
     })();
-    patterns.set(strongsId, found);
+    cache.set(strongsId, found);
   }
   return found;
 }
 
-/** True when the number's English covers `offset` in `text`: the same match, run the other way. */
-export async function meansAt(strongsId: string, text: string, offset: number): Promise<boolean> {
-  const pattern = await patternOf(strongsId);
+/** The English a number can show up as. */
+const patternOf = (strongsId: string) => cachedPattern(patterns, vocabularyOf, strongsId);
+
+function covers(pattern: RegExp | null, text: string, offset: number): boolean {
   if (!pattern) return false;
   for (const m of text.matchAll(pattern)) {
     if (m.index! <= offset && offset < m.index! + m[0].length) return true;
   }
   return false;
+}
+
+/** True when the number's English covers `offset` in `text`: the same match, run the other way. */
+export async function meansAt(strongsId: string, text: string, offset: number): Promise<boolean> {
+  return covers(await patternOf(strongsId), text, offset);
+}
+
+/**
+ * True when the number's headword alone covers `offset`: which of two numbers
+ * that both mean a word is the one it most plainly means ("truth" is G0225's
+ * headword; G0227's is "true").
+ */
+export async function headwordAt(strongsId: string, text: string, offset: number): Promise<boolean> {
+  return covers(await cachedPattern(headwordPatterns, headwordsOf, strongsId), text, offset);
 }
 
 /**

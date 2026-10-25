@@ -96,6 +96,22 @@ export function inflect(word) {
   return [...out];
 }
 
+/**
+ * Words built on a dictionary word of 5+ letters (faithful → faithfulness,
+ * worthy → worthiness). Only for checking a word a source already tagged with
+ * the number; never for finding one.
+ */
+export function derive(word) {
+  const w = word.toLowerCase();
+  if (w.length < 5 || !/^[a-z]+$/.test(w)) return [];
+  const out = new Set();
+  for (const end of ['ness', 'ly', 'ful', 'fully', 'ment', 'ments', 'er', 'ers', 'ion', 'ions']) out.add(w + end);
+  if (w.endsWith('e')) for (const end of ['ion', 'ions']) out.add(w.slice(0, -1) + end);
+  if (w.endsWith('le')) out.add(`${w.slice(0, -1)}y`);
+  if (/[^aeiou]y$/.test(w)) for (const end of ['iness', 'ily']) out.add(w.slice(0, -1) + end);
+  return [...out];
+}
+
 function expand(text) {
   const m = /\(([^()]*)\)/.exec(text);
   if (!m) return [text.replace(/\s+/g, ' ').trim()];
@@ -164,6 +180,14 @@ export function vocabularyOf(entry) {
     if (r.marker || r.text.startsWith('[')) continue;
     phrases.push(...expand(r.text));
   }
+  phrases.push(...headwordsOf(entry));
+  return phrases.map((p) => p.replace(/^(the|a|an)\s+/i, '')).filter(usable);
+}
+
+/** The short definition's English alone: the tie-break when a number's meanings match too many words. */
+export function headwordsOf(entry) {
+  if (!entry) return [];
+  const phrases = [];
   for (const piece of (entry.shortDefinition ?? '').split(/[,;:/]/)) {
     phrases.push(...expand(piece.trim().replace(/^to\s+/i, '')));
   }

@@ -15,7 +15,7 @@ import { classicId } from '../strongs/entry';
 import { testamentOf } from '../strongsUsage';
 import { greekPartnerFor } from '../translationKind';
 import { convertRef, schemeOf } from '../versification';
-import { isNeverMarked, meansAt, type Span } from './glossMatch';
+import { headwordAt, isNeverMarked, meansAt, type Span } from './glossMatch';
 
 export interface WordLink {
   s: number;
@@ -246,7 +246,8 @@ async function originalNumbers(translation: string, book: string, chapter: numbe
  * The Greek or Hebrew word behind an English word: the number linked at
  * `at.offset` in the verse's clean text. A translation the Word Links pack
  * doesn't cover, or a word its links skip, falls back to meaning, and answers
- * only when exactly one number in the original verse means the word tapped.
+ * only when exactly one number in the original verse means the word tapped,
+ * or, when several do, exactly one has it as its headword.
  * Null when unsure.
  */
 export async function originalAt(
@@ -264,5 +265,9 @@ export async function originalAt(
     if (await meansAt(id, at.text, at.offset)) hits.push(id);
   }
   const distinct = new Set(hits.map(classicId));
-  return distinct.size === 1 ? hits[0] : null;
+  if (distinct.size === 1) return hits[0];
+  // Two numbers both mean it: the one whose headword it is, if only one.
+  const plain: string[] = [];
+  for (const id of hits) if (await headwordAt(id, at.text, at.offset)) plain.push(id);
+  return new Set(plain.map(classicId)).size === 1 ? plain[0] : null;
 }
