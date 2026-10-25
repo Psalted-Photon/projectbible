@@ -21,7 +21,14 @@ export const FUNCTION_WORDS = new Set(
     .split(' '),
 );
 
-const IRREGULAR = {
+/** Helping verbs in KJV phrases ("shall fall", "have fallen"): never a number's own word. */
+export const AUXILIARIES = new Set(
+  ('have has had hath hast having shall shalt will wilt would wouldest should shouldest ' +
+    'may mayest might must let being can could cannot did doth dost does')
+    .split(' '),
+);
+
+export const IRREGULAR = {
   arise: ['arose', 'arisen'],
   beget: ['begat', 'begot', 'begotten'],
   begin: ['began', 'begun'],

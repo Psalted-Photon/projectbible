@@ -28,6 +28,10 @@
  *   it is a word built on one (faithful → faithfulness), or a word BSB and KJV
  *   give that number at least 3 times and 3% of the time. Run kjv and bsb
  *   before web and net.
+ * - The words still bare after that are aligned (scripts/lib/aligner.mjs):
+ *   learned from BSB, KJV, NET and WEB side by side, with the links above
+ *   held fixed, and linked only when the aligner is sure. Its scorecard is
+ *   scripts/score-word-links.mjs.
  *
  * Offsets are measured on the verse's clean text exactly as the app measures
  * it (scripts/lib/clean-text.mjs), and each source is checked against the
@@ -46,8 +50,9 @@ import { fileURLToPath } from 'url';
 import { produceUSFXVerses } from '../packages/packtools/src/parsers/build-usfx-pack.mjs';
 import { WORD_OPEN, WORD_SEP, WORD_CLOSE } from '../packages/packtools/src/parsers/usfm-scanner.mjs';
 import { readBooks as readNetBooks } from './build-net-pack.mjs';
+import { alignRows } from './lib/aligner.mjs';
 import { cleanWithIndex, locateVerbatim } from './lib/clean-text.mjs';
-import { FUNCTION_WORDS, NEVER_MARKED, derive, headwordsOf, inflect, patternFor, vocabularyOf } from './lib/gloss-match.mjs';
+import { AUXILIARIES, FUNCTION_WORDS, NEVER_MARKED, derive, headwordsOf, inflect, patternFor, vocabularyOf } from './lib/gloss-match.mjs';
 import { fromEnglish, toEnglish } from './lib/versification.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -90,13 +95,13 @@ const SOURCES = {
     pack: join(repoRoot, 'packs/web.sqlite'),
     credit: 'WEB word tags: eBible.org World English Bible with Strong’s numbers (public domain), checked against the Greek and Hebrew.',
     build: (packText) =>
-      filterTags(
+      aligned('web', filterTags(
         fromTags(
           produceUSFXVerses(join(repoRoot, 'data-sources/web-usfx/eng-web_usfx.xml'), { strongsSentinels: true }).verses,
           packText,
         ).entries,
         { scheme: 'web', greek: { db: ANCIENT_PATH, id: 'byz', scheme: 'majority' } },
-      ),
+      )),
     checks: [
       { ref: ['Genesis', 1, 1], id: 'H1254', want: 'created' },
       { ref: ['Genesis', 1, 1], id: 'H7225', want: 'beginning' },
@@ -108,7 +113,7 @@ const SOURCES = {
     pack: join(repoRoot, 'packs/net.sqlite'),
     credit: 'NET word tags: NET Bible® USFM with Strong’s numbers, checked against the Greek and Hebrew.',
     build: (packText) =>
-      filterTags(
+      aligned('net', filterTags(
         fromTags(
           readNetBooks({ strongsSentinels: true }, { quiet: true }).flatMap((b) =>
             b.verses.map((v) => ({ book: b.name, ...v })),
@@ -116,12 +121,15 @@ const SOURCES = {
           packText,
         ).entries,
         { scheme: 'english', greek: { db: CRITICAL_PATH, id: 'sblgnt', scheme: 'english' } },
-      ),
+      )),
     checks: [
       { ref: ['Genesis', 1, 1], id: 'H1254', want: 'created' },
       { ref: ['John', 3, 16], id: 'G2889', want: 'world' },
       { ref: ['John', 3, 16], id: 'G0025', want: 'loved' },
       { ref: ['Psalms', 23, 1], id: 'H3068', want: 'LORD' },
+      // Found by the aligner: "Dear" alone is tagged.
+      { ref: ['3 John', 1, 5], id: 'G0027', want: 'friend' },
+      { ref: ['3 John', 1, 8], id: 'G4904', want: 'coworkers' },
     ],
   },
 };
@@ -524,13 +532,6 @@ function lexiconPatterns() {
   };
 }
 
-/** Helping verbs in KJV phrases ("shall fall", "have fallen"): never a number's own word. */
-const AUXILIARIES = new Set(
-  ('have has had hath hast having shall shalt will wilt would wouldest should shouldest ' +
-    'may mayest might must let being can could cannot did doth dost does')
-    .split(' '),
-);
-
 /** The words KJV links to each number in each verse, with their endings. */
 function kjvVocabulary() {
   const out = new Map();
@@ -763,6 +764,26 @@ function filterTags(entries, { scheme, greek }) {
   show('20 added by meaning', added);
   show('20 added by headword', addedByHeadword);
   return rows;
+}
+
+// ── WEB and NET: the words left over, aligned ───────────────────────────────
+
+/** filterTags() rows with links for the words its checks left bare (scripts/lib/aligner.mjs). */
+function aligned(target, rows) {
+  const { rows: out, added } = alignRows(target, rows);
+  const nt = added.filter((a) => a.id.startsWith('G'));
+  const ot = added.filter((a) => a.id.startsWith('H'));
+  console.log(`Added by alignment:     ${added.length.toLocaleString()} words (${nt.length.toLocaleString()} NT, ${ot.length.toLocaleString()} OT)`);
+  const lex = new Database(LEXICAL_PATH, { readonly: true });
+  const gloss = (id) =>
+    lex.prepare(`SELECT shortDefinition FROM ${id[0] === 'G' ? 'greek' : 'hebrew'}_strongs_entries WHERE id = ? OR id = ?`)
+      .get(id, id.replace(/^([GH])0+/, '$1'))?.shortDefinition ?? '';
+  for (const [title, list] of [['NT', nt], ['OT', ot]]) {
+    console.log(`\n20 aligned, ${title}:`);
+    for (const x of sample(list, 20)) console.log(`  ${x.where.padEnd(22)} "${x.word}" → ${x.id} ${gloss(x.id).slice(0, 40)}`);
+  }
+  lex.close();
+  return out;
 }
 
 // ── Build ───────────────────────────────────────────────────────────────────
