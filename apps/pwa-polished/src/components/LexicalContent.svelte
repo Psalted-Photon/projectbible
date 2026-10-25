@@ -31,6 +31,8 @@
   export let strongsId: string | undefined = undefined;
   export let morphologyData: any = null;
   export let lexicalEntries: any = null;
+  /** The Greek or Hebrew number Word Links ties the tapped English word to. */
+  export let wordLink: string | null = null;
   /** Set when docked: the id of the window hosting this word study. */
   export let windowId: string | null = null;
   /** The host's own close. Docked, Window.svelte supplies the ×. */
@@ -77,6 +79,8 @@
   let englishWordInfo: WordInfo | null = null;
   let englishPOS: string[] = [];
   let isEnglishWord = false;
+  /** The word the definitions are of, when it isn't the one tapped ("lavish"). */
+  let formOf: string | null = null;
   let hasOfflineDefinitions = false;
   let localLexicalEntries: any = null;
 
@@ -142,14 +146,22 @@
 
   /**
    * The tabs' subject. A tapped word also has a Strong's entry, and carries
-   * itself along so the Dictionary tab can come back to this view of it.
+   * itself along so the Dictionary tab can come back to this view of it. An
+   * English word Word Links ties to a number opens that exact entry, rather
+   * than whatever Strong's lists under the English, which for an inflected
+   * word ("lavished") is nothing or the wrong word.
    */
   $: tabWorks = morphologyData?.strongsId
     ? {
         ...(works ?? EMPTY_WORKS),
         strongs: { id: String(morphologyData.strongsId), word: selectedText, morph: morphologyData },
       }
-    : works;
+    : wordLink && works
+      ? { ...works, strongs: { id: wordLink, word: selectedText }, strongsSearch: null }
+      : works;
+
+  /** Strong's has something for this word, so the card can point at it. */
+  $: strongsLit = !!(tabWorks?.strongs || tabWorks?.strongsSearch);
 
   /**
    * The gloss is the English word behind the original one, so it behaves like
@@ -216,6 +228,7 @@
     englishPOS = [];
     isEnglishWord = false;
     localLexicalEntries = null;
+    formOf = null;
 
     try {
       // Check if we already have lexical entries from the new lookup system
@@ -225,6 +238,7 @@
           word: lexicalEntries.word,
           ipa_us: lexicalEntries.ipa_us ?? undefined,
         };
+        formOf = lexicalEntries.formOf ?? null;
         if (lexicalEntries.pos) {
           englishPOS = Array.isArray(lexicalEntries.pos) ? lexicalEntries.pos : [lexicalEntries.pos];
         }
@@ -252,6 +266,7 @@
               word: offlineEntry.word,
               ipa_us: offlineEntry.ipa_us ?? undefined,
             };
+            formOf = offlineEntry.formOf ?? null;
             if (offlineEntry.pos) {
               englishPOS = Array.isArray(offlineEntry.pos)
                 ? offlineEntry.pos
@@ -489,6 +504,11 @@
                   <dt>Pronunciation:</dt>
                   <dd class="ipa-text">{englishWordInfo.ipa_us}</dd>
                 {/if}
+
+                {#if formOf && hasOfflineDefinitions}
+                  <dt>Form of:</dt>
+                  <dd>{formOf}</dd>
+                {/if}
               </dl>
             </div>
 
@@ -562,27 +582,25 @@
             {/if}
 
             {#if !hasOfflineDefinitions}
-              <!-- No offline definitions available -->
-              <div class="info-section">
-                <h3>About this word</h3>
-                <p class="full-def">
-                  This is an English word from the Bible translation.
-                  For deeper study, look up the original Greek or Hebrew word from an interlinear Bible.
+              {#if isDictionaryInstalled}
+                <p style="margin: 0; padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px; color: #555;">
+                  No definition found for this word in the installed dictionary.
                 </p>
-                {#if isDictionaryInstalled}
-                  <p style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 8px; font-size: 13px; color: #555;">
-                    No definition found for this word in the installed dictionary.
-                  </p>
-                {:else}
-                  <div style="margin-top: 12px;">
-                    <GetPacksCard
-                      packs={["dictionary-en", "lexical"]}
-                      title="Get the dictionaries"
-                      note="Modern and Webster 1913 definitions for English words, and Strong's Hebrew and Greek for the original ones."
-                    />
-                  </div>
-                {/if}
-              </div>
+              {:else}
+                <GetPacksCard
+                  packs={["dictionary-en", "lexical"]}
+                  title="Get the dictionaries"
+                  note="Modern and Webster 1913 definitions for English words, and Strong's Hebrew and Greek for the original ones."
+                />
+              {/if}
+            {/if}
+
+            <!-- Only when the Strong's tab has something to open: a pointer
+                 at nothing is worse than no pointer. -->
+            {#if strongsLit}
+              <button class="strongs-pointer" on:click={() => selectWork("strongs")}>
+                See the Greek or Hebrew behind it in Strong’s
+              </button>
             {/if}
           </div>
       </div>
@@ -838,6 +856,25 @@
   }
 
   .gloss:hover {
+    text-decoration-style: solid;
+  }
+
+  .strongs-pointer {
+    align-self: flex-start;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 15px;
+    color: #8bc34a;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+  }
+
+  .strongs-pointer:hover {
     text-decoration-style: solid;
   }
 

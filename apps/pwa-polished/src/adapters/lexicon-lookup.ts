@@ -7,6 +7,7 @@ import { openDB, type DBMorphology } from './db.js';
 import { dictionaryCache } from '../lib/lru-cache.js';
 import { normalizeBookName } from '../lib/bibleData.js';
 import { strongsForTerm } from '../lib/strongs/source';
+import { irregularBases } from '../lib/irregularVerbs';
 
 export interface Definition {
   id: number;
@@ -30,6 +31,9 @@ export interface EnglishWordEntry {
   ipa_us: string | null;
   ipa_uk: string | null;
   pos: string | null;
+  /** The word the definitions are of, when it isn't the word as written:
+   *  "lavish" for "lavished", "city" for "cities". */
+  formOf?: string | null;
   grammar?: any;
   modern: Definition[];
   historic: Definition[];
@@ -354,6 +358,46 @@ export function singularCandidates(word: string): string[] {
   return out;
 }
 
+const VOWEL = /[aeiou]/;
+
+/**
+ * Ordered base-form candidates for a verb or comparative, most likely first
+ * (never the word itself): "lavished"→"lavish", "rejoiced"→"rejoice",
+ * "sinned"→"sin", "denied"→"deny", "cometh"→"come", "brought"→"bring",
+ * "horsemen"→"horseman". Same contract as singularCandidates: callers keep the
+ * first the dictionary actually has, so a wrong guess ("lavishe") never shows.
+ * Order only matters when two guesses are both words, and follows how the
+ * ending was put on: "hoped" is hope + d (hop would double, "hopped"),
+ * "barred" is bar doubled, "filled" is fill as written.
+ */
+export function baseFormCandidates(word: string): string[] {
+  const w = word.toLowerCase();
+  const out: string[] = [];
+  const push = (s: string) => {
+    if (s && s !== w && s.length > 2 && !out.includes(s)) out.push(s);
+  };
+  for (const base of irregularBases(w)) push(base);
+  if (w.endsWith('men')) push(w.slice(0, -3) + 'man');        // horsemen -> horseman
+  for (const end of ['eth', 'est', 'ing', 'ed', 'er']) {
+    if (!w.endsWith(end)) continue;
+    const stem = w.slice(0, -end.length);
+    if (stem.length < 2) continue;
+    const last = stem[stem.length - 1];
+    if (last === 'i') push(stem.slice(0, -1) + 'y');          // denied -> deny
+    if (last === stem[stem.length - 2] && !VOWEL.test(last)) {
+      // fill, pass, stuff stay doubled; sin, stop, bar were doubled for the ending.
+      if (/[lsfz]/.test(last)) { push(stem); push(stem.slice(0, -1)); }
+      else { push(stem.slice(0, -1)); push(stem); }
+    } else if (/th$|[^s]s$/.test(stem) || (!VOWEL.test(last) && !/[wxy]/.test(last)
+      && VOWEL.test(stem[stem.length - 2] ?? '') && !VOWEL.test(stem[stem.length - 3] ?? ''))) {
+      push(stem + 'e'); push(stem);                           // hoped -> hope before hop, bathed -> bathe
+    } else {
+      push(stem); push(stem + 'e');                           // lavished -> lavish, rejoiced -> rejoice
+    }
+  }
+  return out;
+}
+
 /** Exact lemma → dictionary word_id via the word_mapping store, or null. */
 async function wordMappingId(db: IDBDatabase, lemma: string): Promise<number | null> {
   if (!db.objectStoreNames.contains('word_mapping')) return null;
@@ -361,6 +405,17 @@ async function wordMappingId(db: IDBDatabase, lemma: string): Promise<number | n
     const req = db.transaction('word_mapping', 'readonly').objectStore('word_mapping').get(lemma);
     req.onsuccess = () => resolve(req.result?.word_id ?? null);
     req.onerror = () => resolve(null);
+  });
+}
+
+/** Whether a dictionary word_id has a Concise (Wordset) definition. */
+async function hasModernDefinition(db: IDBDatabase, wordId: number): Promise<boolean> {
+  if (!db.objectStoreNames.contains('english_definitions_wordset')) return false;
+  return new Promise<boolean>((resolve) => {
+    const req = db.transaction('english_definitions_wordset', 'readonly')
+      .objectStore('english_definitions_wordset').index('word_id').count(wordId);
+    req.onsuccess = () => resolve(req.result > 0);
+    req.onerror = () => resolve(false);
   });
 }
 
@@ -432,6 +487,7 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
     console.log('📦 Word data retrieved:', wordData);
     
     let dictionaryWordId: number | null = null;
+    let formOf: string | null = null;
     if (db.objectStoreNames.contains('word_mapping')) {
       console.log('🔍 Looking up dictionary word mapping for:', normalizedWord);
       dictionaryWordId = await wordMappingId(db, normalizedWord);
@@ -440,8 +496,21 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
       if (dictionaryWordId == null) {
         for (const cand of singularCandidates(normalizedWord)) {
           dictionaryWordId = await wordMappingId(db, cand);
-          if (dictionaryWordId != null) break;
+          if (dictionaryWordId != null) { formOf = cand; break; }
         }
+      }
+      // Nor are verb endings: "lavished" shows "lavish". Webster keeps old
+      // spellings ("visite", "creat") that a guess can land on, so when two
+      // guesses are both words the one with a modern definition wins.
+      if (dictionaryWordId == null) {
+        let firstHit: { id: number; cand: string } | null = null;
+        for (const cand of baseFormCandidates(normalizedWord)) {
+          const id = await wordMappingId(db, cand);
+          if (id == null) continue;
+          if (await hasModernDefinition(db, id)) { dictionaryWordId = id; formOf = cand; break; }
+          firstHit ??= { id, cand };
+        }
+        if (dictionaryWordId == null && firstHit) { dictionaryWordId = firstHit.id; formOf = firstHit.cand; }
       }
     } else {
       console.log('⚠️ word_mapping store not found');
@@ -462,6 +531,7 @@ export async function lookupEnglishWord(word: string): Promise<EnglishWordEntry 
       ipa_us: wordData?.ipa_us ?? null,
       ipa_uk: wordData?.ipa_uk ?? null,
       pos: wordData?.pos ?? null,
+      formOf,
       modern: [],
       historic: [],
       wordset: []
@@ -2592,7 +2662,10 @@ export async function resolveWorks(
     term,
     // An entry row can exist with no definitions attached to it, which would
     // open an empty card — so this asks whether there is anything to read.
-    dict: !!(english && (english.modern?.length || english.historic?.length || english.wordset?.length)),
+    // A name's folded form is another word (Asher is not "ash"), so a person or
+    // place only lights the dictionary on its own spelling.
+    dict: !!(english && (english.modern?.length || english.historic?.length || english.wordset?.length))
+      && !(english?.formOf && (person || entry?.kind === 'place')),
     topic,
     entry,
     person,

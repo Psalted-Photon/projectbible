@@ -13,6 +13,7 @@
 
 import { lookupStrongs } from '../../adapters/lexicon-lookup.js';
 import { classicId, parseKjvUsage } from '../strongs/entry';
+import { IRREGULAR } from '../irregularVerbs';
 
 export interface Span {
   s: number;
@@ -38,58 +39,6 @@ const FUNCTION_WORDS = new Set(
     'upon out up after before about through under over among between against unto also')
     .split(' '),
 );
-
-/** Past and other forms the ending rules can't make. */
-const IRREGULAR: Record<string, string[]> = {
-  arise: ['arose', 'arisen'],
-  beget: ['begat', 'begot', 'begotten'],
-  begin: ['began', 'begun'],
-  bear: ['bare', 'bore', 'born', 'borne'],
-  bring: ['brought'],
-  build: ['built'],
-  buy: ['bought'],
-  catch: ['caught'],
-  choose: ['chose', 'chosen'],
-  come: ['came'],
-  die: ['died', 'dying'],
-  drink: ['drank', 'drunk'],
-  eat: ['ate', 'eaten'],
-  fall: ['fell', 'fallen'],
-  find: ['found'],
-  flee: ['fled'],
-  forgive: ['forgave', 'forgiven'],
-  forsake: ['forsook', 'forsaken'],
-  give: ['gave', 'given'],
-  go: ['went', 'gone', 'goeth'],
-  have: ['had', 'hath', 'hast'],
-  hear: ['heard'],
-  hold: ['held'],
-  keep: ['kept'],
-  know: ['knew', 'known'],
-  lay: ['laid'],
-  lead: ['led'],
-  leave: ['left'],
-  lie: ['lay', 'lain', 'lying'],
-  lose: ['lost'],
-  make: ['made'],
-  rise: ['rose', 'risen'],
-  run: ['ran'],
-  say: ['said', 'saith', 'saidst'],
-  see: ['saw', 'seen'],
-  seek: ['sought'],
-  sell: ['sold'],
-  send: ['sent'],
-  sit: ['sat'],
-  slay: ['slew', 'slain'],
-  speak: ['spake', 'spoke', 'spoken'],
-  stand: ['stood'],
-  take: ['took', 'taken'],
-  teach: ['taught'],
-  tell: ['told'],
-  think: ['thought'],
-  understand: ['understood'],
-  write: ['wrote', 'written'],
-};
 
 const VOWEL = /[aeiou]/;
 

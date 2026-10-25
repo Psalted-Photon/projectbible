@@ -12,6 +12,9 @@ export interface LexicalModalState {
   lexicalEntries: any;
   /** Biblical character match for the clicked word (drives the "Character" tab). */
   characterData?: PersonLookupResult | null;
+  /** The Greek or Hebrew number Word Links ties a tapped English word to, so
+   *  the Strong's tab opens that exact entry. */
+  wordLink?: string | null;
 }
 
 function createLexicalModalStore() {
@@ -36,6 +39,7 @@ function createLexicalModalStore() {
     open: (data: Omit<LexicalModalState, 'isOpen'>) => {
       set({
         characterData: null,
+        wordLink: null,
         ...data,
         isOpen: true,
       });
@@ -58,6 +62,7 @@ function createLexicalModalStore() {
         morphologyData: null,
         lexicalEntries: null,
         characterData: null,
+        wordLink: null,
       });
       lookupStore.close();
     },

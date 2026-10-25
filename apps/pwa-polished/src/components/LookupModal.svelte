@@ -267,10 +267,10 @@
     } else if (work === "people" && snap?.personId) {
       origin = { surface: "person", snapshot: snap };
     } else if (work === "dictionary") {
-      const { selectedText, strongsId, morphologyData, lexicalEntries } = lexical;
+      const { selectedText, strongsId, morphologyData, lexicalEntries, wordLink } = lexical;
       origin = {
         surface: "lexical",
-        snapshot: { payload: { selectedText, strongsId, morphologyData, lexicalEntries }, scrollTop: snap?.scrollTop ?? 0 },
+        snapshot: { payload: { selectedText, strongsId, morphologyData, lexicalEntries, wordLink }, scrollTop: snap?.scrollTop ?? 0 },
       };
     } else if (work === "strongs" && snap) {
       origin = { surface: "strongs", snapshot: snap };
@@ -365,6 +365,7 @@
           strongsId={lexical.strongsId}
           morphologyData={lexical.morphologyData}
           lexicalEntries={lexical.lexicalEntries}
+          wordLink={lexical.wordLink ?? null}
           initialScrollTop={saved.dictionary?.scrollTop ?? 0}
           onSnapshot={(snap) => remember("dictionary", snap)}
           onClose={close}

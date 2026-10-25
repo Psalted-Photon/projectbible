@@ -6107,6 +6107,7 @@
                   strongsId: undefined,
                   morphologyData: null,
                   lexicalEntries: englishEntry,
+                  wordLink: capturedLink || null,
                 });
                 return;
               } else {
@@ -6118,6 +6119,7 @@
                   strongsId: undefined,
                   morphologyData: null,
                   lexicalEntries: null,
+                  wordLink: capturedLink || null,
                 });
                 return;
               }
