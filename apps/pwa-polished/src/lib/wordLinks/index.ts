@@ -100,6 +100,26 @@ export function getVerseLinks(
   return found;
 }
 
+/** A whole chapter's links in one read, by verse. Empty when the pack doesn't cover it. */
+export async function getChapterLinks(
+  translation: string,
+  book: string,
+  chapter: number,
+): Promise<Map<number, WordLink[]>> {
+  const t = translation.toLowerCase();
+  const b = packBook(book);
+  const out = new Map<number, WordLink[]>();
+  try {
+    const rows = await readTransaction<{ verse: number; links: string }[]>(STORE, (store) =>
+      store.getAll(IDBKeyRange.bound([t, b, chapter, 0], [t, b, chapter, 9999])),
+    );
+    for (const r of rows ?? []) out.set(r.verse, parseLinks(r.links));
+  } catch {
+    // No links is the safe answer.
+  }
+  return out;
+}
+
 /**
  * Where a number's English sits among a verse's links, inside [start, end):
  * the part of the verse its row shows. Split meanings fold to their classic

@@ -149,6 +149,8 @@
   import type { RepeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import { applyRepeatsToSection, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
   import {
+    countCrossRepeatsInBook,
+    crossingWords,
     crossPlanKey,
     englishChapterPlan,
     hasCrossRepeats,
@@ -5917,13 +5919,24 @@
     const words = new Set<string>();
     for (const g of repeats) words.add(g.word);
     for (const p of pillsByBook.get(book) ?? []) words.add(p.word);
+    const token = ++repeatCountsToken;
     if (words.size === 0 || !book || !translation) {
       repeatCountsStore.set(new Map());
       return;
     }
     const map = await countWordsInBook(translation, book, [...words]);
+    if (token !== repeatCountsToken) return;
+    // A Repeat that crosses languages counts what it lights, not its spelling,
+    // which the other language never has. No number until that count is in.
+    const crossing = crossingWords(repeats, translation);
+    for (const w of crossing) map.delete(w);
     repeatCountsStore.set(map);
+    if (!crossing.length) return;
+    const cross = await countCrossRepeatsInBook(translation, book, repeats);
+    if (token !== repeatCountsToken) return;
+    repeatCountsStore.set(new Map([...map, ...cross]));
   }
+  let repeatCountsToken = 0;
 
   // Recompute counts when book/translation, scratch words, or derived pills change.
   $: void refreshRepeatCounts(currentBook, currentTranslation, $repeatsStore, introPillsByBook);

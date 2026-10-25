@@ -17,14 +17,16 @@
  * after, on top of the plain spelling matches (repeatRenderer.ts).
  */
 
+import { getMorphologyForChapter } from '../adapters/db';
 import type { RepeatGroup } from '../stores/repeatsStore';
 import { normalizeRepeatWord } from '../stores/repeatsStore';
+import { BIBLE_BOOKS } from './bibleData';
 import { piecesIn } from './companion';
 import { wrapCharRange } from './highlightRenderer';
 import { classicId } from './strongs/entry';
 import { isOriginalLanguage } from './translationKind';
 import { companionText } from './verseRendering';
-import { domPiecesOfClean, getVerseLinks, originalAt, spansForStrongs } from './wordLinks';
+import { domPiecesOfClean, getChapterLinks, getVerseLinks, originalAt, spansForStrongs } from './wordLinks';
 
 /** The translation an English Repeat made before Repeats remembered one reads in. */
 const OLDER_REPEATS_TRANSLATION = 'NET';
@@ -62,9 +64,58 @@ function numberGroups(groups: RepeatGroup[]): (RepeatGroup & { strongs: string }
   return groups.filter((g): g is RepeatGroup & { strongs: string } => !!g.strongs);
 }
 
+/** The Repeats that cross into an original (or an English) text. */
+function crossingGroups(groups: RepeatGroup[], original: boolean): RepeatGroup[] {
+  return original ? [...numberGroups(groups), ...englishGroups(groups)] : numberGroups(groups);
+}
+
 /** True when a chapter of an original (or an English) text has anything to work out. */
 export function hasCrossRepeats(groups: RepeatGroup[], original: boolean): boolean {
-  return numberGroups(groups).length > 0 || (original && englishGroups(groups).length > 0);
+  return crossingGroups(groups, original).length > 0;
+}
+
+/** The words of the Repeats that cross into `translation`: their pills count by countCrossRepeatsInBook. */
+export function crossingWords(groups: RepeatGroup[], translation: string): string[] {
+  return crossingGroups(groups, isOriginalLanguage(translation)).map((g) => g.word);
+}
+
+/**
+ * How many words each crossing Repeat lights in a whole book, so its pill
+ * counts what is colored rather than its spelling, which the other language
+ * never has. Only the crossing Repeats are in the answer. Never throws.
+ */
+export async function countCrossRepeatsInBook(
+  translation: string,
+  book: string,
+  groups: RepeatGroup[],
+): Promise<Map<string, number>> {
+  const original = isOriginalLanguage(translation);
+  const crossing = crossingGroups(groups, original);
+  const out = new Map<string, number>(crossing.map((g) => [g.word, 0]));
+  if (!crossing.length) return out;
+  const wordOfColor = new Map(crossing.map((g) => [g.colorIndex, g.word]));
+  const tally = (colorIndex: number | undefined, n = 1) => {
+    const word = colorIndex === undefined ? undefined : wordOfColor.get(colorIndex);
+    if (word !== undefined) out.set(word, (out.get(word) ?? 0) + n);
+  };
+  const chapters = BIBLE_BOOKS.find((b) => b.name === book)?.chapters ?? 1;
+  try {
+    for (let chapter = 1; chapter <= chapters; chapter++) {
+      if (original) {
+        const words = await getMorphologyForChapter(translation, book, chapter);
+        if (!words.length) continue;
+        const plan = await originalChapterPlan(translation, book, chapter, [...new Set(words.map((w) => w.verse))], groups);
+        for (const w of words) if (w.strongsId) tally(plan.get(w.verse)?.ids.get(classicId(w.strongsId)));
+      } else {
+        for (const links of (await getChapterLinks(translation, book, chapter)).values()) {
+          for (const g of numberGroups(groups)) tally(g.colorIndex, spansForStrongs(links, g.strongs).length);
+        }
+      }
+    }
+  } catch {
+    // A partial count beats none.
+  }
+  return out;
 }
 
 /** Where `word` starts in `text`, inside [start, end), at its first letter. */
