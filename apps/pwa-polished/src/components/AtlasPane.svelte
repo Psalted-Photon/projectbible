@@ -538,8 +538,20 @@
       await tick();
       root?.querySelector<HTMLInputElement>('.search-inner input')?.focus();
     } else {
+      cancelSearch();
       resultsOpen = false;
     }
+  }
+
+  // Moved on by every search and by anything that puts the results away, so a
+  // search still waiting (on its debounce or on the place index) can't land
+  // late: it reopened the list after ✕, or put an older word's places up.
+  let searchTicket = 0;
+
+  function cancelSearch() {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = null;
+    searchTicket++;
   }
 
   function onSearchInput() {
@@ -548,19 +560,25 @@
   }
 
   async function runSearch() {
+    const ticket = ++searchTicket;
     const raw = searchText.trim();
     if (raw.length < 2) { resultsOpen = false; return; }
 
-    scriptureHits = scripture?.search(raw, 12) ?? [];
+    const hits = scripture?.search(raw, 12) ?? [];
+    let places: typeof modernHits;
     try {
-      modernHits = await searchPlaces(raw, 40);
+      places = await searchPlaces(raw, 40);
     } catch {
-      modernHits = [];
+      places = [];
     }
+    if (ticket !== searchTicket || !searchOpen) return;
+    scriptureHits = hits;
+    modernHits = places;
     resultsOpen = true;
   }
 
   function clearSearch() {
+    cancelSearch();
     searchText = '';
     scriptureHits = [];
     modernHits = [];
@@ -569,11 +587,13 @@
 
   function pickScripture(entry: any) {
     atlas?.goToScripture(entry);
+    cancelSearch();
     resultsOpen = false;
   }
 
   function pickModern(place: any) {
     atlas?.goToPlace(place);
+    cancelSearch();
     resultsOpen = false;
   }
 
@@ -847,6 +867,7 @@
     if (measureStep) return endMeasure();
     openPanel = null;
     searchOpen = false;
+    cancelSearch();
     resultsOpen = false;
     info = null;
     atlas?.startMeasure();
