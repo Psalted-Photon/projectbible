@@ -166,6 +166,10 @@
   // Signing out should not drop them back on the "check your email" screen for
   // whatever address signed up last. The panel is hidden while signed in, so
   // this only shows up on the way back out.
+  // A later sign-in is a new account, or the same one back; either way the
+  // deletion notice is old news.
+  $: if (isSignedIn && deleteMessage) deleteMessage = '';
+
   $: if (isSignedIn && authMode === 'sent') {
     authMode = 'login';
     sentToEmail = '';
@@ -553,7 +557,16 @@
         const storedOld = localStorage.getItem(STORAGE_ACTIVE_PLAN) ?? sessionStorage.getItem(STORAGE_ACTIVE_PLAN);
         if (storedOld) data = JSON.parse(storedOld);
       }
-      if (!data) return;
+      if (!data) {
+        // The last plan was deleted: let go of it, or its day stayed on the card.
+        currentReadingPlan = null;
+        currentPlanId = null;
+        todayReading = null;
+        verseStats = computeVerseStats(null, []);
+        daysAheadBehind = 0;
+        streak = 0;
+        return;
+      }
       currentReadingPlan = data.plan;
       currentPlanId = data.id;
       if (currentReadingPlan) {
@@ -775,6 +788,11 @@
           </div>
         {:else if !isSignedIn}
           <div class="auth-panel">
+            <!-- Here, not on the Settings tab where the button was: deleting
+                 signs out, and signed out that tab is gone. -->
+            {#if deleteMessage}
+              <div class="auth-message">{deleteMessage}</div>
+            {/if}
             {#if authMode === 'login'}
               <h3>Sign in</h3>
               <input
@@ -880,6 +898,12 @@
         {:else}
           {#if currentTab === 'reading'}
             <div class="reading-tab">
+              {#if !currentReadingPlan}
+                <div class="today-card empty">
+                  You don't have a reading plan yet. Make one and each day's reading shows up here.
+                </div>
+                <button class="primary-btn" on:click={openReadingPlan}>Create a reading plan</button>
+              {:else}
               {#if todayReading}
                 <div class="today-card">
                   <h3>
@@ -940,6 +964,7 @@
               </div>
 
               <button class="primary-btn" on:click={openReadingPlan}>Open full Reading Plan</button>
+              {/if}
             </div>
           {:else if currentTab === 'notes'}
             <SavedVersesPanel on:close={close} />
