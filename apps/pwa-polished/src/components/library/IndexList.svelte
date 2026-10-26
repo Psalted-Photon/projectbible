@@ -213,11 +213,18 @@
   }
 
   // --- Search ------------------------------------------------------------
+  // Moved on by every new search and by clearing, so a search already past
+  // its debounce can't land late: it brought results back after ✕, or put an
+  // older query's rows over a newer one's.
+  let searchTicket = 0;
+
   function runSearch(query: string) {
     if (searchDebounce) clearTimeout(searchDebounce);
+    const ticket = ++searchTicket;
     searching = true;
     searchDebounce = setTimeout(async () => {
       const results = await source.search(query);
+      if (ticket !== searchTicket) return;
       searchResults = results;
       visibleCount = CHUNK;
       searching = false;
@@ -230,6 +237,7 @@
           byLetter.set(l, [...(byLetter.get(l) ?? []), r]);
         }
         await Promise.all([...byLetter].map(([l, rs]) => source.annotateBadges!(rs, l)));
+        if (ticket !== searchTicket) return;
         searchResults = [...results];
       }
     }, 180);
@@ -237,6 +245,7 @@
 
   function clearSearch() {
     if (searchDebounce) clearTimeout(searchDebounce);
+    searchTicket++;
     searchResults = null;
     searching = false;
     visibleCount = CHUNK;
