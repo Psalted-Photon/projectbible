@@ -95,6 +95,22 @@
       } else {
         expandedBooks = new Set();
       }
+    } else {
+      fillOpenBooks(corpora);
+    }
+  }
+
+  /**
+   * The same books again, but maybe not the same text: switching edition (SBLGNT
+   * to TR) keeps the book count, so the books stay open, while each preview is
+   * keyed by edition. Without this the open ones showed only references and
+   * English until closed and opened again.
+   */
+  function fillOpenBooks(list: Corpus[]) {
+    for (const c of list) {
+      for (const group of c.books) {
+        if (expandedBooks.has(bookKey(c.testament, group.book))) void loadBookPreviews(group);
+      }
     }
   }
 
