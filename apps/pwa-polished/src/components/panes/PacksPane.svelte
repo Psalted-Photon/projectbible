@@ -108,6 +108,7 @@
     } catch (err) {
       console.warn("[Packs] Could not list TTS voices:", err);
     }
+    void refreshRemaining();
   }
 
   async function installTtsVoice(voiceId: string) {
@@ -371,10 +372,19 @@
   /** What Install All would still do, and roughly what it would download. */
   let remainingCount = 0;
   let remainingBytes = 0;
+  let remainingTicket = 0;
 
+  /**
+   * Asked again whenever the pack or voice lists are, which is after anything
+   * is installed, updated or removed. It used to be asked only on opening and
+   * after Install All, so one pack or voice put in by hand left the count and
+   * the button saying the old number.
+   */
   async function refreshRemaining() {
+    const ticket = ++remainingTicket;
     try {
       const remaining = await estimateRemaining();
+      if (ticket !== remainingTicket) return; // a newer count is on its way
       remainingCount = remaining.count;
       remainingBytes = remaining.bytes;
     } catch (error) {
@@ -400,7 +410,6 @@
     await loadPacks();
     await loadStats();
     await refreshVoices();
-    await refreshRemaining();
   }
 
   onMount(async () => {
@@ -408,7 +417,6 @@
     await loadPacks();
     await loadStats();
     await refreshVoices();
-    await refreshRemaining();
   });
 
   async function loadManifestSizes() {
@@ -439,6 +447,7 @@
     } finally {
       isLoading = false;
     }
+    void refreshRemaining();
   }
 
   async function loadStats() {
