@@ -241,7 +241,11 @@
   let hydrated = false;
   /** Last payload written, so a re-run with unchanged values stays a no-op. */
   let lastPersisted = "";
+  /** The same, as values, so only what changed since goes out. */
+  let lastPayload: ReturnType<typeof settingsPayload> | null = null;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Set while this pane announces its own write, so it doesn't re-read it. */
+  let announcing = false;
 
   function settingsPayload() {
     return {
@@ -294,10 +298,48 @@
     const payload = settingsPayload();
     const snapshot = JSON.stringify(payload);
     if (snapshot === lastPersisted) return;
+    const before = lastPayload;
     lastPersisted = snapshot;
-    updateSettings(payload);
+    lastPayload = payload;
+
+    // Only what was changed here goes out. The nav bar pin, the Read Aloud
+    // controls and a sync from another device all write settings while this
+    // pane is open, and writing the whole pane back put their old values over
+    // them on the next touch.
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const updates: Record<string, unknown> = {};
+    for (const key of Object.keys(payload) as (keyof typeof payload)[]) {
+      if (key === "tts" || key === "dailyDriverEnglish") continue;
+      if (!before || !same(payload[key], before[key])) updates[key] = payload[key];
+    }
+    // The old single default goes once the pair is set.
+    if ("dailyDriverEnglishOT" in updates || "dailyDriverEnglishNT" in updates) {
+      updates.dailyDriverEnglish = undefined;
+    }
+    const ttsChanges: Record<string, unknown> = {};
+    for (const key of Object.keys(payload.tts) as (keyof typeof payload.tts)[]) {
+      if (!before || !same(payload.tts[key], before.tts[key])) ttsChanges[key] = payload.tts[key];
+    }
+    if (Object.keys(ttsChanges).length > 0) updates.tts = { ...getTtsSettings(), ...ttsChanges };
+    if (Object.keys(updates).length === 0) return;
+
+    updateSettings(updates as Parameters<typeof updateSettings>[0]);
     // Tell BibleReader, the navbar and the reading engine to re-read.
-    window.dispatchEvent(new CustomEvent("settingsUpdated"));
+    announcing = true;
+    try {
+      window.dispatchEvent(new CustomEvent("settingsUpdated"));
+    } finally {
+      announcing = false;
+    }
+  }
+
+  /**
+   * Settings changed somewhere else while the pane is open: show them. Left
+   * alone while a change made here is still waiting to be written.
+   */
+  function settingsChangedElsewhere() {
+    if (announcing || persistTimer || !hydrated) return;
+    loadFromStore();
   }
 
   function schedulePersist() {
@@ -536,8 +578,16 @@
   onMount(() => {
     refreshExternalSummaries();
     window.addEventListener("settingsUpdated", refreshExternalSummaries);
+    window.addEventListener("settingsUpdated", settingsChangedElsewhere);
     getSelectableVoices().then((v) => (ttsVoices = v));
     refreshVoiceInventory();
+    loadFromStore();
+    hydrated = true;
+    document.addEventListener("visibilitychange", flushOnHide);
+  });
+
+  /** Every control from the stored settings. */
+  function loadFromStore() {
     const settings = getSettings();
     theme = settings.theme || "dark";
     fontSize = settings.fontSize || 18;
@@ -579,15 +629,15 @@
     ttsGreekPronunciation = tts.greekPronunciation;
     ttsBilingual = tts.bilingualReading;
 
-    // Everything above is now the stored state, so the first reactive pass
+    // Everything above is now the stored state, so the next reactive pass
     // has nothing to write. Only real edits from here on.
-    lastPersisted = JSON.stringify(settingsPayload());
-    hydrated = true;
-    document.addEventListener("visibilitychange", flushOnHide);
-  });
+    lastPayload = settingsPayload();
+    lastPersisted = JSON.stringify(lastPayload);
+  }
 
   onDestroy(() => {
     window.removeEventListener("settingsUpdated", refreshExternalSummaries);
+    window.removeEventListener("settingsUpdated", settingsChangedElsewhere);
     document.removeEventListener("visibilitychange", flushOnHide);
     // Closing the pane a split second after the last change must not lose it.
     if (persistTimer) persistNow();
