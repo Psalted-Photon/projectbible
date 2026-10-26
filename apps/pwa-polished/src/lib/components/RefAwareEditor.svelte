@@ -76,27 +76,32 @@
 
   async function expand() {
     if (!hit || busy) return;
+    // The reference this expand is for. Another one tapped while the verse is
+    // fetched replaces `hit`, and its key used to get this verse's text.
+    const target = hit;
     busy = true;
     unavailable = false;
     try {
       // Whatever the reader is on — expanding copies what you're looking at,
       // and the text is frozen into the note once inserted.
       const translation = get(navigationStore).translation;
-      const text = await textStore.getVerse(translation, hit.book, hit.chapter, hit.verse);
+      const text = await textStore.getVerse(translation, target.book, target.chapter, target.verse);
+      if (hit !== target) return;
       if (text) {
-        editorRef?.expandRef(hit.key, text);
+        editorRef?.expandRef(target.key, text);
         close();
       } else {
         // Pack not installed for this book, or no such verse in it. Say so and
         // leave the menu open so Go to is still available.
-        console.warn('[RefAwareEditor] No verse text for', hit.ref, 'in', translation);
+        console.warn('[RefAwareEditor] No verse text for', target.ref, 'in', translation);
         unavailable = true;
       }
     } catch (err) {
+      if (hit !== target) return;
       console.error('[RefAwareEditor] Expand failed:', err);
       unavailable = true;
     } finally {
-      busy = false;
+      if (hit === target) busy = false;
     }
   }
 
