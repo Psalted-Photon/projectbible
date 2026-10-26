@@ -2249,16 +2249,20 @@
   // and in a harmony each of the four readers appended its own as the panes
   // crossed chapters together.
 
-  // A card belongs to the marker it was opened on. Once the reader is showing
-  // something else, that marker is gone and the card would be answering for a
-  // chapter nobody is reading.
-  $: if (footnoteHit && (footnoteHit.book !== currentBook || footnoteHit.chapter !== currentChapter)) {
+  // A card belongs to the marker it was opened on. Once the reader has dropped
+  // that marker's chapter, the card would be answering for a chapter nobody is
+  // reading. Loaded, not top: the reader shows several chapters, and a marker
+  // tapped in the one below the top one is still on the page.
+  const isLoaded = (list: typeof chapters, book: string, chapter: number) =>
+    list.some((c) => c.book === book && c.chapter === chapter);
+
+  $: if (footnoteHit && !isLoaded(chapters, footnoteHit.book, footnoteHit.chapter)) {
     closeFootnote();
   }
 
   // Same for the Old Testament quotation card, and for the same reason: it
   // belongs to the mark it was opened on.
-  $: if (otQuoteHit && (otQuoteHit.book !== currentBook || otQuoteHit.chapter !== currentChapter)) {
+  $: if (otQuoteHit && !isLoaded(chapters, otQuoteHit.book, otQuoteHit.chapter)) {
     closeOtQuote();
   }
 
@@ -3908,6 +3912,9 @@
           { book: nextBook, chapter: nextChapter, verses: processedVerses },
         ];
         await loadAnnotations(nextBook, nextChapter, false);
+        // The reader's saved highlights, which otherwise only the chapter that
+        // was navigated to gets.
+        await loadAndApplyHighlights(nextBook, nextChapter);
         await applyReadingPlanEndHighlight();
         // Same as a prepend: a mark waiting on this chapter goes back up.
         reapplyVerseHighlights(readerElement, windowId);
@@ -4056,6 +4063,7 @@
           // for that chapter to come back, which scrolling up is how it does.
           reapplyVerseHighlights(readerElement, windowId);
         }
+        await loadAndApplyHighlights(prevBook, prevChapter);
       }
     } catch (err) {
       console.error("Error loading previous chapter:", err);
@@ -6785,13 +6793,9 @@
     window.addEventListener('pagehide', saveScrollPosition);
 
     // Reload highlights when a remote change arrives (cross-device sync)
-    const unsubscribeHighlightChanges = subscribeToHighlightRemoteChanges(() => {
-      const visible = detectVisibleChapter();
-      if (visible) {
-        loadAndApplyHighlights(visible.book, visible.chapter);
-      } else if (chapters.length > 0) {
-        loadAndApplyHighlights(chapters[0].book, chapters[0].chapter);
-      }
+    // Every loaded chapter, not just the one on screen: the others are a scroll away.
+    const unsubscribeHighlightChanges = subscribeToHighlightRemoteChanges(async () => {
+      for (const c of chapters) await loadAndApplyHighlights(c.book, c.chapter);
     });
 
     // Reload note icons when a remote change arrives (cross-device sync)
