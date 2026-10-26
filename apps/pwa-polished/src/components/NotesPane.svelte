@@ -614,12 +614,34 @@
    *  the panel, because the clean-up below has already run. */
   let destroyed = false;
 
-  onMount(async () => {
+  /**
+   * The sign-in state the last load saw; null until the first one. After a
+   * restart the panel is put back before the session has been read, so that
+   * first load sees no account, and nothing loaded again once it came in: the
+   * panel sat empty until it was closed and reopened.
+   */
+  let loadedSignedIn: boolean | null = null;
+
+  $: signInChanged(isSignedIn);
+
+  function signInChanged(now: boolean) {
+    if (loadedSignedIn === null || now === loadedSignedIn) return;
+    loadedSignedIn = now;
+    if (now) void startUp();
+  }
+
+  async function startUp() {
+    loadedSignedIn = isSignedIn;
     await loadAll();
     if (destroyed) return;
-    await restoreFromContentState();
+    if (view === 'browse') await restoreFromContentState();
     if (destroyed) return;
     if (mode === 'shared') void loadShared();
+  }
+
+  onMount(async () => {
+    await startUp();
+    if (destroyed) return;
 
     const reload = () => {
       // Never clobber unsaved edits with a remote pull.
