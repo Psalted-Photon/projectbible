@@ -81,7 +81,9 @@
   $: content = helpContent[helpTopic];
 
   // Escape closes it, unless something on top (a word card, the lookup card)
-  // took the press first.
+  // took the press first. Heard on the way down (capture, below): Help opens
+  // over Advanced Search, which otherwise heard the press first and closed
+  // underneath it.
   function onEscape(e: KeyboardEvent) {
     if (e.key !== 'Escape' || e.defaultPrevented || !(show && content)) return;
     e.preventDefault();
@@ -89,7 +91,7 @@
   }
 </script>
 
-<svelte:window on:keydown={onEscape} />
+<svelte:window on:keydown|capture={onEscape} />
 
 {#if show && content}
   <!-- svelte-ignore a11y-click-events-have-key-events -->

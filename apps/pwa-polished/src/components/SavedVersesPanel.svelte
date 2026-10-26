@@ -125,7 +125,11 @@
 
   function editKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') commitEdit();
-    else if (e.key === 'Escape') editingKey = null;
+    else if (e.key === 'Escape') {
+      // Handled: only the rename is cancelled, not Profile closed with it.
+      e.preventDefault();
+      editingKey = null;
+    }
   }
 
   function focusOnMount(el: HTMLInputElement) {

@@ -113,29 +113,46 @@
     }, 2000);
   }
   
+  /**
+   * Asked to save while a save was already running. The typing since went in
+   * after that save read the entry, so it gets a save of its own when that one
+   * ends; dropping it lost the last words if the day changed or the journal
+   * closed straight after.
+   */
+  let saveAgain = false;
+
   async function saveEntry() {
-    if (isSaving || blocked) return;
+    if (blocked) return;
+    if (isSaving) {
+      saveAgain = true;
+      return;
+    }
     isSaving = true;
-    
+    saveAgain = false;
+    // What this save writes. Typing during it changes title and text, which
+    // then still count as unsaved.
+    const savedTitle = title.trim() || undefined;
+    const savedText = text;
+
     try {
       if (currentEntry) {
         await syncedJournalStore.updateEntry(currentEntry.id, {
-          title: title.trim() || undefined,
-          text,
+          title: savedTitle,
+          text: savedText,
         });
-        currentEntry.title = title.trim() || undefined;
-        currentEntry.text = text;
+        currentEntry.title = savedTitle;
+        currentEntry.text = savedText;
         currentEntry.updatedAt = new Date();
       } else {
         const newEntry = await syncedJournalStore.saveEntry({
           date: currentDate,
-          title: title.trim() || undefined,
-          text,
+          title: savedTitle,
+          text: savedText,
         });
         currentEntry = newEntry;
       }
-      
-      isDirty = false;
+
+      isDirty = (title.trim() || undefined) !== savedTitle || text !== savedText;
       saveFailureShown = false;
     } catch (error) {
       console.error('Failed to save journal entry:', error);
@@ -146,8 +163,9 @@
     } finally {
       isSaving = false;
     }
+    if (saveAgain && isDirty) void saveEntry();
   }
-  
+
   function handleTextChange(event: CustomEvent<string>) {
     if (blocked) return;
     text = event.detail;

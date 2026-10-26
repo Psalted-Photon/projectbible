@@ -242,7 +242,10 @@
             on:blur={commitRename}
             on:keydown={(e) => {
               if (e.key === 'Enter') commitRename();
-              if (e.key === 'Escape') renamingId = null;
+              if (e.key === 'Escape') {
+                e.preventDefault(); // cancels the rename only
+                renamingId = null;
+              }
             }}
           />
         {:else}

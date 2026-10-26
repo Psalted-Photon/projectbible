@@ -171,7 +171,11 @@
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && selectedCell) selectedCell = null;
+    if (event.key === 'Escape' && selectedCell) {
+      // Handled, so Profile (which this calendar sits in) stays open.
+      event.preventDefault();
+      selectedCell = null;
+    }
   }
 
   // ─── Open journal window ──────────────────────────────────────────────────────
@@ -197,7 +201,8 @@
   }
 </script>
 
-<svelte:window on:pointerdown={handleWindowPointerdown} on:keydown={handleWindowKeydown} />
+<!-- Capture: Profile hears Escape on the window too, and would close first. -->
+<svelte:window on:pointerdown={handleWindowPointerdown} on:keydown|capture={handleWindowKeydown} />
 
 {#if $journalLock.needsUnlock}
   <JournalLockScreen compact />

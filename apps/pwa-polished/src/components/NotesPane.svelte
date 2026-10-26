@@ -1934,6 +1934,7 @@
                 on:keydown={(e) => {
                   if (e.key === 'Enter') commitNewNotebook();
                   if (e.key === 'Escape') {
+                    e.preventDefault(); // cancels the new notebook only
                     creatingNotebook = false;
                     newNotebookName = '';
                   }
