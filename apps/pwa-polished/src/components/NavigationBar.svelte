@@ -4113,7 +4113,9 @@
     top: calc(100% + 4px);
     left: 0;
     right: 0;
-    max-height: 400px;
+    /* Follows the screen height too: a landscape phone is ~390px tall, so a
+       flat 400px ran off the bottom with no way to reach the last rows. */
+    max-height: min(400px, 72vh);
     overflow-y: auto;
     background: #2a2a2a;
     border: 1px solid #3a3a3a;
@@ -4489,7 +4491,7 @@
     position: fixed;
     top: calc(100% + 4px);
     left: 0;
-    max-height: 400px;
+    max-height: min(400px, 72vh); /* see .dropdown-menu */
     overflow-y: auto;
     background: #2a2a2a;
     border: 1px solid #3a3a3a;
