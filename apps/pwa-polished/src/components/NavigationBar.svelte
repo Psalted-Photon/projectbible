@@ -837,6 +837,7 @@
     searchQuery = target.value;
 
     if (!searchQuery.trim()) {
+      dropSearchInFlight();
       searchResults = [];
       showResults = false;
       searchRan = false;
@@ -887,18 +888,32 @@
     }
   }
 
+  // Only the newest search may fill the list. A slow one finishing after a
+  // quicker, newer one put the older words' results up, and one finishing
+  // after the box was cleared brought the list back.
+  let searchTicket = 0;
+
+  function dropSearchInFlight() {
+    searchTicket++;
+    isSearching = false;
+  }
+
   async function performSearch(loadAll: boolean = false) {
     if (!searchQuery.trim()) {
+      dropSearchInFlight();
       searchResults = [];
       showResults = false;
       return;
     }
 
+    const ticket = ++searchTicket;
     isSearching = true;
     try {
       const limit = loadAll ? -1 : 250;
       // Explicit search, so the expensive categories (commentaries) run too.
-      searchResults = await searchService.search(searchQuery, { limit, deep: true });
+      const results = await searchService.search(searchQuery, { limit, deep: true });
+      if (ticket !== searchTicket) return;
+      searchResults = results;
 
       // Calculate displayed count from all categories
       displayedResultCount = searchResults.reduce(
@@ -926,12 +941,13 @@
         scrollToShowButton(searchContainerRef);
       }
     } catch (error) {
+      if (ticket !== searchTicket) return;
       console.error("Search error:", error);
       searchResults = [];
       totalResultCount = 0;
       displayedResultCount = 0;
     } finally {
-      isSearching = false;
+      if (ticket === searchTicket) isSearching = false;
     }
   }
 
@@ -1104,6 +1120,7 @@
   }
 
   async function restoreSearch(origin: SearchOrigin) {
+    dropSearchInFlight();
     searchQuery = origin.query;
     searchResults = origin.results;
     expandedSearchNodes = new Set(origin.expanded);
@@ -1248,6 +1265,7 @@
     }
 
     // Close search results
+    dropSearchInFlight();
     showResults = false;
     searchQuery = "";
     searchResults = [];
@@ -1264,6 +1282,7 @@
   $: searchTree = buildSearchTree(searchResults);
 
   function clearSearch() {
+    dropSearchInFlight();
     searchQuery = "";
     searchResults = [];
     showResults = false;
