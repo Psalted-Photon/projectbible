@@ -94,6 +94,8 @@
   let largestTextSize: number = TEXT_SIZE_RANGE.max;
   let file: File | null = null;
   let drawing = false;
+  /** The image couldn't be made: said under the preview, not left greyed out. */
+  let exportFailed = false;
 
   /** Only the newest draw may publish; an older one finishing late is dropped. */
   let drawToken = 0;
@@ -115,6 +117,7 @@
     const s = style;
     drawing = true;
     file = null;
+    exportFailed = false;
     try {
       const drawn = await renderCard(canvas, { passage, reference, translationLabel, source }, s, {
         image,
@@ -130,15 +133,24 @@
     exportTimer = setTimeout(() => void exportFile(token, s), 250);
   }
 
+  // toBlob gives null when the phone runs short of memory (iPhone, Story size)
+  // and can throw outright; either way the buttons stayed greyed out with no
+  // word why, or the preview stayed dimmed for good.
   async function exportFile(token: number, s: CardStyle) {
     if (!canvas || token !== drawToken) return;
-    const blob = await canvasToBlob(canvas, s);
+    let blob: Blob | null = null;
+    try {
+      blob = await canvasToBlob(canvas, s);
+    } catch (err) {
+      console.error('[ShareCard] export failed', err);
+    }
     if (token !== drawToken) return;
     const ext = cardMime(s) === 'image/png' ? 'png' : 'jpg';
     const base = reference.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'verse';
     file = blob ? new File([blob], `${base}.${ext}`, { type: blob.type }) : null;
+    exportFailed = !blob;
     drawing = false;
-    rememberLastStyle(s);
+    if (blob) rememberLastStyle(s);
   }
 
   $: if (canvas) {
@@ -672,6 +684,10 @@
     <p class="sc-hint">To keep it, tap Share, then Save Image.</p>
   {/if}
 
+  {#if exportFailed}
+    <p class="sc-hint sc-hint-error">Couldn't make the image. Try a smaller size, or a plain background.</p>
+  {/if}
+
   <div class="sc-actions">
     {#if showCopy}
       <button class="sc-btn sc-btn-plain" class:sc-btn-done={copyState === 'done'} disabled={!file} on:click={handleCopy}>
@@ -737,6 +753,9 @@
     font-size: 0.72rem;
     color: #888;
     line-height: 1.4;
+  }
+  .sc-hint-error {
+    color: #ef9a9a;
   }
   .sc-link {
     background: none;
