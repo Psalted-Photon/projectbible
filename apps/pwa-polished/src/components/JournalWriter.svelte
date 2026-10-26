@@ -51,6 +51,8 @@
     // Unsubscribe from remote-change signal
     remoteChangeUnsub?.();
     beforeLockUnsub?.();
+    // Closed inside the 2-second autosave: the words still go in.
+    if (isDirty) void flushTyping();
   });
 
   async function flushTyping() {
@@ -65,10 +67,15 @@
     if (isDirty) await saveEntry();
   }
   
+  /** Days tapped through quickly can load out of order; only the last one shows. */
+  let loadToken = 0;
+
   async function loadEntry(date: string) {
     console.log('[JournalWriter] Loading entry for date:', date);
+    const token = ++loadToken;
     try {
       const entry = await syncedJournalStore.getEntryByDate(date);
+      if (token !== loadToken) return;
       blocked = entry?.locked ? 'locked' : entry?.unreadable ? 'unreadable' : null;
       if (entry) {
         console.log('[JournalWriter] Found entry:', entry.id);
@@ -165,21 +172,35 @@
     }
   }
   
+  /** The day being moved to, while typing still waiting to save is saved first. */
+  let goingTo: string | null = null;
+
+  /**
+   * Typing still waiting on the 2-second autosave belongs to the day it was
+   * typed on, so it is saved before the day changes under it. Without this it
+   * was dropped, or saved onto the next day.
+   */
+  async function goToDate(date: string) {
+    goingTo = date;
+    await flushTyping();
+    if (goingTo !== date) return; // a later tap took over
+    goingTo = null;
+    currentDate = date;
+    await loadEntry(date);
+  }
+
   function navigateDate(offset: number) {
-    const date = new Date(currentDate + 'T12:00:00'); // noon avoids any DST boundary issue
+    const date = new Date((goingTo ?? currentDate) + 'T12:00:00'); // noon avoids any DST boundary issue
     date.setDate(date.getDate() + offset);
-    currentDate = localDateStr(date);
-    loadEntry(currentDate);
+    void goToDate(localDateStr(date));
   }
-  
+
   function jumpToToday() {
-    currentDate = localDateStr(new Date());
-    loadEntry(currentDate);
+    void goToDate(localDateStr(new Date()));
   }
-  
+
   function handleDateChange(event: CustomEvent<string>) {
-    currentDate = event.detail;
-    loadEntry(currentDate);
+    void goToDate(event.detail);
   }
 </script>
 
