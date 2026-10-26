@@ -453,10 +453,26 @@
     schedule();
   }
 
+  /**
+   * One finger of two lifted: carry on from the one still down. The pinch never
+   * updated lastX/lastY, so the next move measured from where the gesture began
+   * and the picture lurched by about the gap between the fingers.
+   */
+  function reseatOnRemaining() {
+    const rest = [...pointers.values()][0];
+    if (rest) {
+      lastX = rest.x;
+      lastY = rest.y;
+    }
+  }
+
   function onPointerUp(e: PointerEvent) {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinchStart = null;
-    if (pointers.size > 0) return;
+    if (pointers.size > 0) {
+      reseatOnRemaining();
+      return;
+    }
     dragging = false;
     // A finished range drag flies its arcs now, over the span the reader chose.
     if (rangeMode && rangeFrom !== null && moved) {
@@ -468,6 +484,27 @@
     rangeFrom = null;
     if (moved) rememberView();
     else tap(e);
+  }
+
+  /** The system took the touch back (a scroll, a call): never a tap or a pick. */
+  function onPointerCancel(e: PointerEvent) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchStart = null;
+    if (pointers.size > 0) {
+      reseatOnRemaining();
+      return;
+    }
+    dragging = false;
+    rangeFrom = null;
+    if (moved) rememberView();
+  }
+
+  /** iOS Safari ignores user-scalable=no, so block its own pinch explicitly. */
+  function blockIosPinch(node: HTMLElement) {
+    const block = (e: Event) => e.preventDefault();
+    const names = ['gesturestart', 'gesturechange', 'gestureend'];
+    for (const n of names) node.addEventListener(n, block);
+    return { destroy: () => names.forEach((n) => node.removeEventListener(n, block)) };
   }
 
   function onWheel(e: WheelEvent) {
@@ -2192,8 +2229,9 @@
         on:pointerdown={onPointerDown}
         on:pointermove={onPointerMove}
         on:pointerup={onPointerUp}
-        on:pointercancel={onPointerUp}
+        on:pointercancel={onPointerCancel}
         on:pointerleave={endHover}
+        use:blockIosPinch
         on:wheel|nonpassive={onWheel}
       ></canvas>
       {#if loading}
