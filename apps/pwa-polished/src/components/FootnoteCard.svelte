@@ -41,8 +41,6 @@
 
   const WIDTH = 320;
 
-  let rootEl: HTMLElement;
-
   /**
    * Move the card to the end of <body>.
    *
@@ -71,11 +69,22 @@
 
   // Placement: prefer above the marker, drop below when there is no room. The
   // height is not known until it renders, so this uses the measured box where
-  // there is one and a sensible guess on the first frame.
+  // there is one and a sensible guess on the first frame. Measured again
+  // whenever the card changes size: it was measured once, so expanding a
+  // reference grew it down over the verse, or off the bottom of the screen.
   let measured = 220;
-  $: if (rootEl) measured = Math.min(rootEl.offsetHeight || measured, 340);
+  function trackHeight(node: HTMLElement) {
+    const ro = new ResizeObserver(() => {
+      measured = Math.min(node.offsetHeight || measured, 340);
+    });
+    ro.observe(node);
+    return { destroy: () => ro.disconnect() };
+  }
   $: left = Math.min(Math.max(x - WIDTH / 2, 8), Math.max(8, window.innerWidth - WIDTH - 8));
-  $: top = y - measured - 12 < 8 ? y + 22 : y - measured - 12;
+  $: top =
+    y - measured - 12 < 8
+      ? Math.max(8, Math.min(y + 22, window.innerHeight - measured - 8))
+      : y - measured - 12;
 
   function onBodyClick(e: MouseEvent | KeyboardEvent) {
     const target = e.target as HTMLElement | null;
@@ -93,8 +102,8 @@
 
 <div
   class="footnote-card themed"
-  bind:this={rootEl}
   use:portal
+  use:trackHeight
   use:grow={new DOMRect(x, y, 0, 18)}
   out:fadeAway
   style="left:{left}px; top:{top}px; width:{WIDTH}px; --ref-color:{color};"
