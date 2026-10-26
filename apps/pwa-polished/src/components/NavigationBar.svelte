@@ -26,6 +26,7 @@
   import { buildSearchTree } from "../lib/searchTree";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import { fixedOrigin } from "../lib/fixedOrigin";
+  import { portal } from "../lib/portal";
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import VerseRefRow from "./VerseRefRow.svelte";
   import RepeatVersesPanel from "./RepeatVersesPanel.svelte";
@@ -276,10 +277,9 @@
     const rect = interlinearGearRef?.getBoundingClientRect();
     if (rect) {
       const width = 300;
-      // The popover is `position: fixed`, which here resolves against the
-      // viewport in dark but against `.main-content` in light/sepia — so clamp
-      // within that box and rebase onto it. See lib/fixedOrigin.ts.
-      const origin = fixedOrigin(interlinearGearRef);
+      // The popover is `position: fixed` and lives on <body>, so this is
+      // normally the viewport; asked rather than assumed. See lib/fixedOrigin.ts.
+      const origin = fixedOrigin(ilPopEl);
       const maxLeft = origin.left + origin.width - width - 8;
       const minLeft = origin.left + 8;
       ilPopLeft = Math.max(minLeft, Math.min(rect.left, maxLeft)) - origin.left;
@@ -3112,14 +3112,20 @@
   {/if}
 
   {#if interlinearMenuOpen && isOriginalLanguage(currentTranslation)}
+    <!-- Both on <body>: the bar is moved with a transform, which makes it the
+         box `position: fixed` resolves against. Inside it, the phone sheet's
+         bottom: 0 was the bar's bottom, so the sheet rose off the top of the
+         screen, and the backdrop only covered the bar. -->
     <button
       class="il-popover-backdrop"
+      use:portal
       on:click={() => (interlinearMenuOpen = false)}
       aria-label="Close customizer"
       tabindex="-1"
     ></button>
     <div
       class="interlinear-popover"
+      use:portal
       bind:this={ilPopEl}
       out:fadeAway
       style="top:{ilPopTop}px; left:{ilPopLeft}px;"
