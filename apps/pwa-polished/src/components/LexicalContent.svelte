@@ -221,7 +221,13 @@
     openWorkSubject(work, tabWorks, worksTerm || selectedText, windowId);
   }
 
+  // Only the newest lookup may fill the card. Two words tapped quickly used
+  // to mix: the second word's pronunciation under the first one's senses.
+  let lexTicket = 0;
+
   async function loadLexicalData() {
+    const ticket = ++lexTicket;
+    const stale = () => ticket !== lexTicket;
     loading = true;
     error = "";
     englishWordInfo = null;
@@ -259,6 +265,7 @@
 
         try {
           const offlineEntry = await lookupEnglishWord(searchText);
+          if (stale()) return;
           if (offlineEntry) {
             localLexicalEntries = offlineEntry;
             isEnglishWord = true;
@@ -280,24 +287,30 @@
 
         try {
           await englishLexicalService.initialize();
-          englishWordInfo = await englishLexicalService.getPronunciation(searchText);
-          if (englishWordInfo) {
+          const info = await englishLexicalService.getPronunciation(searchText);
+          if (stale()) return;
+          if (info) {
+            const pos = await englishLexicalService.getPOSTags(searchText).catch(() => []);
+            if (stale()) return;
+            englishWordInfo = info;
             isEnglishWord = true;
-            englishPOS = await englishLexicalService.getPOSTags(searchText).catch(() => []);
+            englishPOS = pos;
             return;
           }
         } catch (err) {
+          if (stale()) return;
           console.log("English lexical lookup failed:", err);
         }
 
         error = `No lexical entries found for "${selectedText}"`;
       }
     } catch (err) {
+      if (stale()) return;
       console.error("Error loading lexical data:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       error = `Failed to load lexical data: ${errorMessage}`;
     } finally {
-      loading = false;
+      if (!stale()) loading = false;
     }
   }
 
