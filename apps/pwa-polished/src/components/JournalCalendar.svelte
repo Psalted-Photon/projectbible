@@ -20,8 +20,12 @@
   // ─── Entry data ───────────────────────────────────────────────────────────────
   let entryMap = new Map<string, JournalEntry>();
   let loading = false;
+  // Only the newest month may fill the grid. Paging quickly let a slower,
+  // older month land last and wipe the dots of the one on screen.
+  let loadTicket = 0;
 
   async function loadEntries() {
+    const ticket = ++loadTicket;
     loading = true;
     try {
       const year  = currentMonth.getFullYear();
@@ -29,14 +33,16 @@
       const startStr = localDateStr(new Date(year, month, 1));
       const endStr   = localDateStr(new Date(year, month + 1, 0)); // last day of month
       const entries  = await syncedJournalStore.getEntries(startStr, endStr);
+      if (ticket !== loadTicket) return;
       // Only mark days blue if they have actual text content (not empty/deleted entries)
       const withText = entries.filter(e => stripHtml(e.text ?? '').trim().length > 0);
       entryMap = new Map(withText.map(e => [e.date, e]));
     } catch (e) {
+      if (ticket !== loadTicket) return;
       console.error('JournalCalendar: error loading entries', e);
       entryMap = new Map();
     } finally {
-      loading = false;
+      if (ticket === loadTicket) loading = false;
     }
   }
 
@@ -47,7 +53,10 @@
   $: {
     if (wasLocked && !$journalLock.needsUnlock) loadEntries();
     if ($journalLock.needsUnlock) {
-      // Locking drops the previews too, not just the view of them.
+      // Locking drops the previews too, not just the view of them, and any
+      // load still on its way.
+      loadTicket++;
+      loading = false;
       entryMap = new Map();
       selectedCell = null;
     }
