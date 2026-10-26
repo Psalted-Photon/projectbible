@@ -671,6 +671,13 @@
     }, 1700);
   }
 
+  // Turning the eras off hides the bar and its pause button, so the sweep stops
+  // with it: it kept stepping unseen and came back on a later era, still going.
+  $: if (!timelineOn && playTimer) {
+    clearInterval(playTimer);
+    playTimer = null;
+  }
+
   // -------------------------------------------------------------- era card
 
   /** Open the card and frame the era; a second press closes it. */
