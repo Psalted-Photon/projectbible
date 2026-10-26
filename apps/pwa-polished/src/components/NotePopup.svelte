@@ -98,6 +98,8 @@
 
   onDestroy(() => {
     if (saveTimeout) clearTimeout(saveTimeout);
+    // Gone inside the 2-second autosave: the last words still go in.
+    if (isDirty) void saveNote();
     removeWindowListeners();
     window.removeEventListener('editorSurfaceUpdated', refreshNoteTheme);
     window.removeEventListener('settingsUpdated', refreshNoteTheme);
@@ -121,9 +123,20 @@
     saveTimeout = window.setTimeout(() => saveNote(), 2000);
   }
 
+  /**
+   * Asked to save while a save was already running. The typing since went in
+   * after that save read the note, so it gets a save of its own when that one
+   * ends; dropping it lost the last words of a note closed mid-save.
+   */
+  let saveAgain = false;
+
   async function saveNote() {
-    if (isSaving) return;
+    if (isSaving) {
+      saveAgain = true;
+      return;
+    }
     isSaving = true;
+    saveAgain = false;
     const wasDirty = isDirty;
     isDirty = false;
     if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
@@ -159,6 +172,7 @@
     } finally {
       isSaving = false;
     }
+    if (saveAgain && isDirty) void saveNote();
   }
 
   function isContentEmpty(html: string): boolean {
