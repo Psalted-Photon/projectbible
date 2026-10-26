@@ -3492,8 +3492,13 @@
     chapter: number,
     scrollToVerse: number | null = null,
   ) {
+    // Claims a load ticket before probing, the same as loadChapter does. The
+    // probe awaits, and a chapter picked in that gap used to be overtaken: this
+    // went on to load (or fall back to) the old chapter after the new one.
+    const ticket = ++loadChapterTicket;
     // Try to load the requested chapter
     const verses = await textStore.getChapter(translation, book, 1);
+    if (ticket !== loadChapterTicket) return;
 
     if (!verses || verses.length === 0) {
       console.warn(`⚠️ Book "${book}" not found in ${translation}`);
@@ -3502,6 +3507,7 @@
       // If Genesis exists → OT-capable translation → go to Genesis.
       // If Genesis also empty → NT-only translation → go to Matthew.
       const genesisVerses = await textStore.getChapter(translation, "Genesis", 1);
+      if (ticket !== loadChapterTicket) return;
       const fallbackBook = (genesisVerses && genesisVerses.length > 0) ? "Genesis" : "Matthew";
       const fallbackChapter = 1;
 
