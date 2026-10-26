@@ -178,7 +178,12 @@
     );
   }
 
+  // Only the newest load may land: a slow chapter that finished after a quicker
+  // one put its notes up under the newer chapter's title.
+  let loadTicket = 0;
+
   async function loadCommentary(book: string, chapter: number, author?: string) {
+    const ticket = ++loadTicket;
     loading = true;
     error = "";
     lastScrolledVerseKey = ''; // reset so new chapter allows fresh scroll-to-verse
@@ -188,7 +193,9 @@
       console.log(`📜 Loading commentary for ${book} ${chapter}, author: ${author || 'all'}`);
       
       // Get all verse-level commentary entries for the chapter
-      entries = await commentaryStore.getAllChapterContent(book, chapter, author);
+      const loaded = await commentaryStore.getAllChapterContent(book, chapter, author);
+      if (ticket !== loadTicket) return;
+      entries = loaded;
       
       console.log(`   Loaded ${entries.length} commentary entries`);
 
@@ -196,11 +203,12 @@
         readerElement.scrollTo({ top: 0, behavior: "auto" });
       }
     } catch (err: unknown) {
+      if (ticket !== loadTicket) return;
       console.error("Error loading commentary:", err);
       error = `Failed to load commentary for ${book} ${chapter}.`;
       entries = [];
     } finally {
-      loading = false;
+      if (ticket === loadTicket) loading = false;
     }
   }
 
