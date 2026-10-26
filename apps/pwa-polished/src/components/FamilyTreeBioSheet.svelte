@@ -55,10 +55,19 @@
    */
   $: personLabel = shown?.displayTitle || shown?.name || fallbackLabel;
 
+  // A new person lets go of the last one's name, so fallbackLabel covers the
+  // load instead of the previous person's header staying up.
+  let shownFor = personId;
+  $: if (personId !== shownFor) {
+    shownFor = personId;
+    shown = null;
+  }
+
   function handlePersonChange(p: PersonRecord | null) {
     // A null here means "not loaded yet", not "nobody" — ignored rather than
-    // clearing what's already shown, so the header never flashes empty.
-    if (p) shown = p;
+    // clearing what's already shown, so the header never flashes empty. Only
+    // the person this sheet is for counts.
+    if (p && p.id === personId) shown = p;
   }
 </script>
 

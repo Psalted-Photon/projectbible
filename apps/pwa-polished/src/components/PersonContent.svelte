@@ -157,9 +157,15 @@
   async function loadById(id: string) {
     loadedFor = id;
     loading = true;
-    loaded = await getPersonById(id);
-    // Guard a slower load landing after you've moved on.
-    if (loadedFor === id) loading = false;
+    // Cleared first: the previous person's card stayed up, looking like this
+    // one, until the new record arrived.
+    loaded = null;
+    const record = await getPersonById(id);
+    // Guard a slower load landing after you've moved on: it used to still
+    // put its person up, only the spinner was guarded.
+    if (loadedFor !== id) return;
+    loaded = record;
+    loading = false;
   }
 
   $: title = person ? person.displayTitle || person.name : peopleSource.label;
