@@ -1227,14 +1227,16 @@
 
   /* ── Phone portrait (≤480px) ── */
   @media (max-width: 480px) {
+    /* Clear of the status bar: an iPhone home-screen install draws the page
+       under it (viewport-fit=cover), and the title and X sat under the clock. */
     .modal-backdrop {
-      padding: 0;
+      padding: env(safe-area-inset-top, 0px) 0 0;
       align-items: flex-start;
     }
 
     .modal-container {
       max-width: 100vw;
-      max-height: 100dvh;
+      max-height: calc(100dvh - env(safe-area-inset-top, 0px));
       border-radius: 0;
       border-left: none;
       border-right: none;

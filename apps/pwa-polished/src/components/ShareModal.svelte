@@ -160,7 +160,8 @@
     align-items: flex-end;
     justify-content: center;
     z-index: 9000;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* No safe-area padding here: the sheet pads its own bottom, and doing it
+       in both places left a dimmed strip under it on iPhone. */
   }
 
   .sh-modal {
