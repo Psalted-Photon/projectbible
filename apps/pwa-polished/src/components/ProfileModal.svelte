@@ -683,7 +683,7 @@
           </div>
           <div class="profile-details">
             <h2>{profileName ? `Hey ${profileName}` : 'Profile'}</h2>
-            <div class="profile-subtitle">
+            <div class="profile-subtitle" title={profileEmail ?? undefined}>
               {#if profileEmail}
                 {profileEmail}
               {:else}
@@ -1088,11 +1088,15 @@
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
   }
 
+  /* Wraps on a narrow phone: the name and a long email take the first row and
+     the sync / sign-out / X buttons drop under them, instead of the header
+     running off the right edge at 360px. */
   .modal-header {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    gap: 16px;
+    gap: 12px 16px;
     margin-bottom: 16px;
   }
 
@@ -1100,9 +1104,16 @@
     display: flex;
     gap: 12px;
     align-items: center;
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+
+  .profile-details {
+    min-width: 0;
   }
 
   .profile-icon {
+    flex-shrink: 0;
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -1145,12 +1156,16 @@
   .profile-subtitle {
     font-size: 12px;
     color: #aaa;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .profile-actions {
     display: flex;
     align-items: center;
     gap: 10px;
+    margin-left: auto;
   }
 
   .sync-status {
