@@ -282,3 +282,38 @@ export function parseOsisRef(ref: string): RefTarget | null {
     verse: verseStr ? parseInt(verseStr) : 1,
   };
 }
+
+/**
+ * Split an OSIS list into one ref per verse or range, each carrying the book
+ * and chapter it inherits: "Act.18.26; 23.15, 20; 24.22" → Act.18.26,
+ * Act.23.15, Act.23.20, Act.24.22. Strong's writes its lists loosely — colons
+ * for dots, "9.1ff", "6.27b", a new chapter after a comma — so all of those
+ * are read too. Null when a piece can't be read, so the caller can keep the
+ * list as it was.
+ */
+export function splitOsisRefs(list: string): string[] | null {
+  const out: string[] = [];
+  let book: string | null = null;
+  let chapter: string | null = null;
+  for (const group of list.replace(/:/g, '.').split(';')) {
+    for (const raw of group.split(/[,\s]+/)) {
+      // The suffix and any stray marks after the last number say nothing the link needs.
+      const item = raw.replace(/[^\d]+$/, '').replace(/(\d)[a-z]+(?=-)/g, '$1');
+      if (!item) continue;
+      let m: RegExpMatchArray | null;
+      if ((m = item.match(/^([1-4]?[A-Za-z]+)\.(\d+)(?:\.(\d+))?(-[\d.]+)?$/))) {
+        book = m[1];
+        chapter = m[2];
+        out.push(m[3] ? `${book}.${chapter}.${m[3]}${m[4] ?? ''}` : `${book}.${chapter}${m[4] ?? ''}`);
+      } else if ((m = item.match(/^(\d+)\.(\d+)(-[\d.]+)?$/)) && book) {
+        chapter = m[1];
+        out.push(`${book}.${chapter}.${m[2]}${m[3] ?? ''}`);
+      } else if ((m = item.match(/^(\d+)(-\d+)?$/)) && book && chapter) {
+        out.push(`${book}.${chapter}.${m[1]}${m[2] ?? ''}`);
+      } else {
+        return null;
+      }
+    }
+  }
+  return out.length ? out : null;
+}

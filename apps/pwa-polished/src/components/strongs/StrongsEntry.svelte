@@ -15,7 +15,7 @@
   } from "../../lib/strongsUsage";
   import { navigationStore } from "../../stores/navigationStore";
   import { isOriginalLanguage, greekPartnerFor } from "../../lib/translationKind";
-  import { parseOsisRef } from "../../lib/parseRefString";
+  import { parseOsisRef, splitOsisRefs } from "../../lib/parseRefString";
   import { getBookColor } from "../../lib/bibleData";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../../lib/morphologyExpander";
   import {
@@ -210,12 +210,8 @@
       .replace(/<i>([\s\S]*?)<\/i>/gi, "<em>$1</em>")
       // Line breaks (various SWORD spellings)
       .replace(/<BR\s*\/>/gi, "<br>")
-      // Scripture refs → clickable buttons, in their book's color
-      .replace(
-        /<ref='([^']+)'>([\s\S]*?)<\/ref>/gi,
-        (_m, ref: string, label: string) =>
-          `<button class="scripture-ref" data-ref="${ref}" style="color:${refColor(ref)}">${label}</button>`,
-      )
+      // Scripture refs → clickable buttons, one per verse, in their book's color
+      .replace(/<ref='([^']+)'>([\s\S]*?)<\/ref>/gi, (_m, list: string, label: string) => refLinks(list, label))
       // Numbered items: __ at start of a segment → indented block
       .replace(/(^|\n|<br>)__(\d+\.)/g, '$1<span class="strongs-item">$2</span> ')
       // Strip any remaining unknown tags
@@ -225,11 +221,30 @@
       .join("");
   }
 
-  /** The book's category color for an OSIS ref. A list like "Heb.5.4; 7.11" is
-   *  colored by its first reference. */
-  function refColor(osisRef: string): string {
-    const parsed = parseOsisRef(osisRef.split(";")[0]);
-    return parsed ? getBookColor(parsed.book) : "var(--color-primary, #4a90e2)";
+  /** One reference as the label prints it: "Heb.5:4", "7:11", "20", "Mt. 9:4", "1-20". */
+  const REF_LABEL = /(?:[1-4]?[A-Z][a-z]*\.?\s?)?\d+(?:[:.]\d+)?(?:[-–]\d+(?:[:.]\d+)?)?/g;
+
+  /**
+   * A Strong's ref, which often lists several verses under one tag
+   * ("Heb.5.4; 7.11; 9.4" printed "Heb.5:4, 7:11, 9:4"), as a link per verse.
+   * Each reference printed in the label is paired with its verse in the list,
+   * and the commas and spaces between them stay plain text. When the two don't
+   * line up — a handful of entries whose source markup is broken — the whole
+   * label stays one link to the first verse.
+   */
+  function refLinks(list: string, label: string): string {
+    const refs = splitOsisRefs(list);
+    if (!refs) return refButton(list.split(";")[0], label);
+    const printed = label.match(REF_LABEL) ?? [];
+    if (refs.length < 2 || printed.length !== refs.length) return refButton(refs[0], label);
+    let i = 0;
+    return label.replace(REF_LABEL, (text) => refButton(refs[i++], text));
+  }
+
+  function refButton(osisRef: string, label: string): string {
+    const parsed = parseOsisRef(osisRef);
+    const color = parsed ? getBookColor(parsed.book) : "var(--color-primary, #4a90e2)";
+    return `<button class="scripture-ref" data-ref="${osisRef}" style="color:${color}">${label}</button>`;
   }
 
   /**
