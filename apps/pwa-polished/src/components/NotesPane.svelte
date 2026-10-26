@@ -1609,7 +1609,7 @@
       </button>
 
       {#if target?.kind === 'page' || target?.kind === 'shared'}
-        <input
+        <input aria-label="Page title"
           class="title-input"
           placeholder="Untitled"
           bind:value={editorTitle}
@@ -1922,7 +1922,7 @@
             />
 
             {#if creatingNotebook}
-              <input
+              <input aria-label="Notebook name"
                 class="new-nb-input"
                 placeholder="Notebook name…"
                 bind:value={newNotebookName}

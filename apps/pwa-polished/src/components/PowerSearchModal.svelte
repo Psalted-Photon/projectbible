@@ -376,7 +376,7 @@
             <div class="control-group">
               <div class="label-text">Must also contain:</div>
               <div class="input-with-button">
-                <input
+                <input aria-label="Must also contain"
                   type="text"
                   bind:value={mustContainInput}
                   placeholder="Add word..."
@@ -401,7 +401,7 @@
             <div class="control-group">
               <div class="label-text">Must NOT contain:</div>
               <div class="input-with-button">
-                <input
+                <input aria-label="Must not contain"
                   type="text"
                   bind:value={mustNotContainInput}
                   placeholder="Exclude word..."
@@ -434,14 +434,14 @@
             <div class="control-group">
               <div class="label-text">Find words near each other:</div>
               <div class="proximity-inputs">
-                <input
+                <input aria-label="First word"
                   type="text"
                   bind:value={proximityWord1}
                   placeholder="First word..."
                   title="First word in proximity search"
                 />
                 <span class="proximity-label">within</span>
-                <input
+                <input aria-label="Words apart (1 to 30)"
                   type="number"
                   bind:value={proximityDistance}
                   min="1"
@@ -450,7 +450,7 @@
                   title="Maximum words between (1-30)"
                 />
                 <span class="proximity-label">words of</span>
-                <input
+                <input aria-label="Second word"
                   type="text"
                   bind:value={proximityWord2}
                   placeholder="Second word..."

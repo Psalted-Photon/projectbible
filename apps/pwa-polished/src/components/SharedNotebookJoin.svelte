@@ -190,7 +190,7 @@
         Eight characters, from whoever runs the notebook. Capitals and the dash do not matter.
       </p>
 
-      <input
+      <input aria-label="Invite code"
         class="sj-input"
         placeholder="ABCD-EFGH"
         inputmode="text"

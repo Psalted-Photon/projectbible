@@ -786,14 +786,14 @@
               <button class="primary-btn" on:click={() => (recoveryDone = false)}>Continue</button>
             {:else}
               <h3>Choose a new password</h3>
-              <input
+              <input aria-label="New password"
                 class={`auth-input ${recoveryPassword.length > 0 ? (recoveryMatch ? 'match-ok' : 'match-error') : ''}`}
                 type="password"
                 placeholder="New password"
                 autocomplete="new-password"
                 bind:value={recoveryPassword}
               />
-              <input
+              <input aria-label="Confirm new password"
                 class={`auth-input ${recoveryPasswordConfirm.length > 0 ? (recoveryMatch ? 'match-ok' : 'match-error') : ''}`}
                 type="password"
                 placeholder="Confirm new password"
@@ -822,7 +822,7 @@
             {/if}
             {#if authMode === 'login'}
               <h3>Sign in</h3>
-              <input
+              <input aria-label="Email"
                 class="auth-input"
                 type="email"
                 placeholder="Email"
@@ -830,7 +830,7 @@
                 bind:value={authEmail}
                 on:keydown={(e) => e.key === 'Enter' && handleSignIn()}
               />
-              <input
+              <input aria-label="Password"
                 class="auth-input"
                 type="password"
                 placeholder="Password"
@@ -847,9 +847,9 @@
               </button>
             {:else if authMode === 'signup'}
               <h3>Create account</h3>
-              <input class="auth-input" type="text" placeholder="Name" autocomplete="name" bind:value={authName} />
-              <input class="auth-input" type="email" placeholder="Email" autocomplete="email" bind:value={authEmail} />
-              <input
+              <input aria-label="Name" class="auth-input" type="text" placeholder="Name" autocomplete="name" bind:value={authName} />
+              <input aria-label="Email" class="auth-input" type="email" placeholder="Email" autocomplete="email" bind:value={authEmail} />
+              <input aria-label="Password"
                 class={`auth-input ${authPassword.length > 0 ? (authPassword.length < 6 ? 'match-error' : 'match-ok') : ''}`}
                 type="password"
                 placeholder="Password"
@@ -857,7 +857,7 @@
                 bind:value={authPassword}
               />
               <div class={`password-match ${signUpStrengthClass}`}>{signUpStrength}</div>
-              <input
+              <input aria-label="Confirm password"
                 class={`auth-input ${authPasswordConfirm.length > 0 ? (signUpMatch ? 'match-ok' : 'match-error') : ''}`}
                 type="password"
                 placeholder="Confirm password"
@@ -899,7 +899,7 @@
               </button>
             {:else}
               <h3>Reset password</h3>
-              <input
+              <input aria-label="Email"
                 class="auth-input"
                 type="email"
                 placeholder="Email"
@@ -1004,7 +1004,7 @@
                    account. -->
               <div class="setting-group">
                 <p class="setting-label">Change name</p>
-                <input class="auth-input" type="text" placeholder="Your name" bind:value={nameUpdate} />
+                <input aria-label="Your name" class="auth-input" type="text" placeholder="Your name" bind:value={nameUpdate} />
                 <button class="primary-btn" on:click={handleChangeName} disabled={nameSaving}>
                   {nameSaving ? 'Updating…' : 'Update name'}
                 </button>
@@ -1017,19 +1017,19 @@
               </div>
               <div class="setting-group">
                 <p class="setting-label">Change password</p>
-                <input
+                <input aria-label="Current password"
                   class="auth-input"
                   type="password"
                   placeholder="Current password"
                   bind:value={currentPassword}
                 />
-                <input
+                <input aria-label="New password"
                   class={`auth-input ${newPassword.length > 0 ? (passwordsMatch ? 'match-ok' : 'match-error') : ''}`}
                   type="password"
                   placeholder="New password"
                   bind:value={newPassword}
                 />
-                <input
+                <input aria-label="Confirm new password"
                   class={`auth-input ${newPasswordConfirm.length > 0 ? (passwordsMatch ? 'match-ok' : 'match-error') : ''}`}
                   type="password"
                   placeholder="Confirm new password"
@@ -1059,7 +1059,7 @@
                 {#if showDeleteConfirm && !showFinalDeleteConfirm}
                   <div class="delete-confirm">
                     <p>Type DELETE to confirm account deletion.</p>
-                    <input class="auth-input" type="text" bind:value={deleteConfirmText} />
+                    <input aria-label="Type DELETE to confirm" class="auth-input" type="text" bind:value={deleteConfirmText} />
                     <button class="danger-btn" on:click={handleDeleteAccount}>Confirm delete</button>
                     <button class="secondary-btn" on:click={cancelDeleteAccount}>Cancel</button>
                   </div>
