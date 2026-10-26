@@ -9,6 +9,8 @@
   import { ENOCH_EDITIONS, isEnochAuthor, enochLabelFor, loadEnoch } from "../lib/enochBooks";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import PackDropdownSection from "./PackDropdownSection.svelte";
+  import { portal } from "../lib/portal";
+  import { fixedOrigin } from "../lib/fixedOrigin";
   import ReadAloudTextButton from "./ReadAloudTextButton.svelte";
 
   export let windowId: string | undefined = undefined;
@@ -34,9 +36,28 @@
   let enochChapters: { chapter: number; label: string }[] = [];
   let enochLoadedFor = "";
 
-  // Refs for dropdown positioning
+  // Refs for dropdown positioning. This window's own, never looked up by class:
+  // with two commentary windows open, a lookup found the other one's menu.
   let authorButtonRef: HTMLElement;
   let referenceButtonRef: HTMLElement;
+  let authorMenuEl: HTMLElement | null = null;
+  let referenceMenuEl: HTMLElement | null = null;
+  let navContentEl: HTMLElement | null = null;
+
+  /**
+   * Put a menu under its button. The menus live on <body> (see the markup), so
+   * this is normally the viewport; asked rather than assumed, and kept on screen.
+   */
+  function placeMenu(menu: HTMLElement, button: HTMLElement, minWidth?: number) {
+    const rect = button.getBoundingClientRect();
+    const origin = fixedOrigin(menu);
+    if (minWidth) menu.style.width = `${Math.max(rect.width, minWidth)}px`;
+    else menu.style.removeProperty('width');
+    const maxLeft = origin.left + origin.width - menu.offsetWidth - 8;
+    menu.style.left = `${Math.max(origin.left + 8, Math.min(rect.left, maxLeft)) - origin.left}px`;
+    menu.style.top = `${rect.bottom + 4 - origin.top}px`;
+    return rect;
+  }
 
   // Use per-window state if windowId provided, otherwise use global state
   $: windowState = windowId
@@ -126,15 +147,9 @@
       // Position dropdown. Asked for before the authors are refreshed below,
       // which can take a frame or two, so it never shows anywhere but here.
       requestAnimationFrame(() => {
-        const dropdown = document.querySelector(
-          ".author-dropdown",
-        ) as HTMLElement;
+        const dropdown = authorMenuEl;
         if (dropdown && authorButtonRef) {
-          const rect = authorButtonRef.getBoundingClientRect();
-          dropdown.style.left = `${rect.left}px`;
-          dropdown.style.top = `${rect.bottom + 4}px`;
-          dropdown.style.width = `${Math.max(rect.width, 200)}px`;
-          growFrom(dropdown, rect);
+          growFrom(dropdown, placeMenu(dropdown, authorButtonRef, 200));
         }
       });
 
@@ -158,15 +173,9 @@
       
       // Position dropdown and scroll to current book
       requestAnimationFrame(() => {
-        const dropdown = document.querySelector(
-          ".commentary-reference-dropdown",
-        ) as HTMLElement;
+        const dropdown = referenceMenuEl;
         if (dropdown && referenceButtonRef) {
-          const rect = referenceButtonRef.getBoundingClientRect();
-          dropdown.style.left = `${rect.left}px`;
-          dropdown.style.top = `${rect.bottom + 4}px`;
-          dropdown.style.removeProperty('width');
-          growFrom(dropdown, rect);
+          growFrom(dropdown, placeMenu(dropdown, referenceButtonRef));
 
           // Scroll to current book
           if (currentBook) {
@@ -229,7 +238,7 @@
     if (isExpanding) {
       // Scroll to position this book at top when expanding
       requestAnimationFrame(() => {
-        const dropdown = document.querySelector('.commentary-reference-dropdown') as HTMLElement;
+        const dropdown = referenceMenuEl;
         const bookButton = event.target as HTMLElement;
         const bookItem = bookButton?.closest('.book-item') as HTMLElement;
         
@@ -256,11 +265,17 @@
     expandedBooks = new Set();
   }
 
+  // Listened for on the way down (capture), because the other commentary
+  // window's buttons stop their clicks on the way up, which left this window's
+  // menu open beside that one's. Only this window's own buttons and menus count
+  // as inside.
   function closeDropdowns(event: MouseEvent) {
     const target = event.target as HTMLElement;
+    const trigger = target.closest(".nav-dropdown");
     if (
-      !target.closest(".nav-dropdown") &&
-      !target.closest(".dropdown-menu")
+      !(trigger && navContentEl?.contains(trigger)) &&
+      !authorMenuEl?.contains(target) &&
+      !referenceMenuEl?.contains(target)
     ) {
       authorDropdownOpen = false;
       referenceDropdownOpen = false;
@@ -268,52 +283,25 @@
   }
 
   function updateDropdownPositions() {
-    if (authorDropdownOpen) {
-      const dropdown = document.querySelector(
-        ".author-dropdown",
-      ) as HTMLElement;
-      if (dropdown && authorButtonRef) {
-        const rect = authorButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
-        dropdown.style.width = `${Math.max(rect.width, 200)}px`;
-      }
+    if (authorDropdownOpen && authorMenuEl && authorButtonRef) {
+      placeMenu(authorMenuEl, authorButtonRef, 200);
     }
-    if (referenceDropdownOpen) {
-      const dropdown = document.querySelector(
-        ".commentary-reference-dropdown",
-      ) as HTMLElement;
-      if (dropdown && referenceButtonRef) {
-        const rect = referenceButtonRef.getBoundingClientRect();
-        dropdown.style.left = `${rect.left}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
-        dropdown.style.removeProperty('width');
-      }
+    if (referenceDropdownOpen && referenceMenuEl && referenceButtonRef) {
+      placeMenu(referenceMenuEl, referenceButtonRef);
     }
   }
 
   onMount(() => {
-    document.addEventListener("click", closeDropdowns);
-
-    // Update dropdown positions on scroll
-    const navContent = document.querySelector(".commentary-nav-content");
-    if (navContent) {
-      navContent.addEventListener("scroll", updateDropdownPositions);
-    }
+    document.addEventListener("click", closeDropdowns, true);
   });
 
   onDestroy(() => {
-    document.removeEventListener("click", closeDropdowns);
-
-    const navContent = document.querySelector(".commentary-nav-content");
-    if (navContent) {
-      navContent.removeEventListener("scroll", updateDropdownPositions);
-    }
+    document.removeEventListener("click", closeDropdowns, true);
   });
 </script>
 
 <div class="commentary-navigation-bar" {style}>
-  <div class="commentary-nav-content">
+  <div class="commentary-nav-content" bind:this={navContentEl} on:scroll={updateDropdownPositions}>
     <!-- Author Dropdown -->
     <div class="nav-dropdown author-dropdown-trigger">
       <button
@@ -370,9 +358,11 @@
     {/if}
   </div>
 
-  <!-- Dropdowns rendered outside nav-content to avoid overflow clipping -->
+  <!-- Dropdowns live on <body>. Inside the window, light and sepia's filter
+       made the window the box `position: fixed` resolves against, so they
+       opened in the wrong place and were cut off at the window's edges. -->
   {#if authorDropdownOpen}
-    <div class="dropdown-menu author-dropdown" out:fadeAway>
+    <div class="dropdown-menu author-dropdown" use:portal bind:this={authorMenuEl} out:fadeAway>
       <button
         class="dropdown-item"
         class:selected={currentAuthor === "All Authors"}
@@ -414,7 +404,7 @@
   {/if}
 
   {#if referenceDropdownOpen && isEnoch}
-    <div class="dropdown-menu tree-menu commentary-reference-dropdown" out:fadeAway>
+    <div class="dropdown-menu tree-menu commentary-reference-dropdown" use:portal bind:this={referenceMenuEl} out:fadeAway>
       <div class="enoch-chapter-grid">
         {#each enochChapters as ch}
           <button
@@ -433,7 +423,7 @@
   {#if referenceDropdownOpen && !isEnoch}
     <!-- book-tree carries the two-column layout; .tree-menu is shared with the
          Enoch picker above, which must stay a single block. -->
-    <div class="dropdown-menu tree-menu book-tree commentary-reference-dropdown" out:fadeAway>
+    <div class="dropdown-menu tree-menu book-tree commentary-reference-dropdown" use:portal bind:this={referenceMenuEl} out:fadeAway>
       {#each REFERENCE_COLUMNS as column}
         <div class="book-column book-column-{column.testament}">
           <div class="book-column-title">{column.label}</div>
@@ -704,7 +694,8 @@
     max-height: 400px;
     overflow-y: auto;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z-index: 2000;
+    /* On <body> now: over Harmonies (8000) and the windows above it (8500). */
+    z-index: 10001;
   }
 
   .dropdown-item {
