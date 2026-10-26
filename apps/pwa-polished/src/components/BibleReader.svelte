@@ -364,6 +364,8 @@
   }> = [];
   let loading = true;
   let error = "";
+  /** The chapter that was asked for and came back empty, for the message in its place. */
+  let missingChapter = "";
   /** No Bible text on the device at all — see the empty state in the markup. */
   let noTranslationsInstalled = false;
   let chronologicalData: any = null;
@@ -3022,6 +3024,7 @@
 
     loading = true;
     error = "";
+    missingChapter = "";
     // Repeats are persistent/global — loadAndApplyHighlights re-applies them
     // after the new chapter renders; no need to clear here.
     try {
@@ -3037,6 +3040,11 @@
       if (!chapterVerses || chapterVerses.length === 0) {
         console.warn(`No verses found for ${translation} ${book} ${chapter}`);
         loading = false;
+        // Not the chapter that was up before: it stayed on screen under the new
+        // name, with nothing to say this one was missing (Hebrew Malachi 4,
+        // which the Hebrew Bible numbers as Malachi 3:19-24).
+        chapters = [];
+        missingChapter = `${book} ${chapter}`;
         // The key stays committed on purpose. A pack with no verses for this
         // chapter will fail identically every time, and clearing it here would
         // have the reactive block retry the same load on every tick.
@@ -7193,7 +7201,13 @@
         <button class="no-text-retry" on:click={() => location.reload()}>Try again</button>
       </div>
     {:else if chapters.length === 0}
-      <div class="no-content">No verses found for this chapter.</div>
+      <div class="no-content">
+        {#if missingChapter}
+          {missingChapter} isn’t in this translation. Some Bibles number their chapters differently.
+        {:else}
+          No verses found for this chapter.
+        {/if}
+      </div>
     {:else}
       {#each chapters as chapterData (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}`)}
         {@const chPlanCtxs = computeAllPlanContexts(chapterData.book, chapterData.chapter, $readingSessionStore)}
