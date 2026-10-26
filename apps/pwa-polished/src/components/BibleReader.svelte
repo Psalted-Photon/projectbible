@@ -7013,8 +7013,10 @@
         const spans = pendingWordSpans;
 
         // Replace only what this selection actually covers, so an unrelated
-        // phrase elsewhere in the same verse survives.
-        const overlapping = chapterWordHighlights.filter(h =>
+        // phrase elsewhere in the same verse survives. Read from storage, not
+        // the cache: that can hold another chapter, with the same verse numbers.
+        const stored = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
+        const overlapping = stored.filter(h =>
           h.translation === currentTranslation &&
           spans.some(p =>
             p.verse === h.reference.verse &&
@@ -7040,14 +7042,15 @@
             style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
           }});
         }
-        chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
       } else {
         // Verse-level: one record per verse, replacing whatever each had.
         const verses = pendingHighlightVerses.length > 0
           ? pendingHighlightVerses
           : [highlightModalRef.verse];
+        // From storage, for the same reason as the word branch above.
+        const stored = await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter);
         for (const verse of verses) {
-          const prev = chapterVerseHighlights.find(h => h.reference.verse === verse);
+          const prev = stored.find(h => h.reference.verse === verse);
           if (prev) {
             await userDataStore.deleteHighlight(prev.id);
             await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: prev.id });
@@ -7059,18 +7062,10 @@
             style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
           }});
         }
-        chapterVerseHighlights = await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter);
       }
-      // Re-apply all highlights for the chapter
-      await tick();
-      const section = readerElement?.querySelector<HTMLElement>(
-        `[data-chapter-section][data-book="${highlightModalRef.book}"][data-chapter="${highlightModalRef.chapter}"]`
-      );
-      if (section) {
-        clearRepeatsInSection(section);
-        applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
-        paintRepeatsIn(section, get(repeatsStore));
-      }
+      // Re-apply all highlights for the chapter, both kinds read together so
+      // neither is left over from another chapter.
+      await loadAndApplyHighlights(highlightModalRef.book, highlightModalRef.chapter);
     }}
     on:remove={async () => {
       if (!highlightModalRef) return;
@@ -7081,7 +7076,7 @@
           // Remove every record the selection covers, so a phrase that saved as
           // several per-verse rows comes off in one go rather than one row at a time.
           const targets = pendingWordSpans.length > 0
-            ? chapterWordHighlights.filter(h =>
+            ? (await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter)).filter(h =>
                 h.translation === currentTranslation &&
                 pendingWordSpans.some(p =>
                   p.verse === h.reference.verse &&
@@ -7094,31 +7089,21 @@
             await userDataStore.deleteWordHighlight(t.id);
             await syncQueue.enqueue({ type: 'DELETE', table: 'user_word_highlights', id: t.id });
           }
-          chapterWordHighlights = await userDataStore.getChapterWordHighlights(highlightModalRef.book, highlightModalRef.chapter);
-          // A relocated book-intro pill may now have lost a highlight — re-derive.
-          await refreshBookIntroPills();
         } else {
           // Every verse the selection covers, so 3 and 5 come off together.
           const existing = highlightModalExisting;
           const targets = pendingHighlightVerses.length > 1
-            ? chapterVerseHighlights.filter(h => pendingHighlightVerses.includes(h.reference.verse))
+            ? (await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter))
+                .filter(h => pendingHighlightVerses.includes(h.reference.verse))
             : [existing];
           for (const t of targets) {
             await userDataStore.deleteHighlight(t.id);
             await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: t.id });
           }
-          chapterVerseHighlights = await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter);
         }
-        // Re-apply after removal
-        await tick();
-        const section = readerElement?.querySelector<HTMLElement>(
-          `[data-chapter-section][data-book="${highlightModalRef.book}"][data-chapter="${highlightModalRef.chapter}"]`
-        );
-        if (section) {
-          clearRepeatsInSection(section);
-          applyChapterHighlights(section, chapterVerseHighlights, chapterWordHighlights, currentTranslation);
-          paintRepeatsIn(section, get(repeatsStore));
-        }
+        // Re-apply after removal. This also re-derives the book-intro pills,
+        // which a removed word highlight may have fed.
+        await loadAndApplyHighlights(highlightModalRef.book, highlightModalRef.chapter);
       }
     }}
     on:close={() => { highlightModalOpen = false; bulkRepeatRequest = null; highlightModalRepeatGroup = null; }}
