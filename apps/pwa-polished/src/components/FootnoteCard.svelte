@@ -98,7 +98,11 @@
   }
 </script>
 
-<svelte:window on:keydown={(e) => e.key === 'Escape' && dispatch('close')} />
+<svelte:window on:keydown={(e) => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  e.preventDefault();
+  dispatch('close');
+}} />
 
 <div
   class="footnote-card themed"

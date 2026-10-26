@@ -26,7 +26,17 @@
     );
     close();
   }
+
+  // Escape closes it, unless something on top (a word card, the lookup card)
+  // took the press first.
+  function onEscape(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || e.defaultPrevented || !(open)) return;
+    e.preventDefault();
+    close();
+  }
 </script>
+
+<svelte:window on:keydown={onEscape} />
 
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->

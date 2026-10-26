@@ -204,7 +204,11 @@
   );
 </script>
 
-<svelte:window on:keydown={(e) => e.key === 'Escape' && dispatch('close')} />
+<svelte:window on:keydown={(e) => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  e.preventDefault();
+  dispatch('close');
+}} />
 
 <!-- No hidden state. The card stays up until you tap away or press Escape,
      which is what "it should just stay and scroll" means: a card that removes

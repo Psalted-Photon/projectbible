@@ -881,6 +881,8 @@
     if (event.key === "Enter" && searchQuery.trim()) {
       submitSearch();
     } else if (event.key === "Escape") {
+      // Handled here, so a pane behind the bar doesn't close as well.
+      event.preventDefault();
       showResults = false;
       if (!searchQuery.trim()) {
         searchExpanded = false;
@@ -2207,8 +2209,27 @@
     closeCrumbMenu();
   }
 
+  // Escape puts away whatever the bar has open: it used to close only the crumb
+  // menu, and the translation, book, commentary and repeat menus ignored it.
   function onWindowKeydown(event: KeyboardEvent): void {
-    if (crumbMenu && event.key === "Escape") closeCrumbMenu();
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    const anyOpen =
+      !!crumbMenu || translationDropdownOpen || referenceDropdownOpen || commDropdownOpen ||
+      refsPackOpen || repeatDropdownWord !== null || repeatVerses !== null || showResults;
+    if (!anyOpen) return;
+    event.preventDefault();
+    if (crumbMenu) closeCrumbMenu();
+    translationDropdownOpen = false;
+    referenceDropdownOpen = false;
+    commDropdownOpen = false;
+    translationDropdownPositioned = false;
+    referenceDropdownPositioned = false;
+    commDropdownPositioned = false;
+    refsPackOpen = false;
+    refsPackPositioned = false;
+    closeRepeatDropdown();
+    repeatVerses = null;
+    showResults = false;
   }
 
   /** Go to the held crumb and drop every crumb after it — what a tap used to do. */

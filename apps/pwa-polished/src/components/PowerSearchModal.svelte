@@ -288,7 +288,17 @@
     return highlighted;
   }
 
+
+  // Escape closes it, unless something on top (a word card, the lookup card)
+  // took the press first.
+  function onEscape(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || e.defaultPrevented || !(show)) return;
+    e.preventDefault();
+    closeModal();
+  }
 </script>
+
+<svelte:window on:keydown={onEscape} />
 
 {#if show}
   <!-- svelte-ignore a11y-click-events-have-key-events -->

@@ -1371,7 +1371,17 @@
     const el = document.querySelector(`[data-day-number="${dayNumber}"]`) as HTMLElement | null;
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  // Escape closes it, unless something on top (a word card, the lookup card)
+  // took the press first.
+  function onEscape(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || e.defaultPrevented || !(isOpen)) return;
+    e.preventDefault();
+    close();
+  }
 </script>
+
+<svelte:window on:keydown={onEscape} />
 
 {#if isOpen}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -1571,7 +1581,7 @@
                           class="plan-rename-input"
                           type="text"
                           bind:value={planRenameValue}
-                          on:keydown={(e) => { if (e.key === 'Enter') renamePlan(entry.id, planRenameValue); if (e.key === 'Escape') { planRenamingId = null; planRenameValue = ''; } }}
+                          on:keydown={(e) => { if (e.key === 'Enter') renamePlan(entry.id, planRenameValue); if (e.key === 'Escape') { e.preventDefault(); planRenamingId = null; planRenameValue = ''; } }}
                           on:blur={() => renamePlan(entry.id, planRenameValue || getPlanDisplayName(entry.plan.config))}
                           use:focusAndSelect
                         />

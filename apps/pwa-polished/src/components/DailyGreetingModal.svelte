@@ -166,7 +166,17 @@
     navigationStore.navigateToVerse(current.translation, parsed.book, verseAt.chapter, verseAt.startVerse);
     close();
   }
+
+  // Escape closes it, unless something on top (a word card, the lookup card)
+  // took the press first.
+  function onEscape(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || e.defaultPrevented || !($dailyGreetingOpen && !$welcomePending)) return;
+    e.preventDefault();
+    close();
+  }
 </script>
+
+<svelte:window on:keydown={onEscape} />
 
 <!-- A brand-new account gets the welcome first; both cards are fixed at the
      same depth, so they would otherwise stack. The greeting stays open

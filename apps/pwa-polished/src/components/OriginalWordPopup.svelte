@@ -84,7 +84,9 @@
   }
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<!-- Capture: the word card sits on top of whatever opened it (a Strong's
+     card, the lookup card), so it hears Escape first and marks it handled. -->
+<svelte:window on:keydown|capture={onKeydown} />
 
 {#if $shown}
   {@const s = $shown}

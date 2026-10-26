@@ -79,7 +79,17 @@
 
   // A topic with no entry shows nothing rather than crashing.
   $: content = helpContent[helpTopic];
+
+  // Escape closes it, unless something on top (a word card, the lookup card)
+  // took the press first.
+  function onEscape(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || e.defaultPrevented || !(show && content)) return;
+    e.preventDefault();
+    closeModal();
+  }
 </script>
+
+<svelte:window on:keydown={onEscape} />
 
 {#if show && content}
   <!-- svelte-ignore a11y-click-events-have-key-events -->

@@ -27,6 +27,25 @@
     handleClose();
   }
 
+  let paneEl: HTMLElement;
+
+  /**
+   * Escape closes the pane on top. Only when nothing is drawn over it — another
+   * pane, a modal, a card — and only once every other handler has had the
+   * press, stepping aside if one took it, so one press never closes two
+   * things. (The backdrop's own keydown never fired: it can't take focus.)
+   */
+  function onWindowKeydown(e: KeyboardEvent) {
+    if (e.key !== "Escape" || e.defaultPrevented || !paneEl) return;
+    // Asked now, before anything closing on this same press leaves the page.
+    const r = paneEl.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (!hit || !paneEl.contains(hit)) return;
+    setTimeout(() => {
+      if (!e.defaultPrevented) handleClose();
+    }, 0);
+  }
+
   function startResize(e: MouseEvent | TouchEvent) {
     isDraggingResize = true;
 
@@ -102,6 +121,7 @@
   on:mouseup={handleResizeEnd}
   on:touchmove={handleResizeMove}
   on:touchend={handleResizeEnd}
+  on:keydown={onWindowKeydown}
 />
 
 <!-- Backdrop -->
@@ -111,12 +131,12 @@
   role="none"
   style="z-index: {pane.zIndex + zBase - 1};"
   on:click={handleBackdropClick}
-  on:keydown={(e) => e.key === 'Escape' && handleBackdropClick()}
   transition:fly={{ opacity: 0, duration: 300 }}
 ></div>
 
 <!-- Pane -->
 <div
+  bind:this={paneEl}
   class="pane themed {pane.position} pane-{pane.type}"
   style={paneStyle}
   transition:fly={transitionConfig}

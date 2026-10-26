@@ -302,7 +302,10 @@
   let content: { handleBack?: () => boolean; viewSnapshot?: () => any } | null = null;
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.key !== "Escape" || !work) return;
+    // Already taken by a card on top of this one (a Greek word opened from a
+    // definition): one press closed both.
+    if (e.key !== "Escape" || !work || e.defaultPrevented) return;
+    e.preventDefault();
     if (content?.handleBack?.()) return;
     close();
   }
