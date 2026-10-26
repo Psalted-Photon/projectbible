@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { profileModalStore } from '../stores/profileModalStore';
+  import { parallelStore } from '../stores/parallelStore';
   import { userProfileStore } from '../stores/userProfileStore';
   import { supabaseAuthService } from '../services/SupabaseAuthService';
   import { passwordRecovery, authLinkError, finishPasswordRecovery } from '../stores/passwordRecoveryStore';
@@ -654,7 +655,7 @@
 {#if isOpen}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="modal-overlay" on:click={close}>
+  <div class="modal-overlay" class:over-parallel={$parallelStore.active} on:click={close}>
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="modal-content" on:click|stopPropagation>
@@ -1043,6 +1044,11 @@
     justify-content: center;
     align-items: center;
     z-index: 2000;
+  }
+
+  /* Above Harmonies (8000) and the windows raised over it (8500). */
+  .modal-overlay.over-parallel {
+    z-index: 8800;
   }
 
   .modal-content {

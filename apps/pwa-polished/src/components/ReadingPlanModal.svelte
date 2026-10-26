@@ -15,6 +15,7 @@
   } from '../stores/ReadingProgressStore';
   import { readingSessionStore } from '../stores/readingSessionStore';
   import { profileModalStore } from '../stores/profileModalStore';
+  import { parallelStore } from '../stores/parallelStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
   import { normalizeBookName, getBookColor, shortBookName } from '../lib/bibleData';
@@ -1365,7 +1366,7 @@
 {#if isOpen}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="modal-overlay" on:click={close}>
+  <div class="modal-overlay" class:over-parallel={$parallelStore.active} on:click={close}>
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="modal-content" on:click|stopPropagation>
@@ -1979,7 +1980,7 @@
   {#if congratsPlanName}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="congrats-overlay" on:click={() => congratsPlanName = null}>
+    <div class="congrats-overlay" class:over-parallel={$parallelStore.active} on:click={() => congratsPlanName = null}>
       <div class="congrats-card" on:click|stopPropagation>
         <div class="congrats-emoji"><Trophy size={56} weight="bold" /></div>
         <h2 class="congrats-title">Plan complete!</h2>
@@ -2003,6 +2004,11 @@
     justify-content: center;
     z-index: 1000;
     padding: 20px;
+  }
+
+  /* Above Harmonies (8000) and the windows raised over it (8500), below Profile's 8800. */
+  .modal-overlay.over-parallel {
+    z-index: 8700;
   }
   
   .modal-content {
@@ -3304,6 +3310,9 @@
     justify-content: center;
     z-index: 1100;
     padding: 20px;
+  }
+  .congrats-overlay.over-parallel {
+    z-index: 8750;
   }
   .congrats-card {
     background: #1a1a1a;

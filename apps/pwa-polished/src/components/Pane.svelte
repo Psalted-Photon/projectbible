@@ -2,6 +2,7 @@
   import { fly } from "../lib/motion";
   import { get } from "svelte/store";
   import { paneStore, pendingCloseEdge, type PaneState } from "../stores/paneStore";
+  import { parallelStore } from "../stores/parallelStore";
   import SettingsPane from "./panes/SettingsPane.svelte";
   import PacksPane from "./panes/PacksPane.svelte";
   import WakeAlarmPane from "./panes/WakeAlarmPane.svelte";
@@ -81,11 +82,15 @@
     opacity: 1,
   };
 
+  // Over Harmonies (8000) and the windows raised above it (8500), as well as
+  // over the reader; otherwise Settings opened from a harmony opens behind it.
+  $: zBase = $parallelStore.active ? 8600 : 100;
+
   $: paneStyle = `
     ${pane.position === "left" ? `left: 0; width: ${pane.width}%;` : ""}
     ${pane.position === "right" ? `right: 0; width: ${pane.width}%;` : ""}
     ${pane.position === "bottom" ? `bottom: 0; height: ${pane.height}%;` : ""}
-    z-index: ${pane.zIndex + 100};
+    z-index: ${pane.zIndex + zBase};
   `;
 </script>
 
@@ -101,7 +106,7 @@
   class="backdrop"
   class:clear={clearBackdrop}
   role="none"
-  style="z-index: {pane.zIndex + 99};"
+  style="z-index: {pane.zIndex + zBase - 1};"
   on:click={handleBackdropClick}
   on:keydown={(e) => e.key === 'Escape' && handleBackdropClick()}
   transition:fly={{ opacity: 0, duration: 300 }}
