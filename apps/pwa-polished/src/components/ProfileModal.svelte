@@ -58,6 +58,11 @@
   let recoveryError = '';
   let recoveryDone = false;
   let recoverySaving = false;
+  // Held while each account action waits on the server, so a second tap can't
+  // send it again (two renames, two re-authentications, two deletes).
+  let nameSaving = false;
+  let passwordSaving = false;
+  let deletingAccount = false;
 
   let profileName: string | null = null;
   let profileEmail: string | null = null;
@@ -426,6 +431,8 @@
       passwordError = 'New passwords do not match.';
       return;
     }
+    if (passwordSaving) return;
+    passwordSaving = true;
     try {
       await supabaseAuthService.reauthenticate(profileEmail, currentPassword);
       await supabaseAuthService.updatePassword(newPassword);
@@ -436,6 +443,8 @@
     } catch (error) {
       console.error(error);
       passwordError = 'Password update failed.';
+    } finally {
+      passwordSaving = false;
     }
   }
 
@@ -470,6 +479,8 @@
       nameError = 'Enter your name.';
       return;
     }
+    if (nameSaving) return;
+    nameSaving = true;
     try {
       await supabaseAuthService.updateProfileName(nameUpdate.trim());
       const session = await supabaseAuthService.getSession();
@@ -478,6 +489,8 @@
     } catch (error) {
       console.error(error);
       nameError = 'Name update failed.';
+    } finally {
+      nameSaving = false;
     }
   }
 
@@ -500,8 +513,10 @@
   }
 
   async function handleFinalDeleteAccount() {
+    if (deletingAccount) return;
     deleteError = '';
     deleteMessage = '';
+    deletingAccount = true;
     try {
       await supabaseAuthService.deleteAccount();
       await supabaseAuthService.signOut();
@@ -513,6 +528,8 @@
       console.error(error);
       deleteError = 'Account deletion failed.';
       showFinalDeleteConfirm = false;
+    } finally {
+      deletingAccount = false;
     }
   }
 
@@ -988,8 +1005,8 @@
               <div class="setting-group">
                 <p class="setting-label">Change name</p>
                 <input class="auth-input" type="text" placeholder="Your name" bind:value={nameUpdate} />
-                <button class="primary-btn" on:click={handleChangeName}>
-                  Update name
+                <button class="primary-btn" on:click={handleChangeName} disabled={nameSaving}>
+                  {nameSaving ? 'Updating…' : 'Update name'}
                 </button>
                 {#if nameMessage}
                   <div class="auth-message">{nameMessage}</div>
@@ -1023,8 +1040,8 @@
                     {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
                   {/if}
                 </div>
-                <button class="primary-btn" on:click={handleChangePassword} disabled={!passwordsMatch || !currentPassword}>
-                  Change password
+                <button class="primary-btn" on:click={handleChangePassword} disabled={!passwordsMatch || !currentPassword || passwordSaving}>
+                  {passwordSaving ? 'Changing…' : 'Change password'}
                 </button>
                 {#if passwordMessage}
                   <div class="auth-message">{passwordMessage}</div>
@@ -1051,8 +1068,10 @@
                   <div class="delete-confirm delete-final">
                     <p class="delete-final-warning">ARE YOU SURE YOU WANT TO DELETE YOUR ACCOUNT?</p>
                     <p>This permanently erases your account and every synced note, highlight, journal entry, and reading plan. This cannot be undone.</p>
-                    <button class="danger-btn" on:click={handleFinalDeleteAccount}>Yes — permanently delete my account</button>
-                    <button class="secondary-btn" on:click={cancelDeleteAccount}>Cancel</button>
+                    <button class="danger-btn" on:click={handleFinalDeleteAccount} disabled={deletingAccount}>
+                      {deletingAccount ? 'Deleting…' : 'Yes — permanently delete my account'}
+                    </button>
+                    <button class="secondary-btn" on:click={cancelDeleteAccount} disabled={deletingAccount}>Cancel</button>
                   </div>
                 {/if}
                 {#if deleteError}
