@@ -131,6 +131,23 @@
   // event delegation on the body and navigate to the referenced verse.
   function handleCommentaryBodyClick(e: MouseEvent | KeyboardEvent) {
     const target = e.target as HTMLElement;
+    // A link carried over from the source page (Calvin's, from CCEL): relative,
+    // so following it reloaded the app at "/?scrBook=..." or put "#xiv.vii" in
+    // the address bar. A scripture one opens its verse here; the rest stay put.
+    const link = e instanceof MouseEvent ? (target.closest("a[href]") as HTMLAnchorElement | null) : null;
+    const href = link?.getAttribute("href") ?? "";
+    if (link && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+      e.preventDefault();
+      const q = new URLSearchParams(href.split("#")[0].replace(/^[^?]*\?/, ""));
+      const book = q.get("scrBook");
+      const chapter = q.get("scrCh");
+      const verse = q.get("scrV");
+      if (book && chapter) {
+        const entry = link.closest('.commentary-entry[data-verse-start]') as HTMLElement | null;
+        handleRefClick(`${book} ${chapter}${verse ? `:${verse}` : ""}`, Number(entry?.dataset.verseStart) || null);
+      }
+      return;
+    }
     if (!target.classList.contains("commentary-ref")) {
       // A Greek or Hebrew word in the comment: its meaning beside it.
       if (e instanceof MouseEvent && !target.closest("a, button")) showOriginalWordAt(e);
