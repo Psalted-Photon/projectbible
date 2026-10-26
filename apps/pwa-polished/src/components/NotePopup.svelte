@@ -54,7 +54,9 @@
   type Handle = 's' | 'e' | 'w' | 'sw' | 'se';
   let interactMode: 'move' | 'resize' | null = null;
   let activeHandle: Handle | null = null;
-  let gestureBounds: { width: number; height: number } | null = null;
+  /** The area the note may use, in the coordinates `left`/`top` are in. */
+  type Area = { x0: number; y0: number; x1: number; y1: number };
+  let gestureBounds: Area | null = null;
   let pointerStartX = 0;
   let pointerStartY = 0;
   let startLeft = 0;
@@ -197,15 +199,33 @@
   /**
    * The box this note is laid out against — usually the viewport, but not when a
    * filter on `.themed` makes an ancestor the containing block. See
-   * lib/fixedOrigin.ts. Only the size matters here: `left`/`top` are already
-   * expressed relative to this box, so no offset has to be subtracted.
+   * lib/fixedOrigin.ts. `left`/`top` are already expressed relative to this
+   * box, so its own offset is never subtracted — only the reader's edges are
+   * moved into it (measureArea).
    */
-  function bounds(): { width: number; height: number } {
+  function bounds(): Area {
     // Measured once per gesture: fixedOrigin walks ancestors reading computed
     // styles, which is not something to do on every pointermove.
-    if (gestureBounds) return gestureBounds;
+    return gestureBounds ?? measureArea();
+  }
+
+  /**
+   * The box fixed positioning resolves against, cut down to the main reader's
+   * own area. The reader sits under the docked windows, so a note dragged past
+   * its edge slid underneath one and was lost there; it now stops at that edge
+   * the way it stops at the screen's.
+   */
+  function measureArea(): Area {
     const origin = fixedOrigin(popupEl);
-    return { width: origin.width, height: origin.height };
+    const area: Area = { x0: 0, y0: 0, x1: origin.width, y1: origin.height };
+    const main = popupEl?.closest('.main-content')?.getBoundingClientRect();
+    if (main) {
+      area.x0 = Math.max(area.x0, main.left - origin.left);
+      area.y0 = Math.max(area.y0, main.top - origin.top);
+      area.x1 = Math.min(area.x1, main.right - origin.left);
+      area.y1 = Math.min(area.y1, main.bottom - origin.top);
+    }
+    return area;
   }
 
   /**
@@ -215,11 +235,11 @@
    * is gone for good the next time that verse is opened.
    */
   function clampIntoView() {
-    const { width, height } = bounds();
-    w = Math.min(w, Math.max(MIN_W, width));
-    h = Math.min(h, Math.max(MIN_H, height));
-    left = Math.min(Math.max(left, KEEP_VISIBLE - w), Math.max(0, width - KEEP_VISIBLE));
-    top = Math.min(Math.max(top, 0), Math.max(0, height - KEEP_VISIBLE));
+    const { x0, y0, x1, y1 } = bounds();
+    w = Math.min(w, Math.max(MIN_W, x1 - x0));
+    h = Math.min(h, Math.max(MIN_H, y1 - y0));
+    left = Math.min(Math.max(left, x0 + KEEP_VISIBLE - w), Math.max(x0, x1 - KEEP_VISIBLE));
+    top = Math.min(Math.max(top, y0), Math.max(y0, y1 - KEEP_VISIBLE));
   }
 
   // ---- Drag-move (header bar) ----
@@ -239,8 +259,7 @@
 
   function beginInteraction(e: PointerEvent) {
     e.preventDefault();
-    const origin = fixedOrigin(popupEl);
-    gestureBounds = { width: origin.width, height: origin.height };
+    gestureBounds = measureArea();
     pointerStartX = e.clientX;
     pointerStartY = e.clientY;
     startLeft = left;
@@ -278,19 +297,19 @@
       left = startLeft + dx;
       top = startTop + dy;
     } else if (activeHandle) {
-      const { width, height } = bounds();
+      const { x0, x1, y1 } = bounds();
       // Each letter in the handle name is one edge that moves. A corner has two,
       // so both axes change in a single gesture. The top edge never moves — see
       // the Handle type.
       if (activeHandle.includes('s')) {
-        h = Math.min(Math.max(MIN_H, startH + dy), Math.max(MIN_H, height - startTop));
+        h = Math.min(Math.max(MIN_H, startH + dy), Math.max(MIN_H, y1 - startTop));
       }
       if (activeHandle.includes('w')) {
-        const newW = Math.min(Math.max(MIN_W, startW - dx), startLeft + startW);
+        const newW = Math.min(Math.max(MIN_W, startW - dx), startLeft + startW - x0);
         left = startLeft + (startW - newW);
         w = newW;
       } else if (activeHandle.includes('e')) {
-        w = Math.min(Math.max(MIN_W, startW + dx), Math.max(MIN_W, width - startLeft));
+        w = Math.min(Math.max(MIN_W, startW + dx), Math.max(MIN_W, x1 - startLeft));
       }
     }
 

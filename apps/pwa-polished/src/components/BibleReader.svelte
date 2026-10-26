@@ -5463,12 +5463,11 @@
     const { w, h } = toastSize;
 
     // Top limit is the reader's own top edge, so the toast never rides up over
-    // the navigation bar; bottom limit is the screen.
-    const safeTop = Math.max(
-      TOAST_MARGIN,
-      readerElement?.getBoundingClientRect().top ?? TOAST_MARGIN,
-    );
-    const safeBottom = window.innerHeight - TOAST_MARGIN;
+    // the navigation bar; bottom limit is the screen, or the reader's bottom
+    // when a window is docked under it.
+    const readerBox = readerElement?.getBoundingClientRect();
+    const safeTop = Math.max(TOAST_MARGIN, readerBox?.top ?? TOAST_MARGIN);
+    const safeBottom = Math.min(window.innerHeight, readerBox?.bottom ?? window.innerHeight) - TOAST_MARGIN;
 
     const above = anchor.top - TOAST_GAP - h;
     const below = anchor.bottom + TOAST_GAP;
@@ -5492,10 +5491,13 @@
     // Everything above is in viewport coordinates, but toastX/toastY drive a
     // `position: fixed` element, which does not always resolve against the
     // viewport — see lib/fixedOrigin.ts. Clamp within the box we are actually
-    // placed in, then rebase onto it, both in one step here at the end.
+    // placed in, then rebase onto it, both in one step here at the end. The
+    // reader's own sides count too, like the ring's: the classic toast is what
+    // shows when a docked window has narrowed the reader, and clamped to the
+    // whole screen it slid under that window.
     const origin = fixedOrigin(readerElement);
-    const minX = origin.left + TOAST_MARGIN;
-    const maxX = origin.left + origin.width - w - TOAST_MARGIN;
+    const minX = Math.max(origin.left, readerBox?.left ?? origin.left) + TOAST_MARGIN;
+    const maxX = Math.min(origin.left + origin.width, readerBox?.right ?? Infinity) - w - TOAST_MARGIN;
     toastX = Math.min(Math.max(centerX - w / 2, minX), Math.max(minX, maxX)) - origin.left;
     toastY = y - origin.top;
     toastPlaced = true;
