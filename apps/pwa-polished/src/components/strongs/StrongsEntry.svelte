@@ -230,11 +230,13 @@
    * Each reference printed in the label is paired with its verse in the list,
    * and the commas and spaces between them stay plain text. When the two don't
    * line up — a handful of entries whose source markup is broken — the whole
-   * label stays one link to the first verse.
+   * label stays one link to the first verse. So does a label holding markup of
+   * its own (G0025 nests a second ref inside the first): splitting it would
+   * cut through the tag.
    */
   function refLinks(list: string, label: string): string {
     const refs = splitOsisRefs(list);
-    if (!refs) return refButton(list.split(";")[0], label);
+    if (!refs || label.includes("<")) return refButton(refs?.[0] ?? list.split(";")[0], label);
     const printed = label.match(REF_LABEL) ?? [];
     if (refs.length < 2 || printed.length !== refs.length) return refButton(refs[0], label);
     let i = 0;
