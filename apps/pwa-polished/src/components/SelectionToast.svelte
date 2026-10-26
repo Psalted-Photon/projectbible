@@ -223,4 +223,14 @@
     background: #667eea;
     color: #fff;
   }
+
+  /* Fingers need more than the ~19px a mouse gets by with. */
+  @media (pointer: coarse) {
+    .toggle-btn,
+    .action-btn {
+      min-height: 32px;
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+  }
 </style>

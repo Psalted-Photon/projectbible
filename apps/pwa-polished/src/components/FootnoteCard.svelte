@@ -242,6 +242,13 @@
     color: #b9c4fa;
   }
 
+  @media (pointer: coarse) {
+    .fc-goto {
+      min-height: 32px;
+      padding: 6px 12px;
+    }
+  }
+
   .fc-verse {
     margin: 0;
     color: #cfcfcf;

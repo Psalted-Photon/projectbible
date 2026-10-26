@@ -3358,6 +3358,9 @@
     font-size: 1rem;
     line-height: 1;
     padding: 3px 6px;
+    /* Fills the 38px strip's height: they were ~23px tall. */
+    min-height: 30px;
+    min-width: 32px;
     cursor: pointer;
     border-radius: 4px;
     transition: color 0.15s, background 0.15s;

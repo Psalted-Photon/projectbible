@@ -8027,6 +8027,27 @@
     opacity: 1;
   }
 
+  /* On a touchscreen the gutter marks reach further than they're drawn: an
+     invisible box around each one, so a 10px glyph isn't a 10px target. Taller
+     than wide, since the marks sit side by side in a row. Nothing moves —
+     padding them out would blow out the gutter's line height (see above). */
+  @media (pointer: coarse) {
+    .anno-ref,
+    .ot-quote-mark,
+    .art-icon,
+    .verse-note-icon {
+      position: relative;
+    }
+    .anno-ref::after,
+    .ot-quote-mark::after,
+    .art-icon::after,
+    .verse-note-icon::after {
+      content: '';
+      position: absolute;
+      inset: -8px -4px;
+    }
+  }
+
   /* Harmony reading session inline buttons */
   .harmony-btn-row {
     display: inline-flex;
