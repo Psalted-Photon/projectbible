@@ -63,6 +63,9 @@
   let isSearching = false;
   let searchResults: SearchCategory[] = [];
   let totalResultCount = 0;
+  /** The words the last finished search was for, so an empty result can say so. */
+  let searchedFor = "";
+  let searchFailed = false;
 
   /** Expand state for the shared results tree, keyed by node path. */
   let expandedResultNodes = new Set<string>();
@@ -150,6 +153,7 @@
     }
 
     isSearching = true;
+    searchFailed = false;
     try {
       const query = generateSafeRegex(config);
       generatedQuery = query;
@@ -162,9 +166,11 @@
       // Open the Bible group so results are visible without a first click.
       const hasBible = searchResults.some((c) => c.key === 'bible' && c.count > 0);
       expandedResultNodes = new Set(hasBible ? ['bible'] : []);
+      searchedFor = config.text.trim();
     } catch (error) {
       console.error("Search error:", error);
       searchResults = [];
+      searchFailed = true;
     } finally {
       isSearching = false;
     }
@@ -172,6 +178,8 @@
 
   function resetConfig() {
     config = createDefaultConfig();
+    searchedFor = "";
+    searchFailed = false;
     generatedQuery = null;
     previewResults = [];
     searchResults = [];
@@ -307,6 +315,7 @@
                 id="search-text"
                 type="text"
                 bind:value={config.text}
+                on:keydown={(e) => e.key === 'Enter' && !isSearching && executeSearch()}
                 placeholder="Enter word or phrase..."
                 title="The main word or phrase to search for"
               />
@@ -555,6 +564,14 @@
                   </button>
                 {/each}
               {/each}
+            </div>
+          {:else if searchFailed}
+            <div class="empty-state">
+              <p>The search couldn't run. Check the patterns and try again.</p>
+            </div>
+          {:else if generatedQuery && !isSearching}
+            <div class="empty-state">
+              <p>No matches{searchedFor ? ` for “${searchedFor}”` : ""}. Try fewer filters or a shorter phrase.</p>
             </div>
           {:else}
             <div class="empty-state">
@@ -1172,6 +1189,32 @@
     background: #5a5a5a;
   }
 
+  /* Too narrow for the 450px controls beside the results: one column, the
+     results under the controls. Phones get the tighter chrome below too. */
+  @media (max-width: 760px) {
+    .modal-body {
+      flex-direction: column;
+      overflow-y: auto;
+      gap: 0;
+    }
+
+    .controls-panel {
+      flex: none;
+      width: 100%;
+      overflow-y: visible;
+      padding-right: 0;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #333;
+    }
+
+    .preview-panel {
+      flex: none;
+      width: 100%;
+      min-height: 200px;
+      box-sizing: border-box;
+    }
+  }
+
   /* ── Phone portrait (≤480px) ── */
   @media (max-width: 480px) {
     .modal-backdrop {
@@ -1197,25 +1240,10 @@
     }
 
     .modal-body {
-      flex-direction: column;
-      overflow-y: auto;
-      gap: 0;
       padding: 12px;
     }
 
-    .controls-panel {
-      flex: none;
-      width: 100%;
-      overflow-y: visible;
-      padding-right: 0;
-      padding-bottom: 12px;
-      border-bottom: 1px solid #333;
-    }
-
     .preview-panel {
-      flex: none;
-      width: 100%;
-      min-height: 200px;
       padding: 12px;
     }
 
