@@ -522,6 +522,17 @@
         })),
       };
     });
+    await repaintSavedHighlights();
+  }
+
+  /**
+   * Every loaded chapter's saved highlights, painted again. A verse whose text
+   * is rebuilt (red letters, interlinear) gets a fresh span, and word
+   * highlights live inside the old one.
+   */
+  async function repaintSavedHighlights(): Promise<void> {
+    await tick();
+    for (const c of chapters) await loadAndApplyHighlights(c.book, c.chapter);
   }
   let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -5812,6 +5823,15 @@
   $: if (readerElement && chapters) {
     void isInterlinearActive;
     void repaintRepeats($repeatsStore, showPlaceMarkers && placePhrasesLoaded);
+  }
+
+  // Interlinear on or off rebuilds every verse's text, and the saved word
+  // highlights with it. Only a toggle: a translation change reloads them anyway.
+  let interlinearWas: boolean | null = null;
+  $: if (interlinearWas !== isInterlinearActive) {
+    const toggled = interlinearWas !== null && isOriginalLanguage(currentTranslation);
+    interlinearWas = isInterlinearActive;
+    if (toggled) void repaintSavedHighlights();
   }
 
   // A repeat pill requested "Highlight All" — open the modal in bulk mode.
