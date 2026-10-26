@@ -173,7 +173,13 @@
     };
   }
 
+  // Only the newest article may land. Fetched straight into the page, a slow
+  // one finishing after a quicker one mixed them: one article's body under
+  // the other's title.
+  let loadTicket = 0;
+
   async function loadData() {
+    const ticket = ++loadTicket;
     const jumpTab = pendingTab;
     pendingTab = null;
     loading = true;
@@ -191,27 +197,36 @@
     rememberedId = null;
     destroyMap();
 
+    let nextPlace: IsbePlaceRecord | null = null;
+    let nextEntry: IsbeEntryRecord | null = null;
+    let nextVerses: typeof verses = [];
     if (placeId) {
-      place = await getIsbePlace(placeId);
-      if (place) verses = await getIsbePlaceVerses(place.placeId);
-      if (place?.entryId != null) entry = await getIsbeEntry(place.entryId);
+      nextPlace = await getIsbePlace(placeId);
+      if (nextPlace) nextVerses = await getIsbePlaceVerses(nextPlace.placeId);
+      if (nextPlace?.entryId != null) nextEntry = await getIsbeEntry(nextPlace.entryId);
     } else if (entryId != null) {
-      entry = await getIsbeEntry(entryId);
+      nextEntry = await getIsbeEntry(entryId);
       // Opened by entry (e.g. from search). If it's a place, pull a representative
       // location so the Map and Verses tabs light up too.
-      if (entry?.isPlace) {
-        place = await getIsbePlaceByEntryId(entryId);
-        if (place) verses = await getIsbePlaceVerses(place.placeId);
+      if (nextEntry?.isPlace) {
+        nextPlace = await getIsbePlaceByEntryId(entryId);
+        if (nextPlace) nextVerses = await getIsbePlaceVerses(nextPlace.placeId);
       }
     }
-    if (place) placeNames = await getIsbePlaceNames(place.placeId);
+    const nextNames = nextPlace ? await getIsbePlaceNames(nextPlace.placeId) : [];
     // Cross-reference linkification hits the name index, so it has to finish
     // before the article renders — otherwise the links would pop in late.
     // Formatting only wraps text, so it runs on the linked HTML and the
     // sanitizer still has the last word.
-    articleHtml = entry?.bodyHtml
-      ? sanitizePackHtml(formatArticle(await linkifyCrossRefs(entry.bodyHtml)))
+    const nextHtml = nextEntry?.bodyHtml
+      ? sanitizePackHtml(formatArticle(await linkifyCrossRefs(nextEntry.bodyHtml)))
       : "";
+    if (ticket !== loadTicket) return;
+    place = nextPlace;
+    entry = nextEntry;
+    verses = nextVerses;
+    placeNames = nextNames;
+    articleHtml = nextHtml;
     loading = false;
 
     if (jumpTab) {
