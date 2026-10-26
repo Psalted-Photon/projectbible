@@ -1062,7 +1062,15 @@
     selectedBooks = selectedBooks;
   }
   
+  /**
+   * Set from the tap until the form is cleared. The form stays up a second
+   * after the plan is made, and a second tap in that time made a second plan.
+   */
+  let generating = false;
+
   async function generatePlan() {
+    if (generating) return;
+    generating = true;
     planGenerationStatus = 'Generating plan...';
     
     try {
@@ -1142,10 +1150,12 @@
         // Clear the form now that the plan exists, so coming back to Create
         // Plan starts blank rather than showing the plan just made.
         resetCreateForm();
+        generating = false;
       }, 1000);
 
     } catch (error) {
       planGenerationStatus = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      generating = false;
     }
   }
   
@@ -1517,7 +1527,7 @@
               </div>
             {/if}
             
-            <button class="generate-btn" on:click={generatePlan}>Generate plan</button>
+            <button class="generate-btn" on:click={generatePlan} disabled={generating}>Generate plan</button>
             {#if planGenerationStatus}
               <div class="status">{planGenerationStatus}</div>
             {/if}
@@ -2322,6 +2332,13 @@
   .generate-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+  }
+
+  .generate-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+    transform: none;
+    box-shadow: none;
   }
 
   .create-new-plan-btn {
