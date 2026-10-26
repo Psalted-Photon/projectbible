@@ -634,8 +634,10 @@ const SOURCE_FIXES = {
     'MRK:14:62': [{ text: '“I am,”' }, { text: '“and you will see the Son of Man sitting at the right hand of the Power and coming with the clouds of heaven.”' }],
     'MAT:17:7': [{ text: '“Get up,”' }, { text: '“Do not be afraid.”' }],
     // A span snapped to NET's quotation marks stops at the first inner one: the
-    // nested “ in 26:18, the closing ” after "need nothing," in Rev 3:17.
+    // nested “ in 26:18, the closing ” after "need nothing," in Rev 3:17, the
+    // one after "deep secrets of Satan" in Rev 2:24.
     'MAT:26:18': [{ text: '“Go into the city to a certain man and tell him, ‘The Teacher says, “My time is near. I will observe the Passover with my disciples at your house.”’”' }],
+    'REV:2:24': [{ text: 'But to the rest of you in Thyatira, all who do not hold to this teaching (who have not learned the so-called “deep secrets of Satan”), to you I say: I do not put any additional burden on you.' }],
     'REV:3:17': [{ text: 'Because you say, “I am rich and have acquired great wealth, and need nothing,” but do not realize that you are wretched, pitiful, poor, blind, and naked,' }],
   },
 };
