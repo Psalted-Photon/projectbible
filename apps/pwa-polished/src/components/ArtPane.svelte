@@ -26,6 +26,8 @@
   let loading = true;
   let error: string | null = null;
   let allScenes: ArtScene[] = [];      // browse list (only when no scene context)
+  /** False when a passage found nothing because the art pack isn't in. */
+  let artInstalled = true;
   let browse = false;                  // opened with no scene → show the browsable list
   let selected: ArtScene | null = null;
   let urls: Record<string, string> = {};   // image id → object URL (full resolution)
@@ -124,12 +126,15 @@
     browse = false;
     allScenes = [];
     viewerWork = null;
+    artInstalled = true;
     try {
       if (sceneId) {
         selected = await artStore.getScene(sceneId);
       } else if (book && chapter && verse) {
         const scenes = await artStore.getScenesForVerse({ book, chapter, verse });
         selected = scenes[0] ?? null;
+        // Nothing here may just mean no pack: offer it, as the gallery does.
+        if (!selected) artInstalled = await artStore.hasAnyScenes();
       } else {
         browse = true;
         allScenes = await artStore.getAllScenes();
@@ -319,6 +324,14 @@
         {/each}
       </ul>
     {/if}
+  {:else if !artInstalled}
+    <div class="state">
+      <GetPacksCard
+        packs={['biblical-art']}
+        title="No art installed yet"
+        note="Famous paintings by the old masters, matched to the scenes they show. They work with no connection once they’re in."
+      />
+    </div>
   {:else}
     <div class="state">No art for this passage yet.</div>
   {/if}

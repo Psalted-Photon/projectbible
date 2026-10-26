@@ -102,6 +102,21 @@ export class IndexedDBArtStore implements ArtStore {
     }
   }
 
+  /** Whether the art pack is in at all: any scene, without reading them all. */
+  async hasAnyScenes(): Promise<boolean> {
+    try {
+      const db = await openDB();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction('art_scenes', 'readonly');
+        const req = tx.objectStore('art_scenes').count();
+        req.onsuccess = () => resolve(req.result > 0);
+        req.onerror = () => reject(req.error);
+      });
+    } catch {
+      return false;
+    }
+  }
+
   /** Every installed scene, for a browsable gallery (canonical order) */
   async getAllScenes(): Promise<ArtScene[]> {
     try {
