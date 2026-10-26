@@ -64,7 +64,14 @@
     verseTranslation = '';
     unavailable = '';
     textLoading = true;
-    loadVerseText();
+    // A lookup that throws (the text store failing) left the card on
+    // "Loading…" for good; it now says so instead.
+    loadVerseText().catch((e) => {
+      console.error('DailyGreetingModal: verse lookup failed', e);
+      verseText = '';
+      unavailable = "Couldn't load today's verse.";
+      textLoading = false;
+    });
   }
 
   // Always the reader's translation, never another one borrowed in its place:
@@ -242,7 +249,11 @@
     max-width: 480px;
     width: 100%;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
-    overflow: hidden;
+    /* Scrolls inside the screen: on a short screen (a landscape phone) the
+       card was clipped with its buttons out of reach. */
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
   }

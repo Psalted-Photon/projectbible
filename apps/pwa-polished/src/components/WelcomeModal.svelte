@@ -89,7 +89,11 @@
     max-width: 480px;
     width: 100%;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
-    overflow: hidden;
+    /* Scrolls inside the screen: on a short screen (a landscape phone) the
+       card was clipped with its buttons out of reach. */
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
   }
