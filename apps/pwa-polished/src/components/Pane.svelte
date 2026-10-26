@@ -68,6 +68,9 @@
   }
 
   function handleResizeEnd() {
+    // Every open pane hears the release; only the one being dragged answers it,
+    // or closing the top pane would close the ones under it too.
+    if (!isDraggingResize) return;
     if (get(pendingCloseEdge) !== null) {
       handleClose();
     }
