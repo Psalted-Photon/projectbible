@@ -76,6 +76,15 @@
     dispatch('close');
   }
 
+  // A tap outside only closes before anything is under way or once it's all
+  // done. Mid-setup — the fingerprint prompt waiting, the recovery code on
+  // screen — a stray tap threw the half-made setup away; Cancel still does.
+  $: backdropCloses = step === 'intro' || step === 'off-confirm' || step === 'unreadable' || step === 'done';
+
+  function onBackdrop() {
+    if (backdropCloses) close();
+  }
+
   function problemText(err: unknown): string {
     if (err instanceof JournalLockError) return err.message;
     if (err instanceof PasskeyError) {
@@ -175,7 +184,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="ld-overlay" use:portal on:click={close}>
+<div class="ld-overlay" use:portal on:click={onBackdrop}>
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="ld-card" on:click|stopPropagation role="dialog" aria-modal="true" aria-label={TITLES[kind]} tabindex="-1">
     <div class="ld-header">
