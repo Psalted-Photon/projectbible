@@ -720,6 +720,12 @@
         await syncService.forceSync().catch(() => {});
       }
       pending = await pendingWork();
+    } catch (err) {
+      // The button just went back to normal with nothing said. Nothing is
+      // cleared without this answer: it is what keeps unsent work from loss.
+      console.error('Clear cache: checking for unsent work failed', err);
+      showNotice("Couldn't check for unsent changes, so nothing was cleared. Try again.", 'error');
+      return;
     } finally {
       checkingPending = false;
     }
