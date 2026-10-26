@@ -16,12 +16,21 @@
     return new Date(y, m - 1, 1);
   }
 
-  const planStart = planDayDateStr(plan.days[0].date);
-  const planEnd   = planDayDateStr(plan.days[plan.days.length - 1].date);
+  // Reactive, not worked out once: switching plans hands this the new one, and
+  // the old plan's range and month stayed on the calendar.
+  $: planStart = planDayDateStr(plan.days[0].date);
+  $: planEnd   = planDayDateStr(plan.days[plan.days.length - 1].date);
 
-  let currentMonth: Date = monthOf(
-    todayStr >= planStart && todayStr <= planEnd ? todayStr : planStart
-  );
+  // Keyed on the range rather than the plan object, which can be rebuilt
+  // as progress reloads; that would throw the reader back to this month.
+  let currentMonth: Date = new Date();
+  let monthFor = '';
+  $: if (`${planStart}|${planEnd}` !== monthFor) {
+    monthFor = `${planStart}|${planEnd}`;
+    currentMonth = monthOf(
+      todayStr >= planStart && todayStr <= planEnd ? todayStr : planStart
+    );
+  }
 
   function prevMonth() {
     currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
