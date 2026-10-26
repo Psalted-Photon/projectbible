@@ -1282,6 +1282,14 @@
 
   // Track selected verse number for commentary
   let selectedVerseNumber: number | null = null;
+  /**
+   * The chapter the selection sits in, set each time the ring opens. The
+   * reader shows several chapters at once and currentBook/currentChapter
+   * follow the one at the top of the screen, so a verse tapped further down
+   * has to be read off its own section.
+   */
+  let selBook = '';
+  let selChapter = 0;
 
   // Share state. Both are captured when Share is tapped and read only by the
   // sheet — the ring closes and clearHighlights() runs before it opens, so
@@ -1701,13 +1709,13 @@
 
   function openTranslationCard(verses: number[]) {
     if (verses.length === 0) return;
-    const box = translationBox(currentBook, currentChapter, verses);
+    const box = translationBox(selBook, selChapter, verses);
     if (!box) return;
     closeOtQuote();
     const shift = nudgeOtCardIntoView(box.verseBottom);
     translationHit = {
-      book: currentBook,
-      chapter: currentChapter,
+      book: selBook,
+      chapter: selChapter,
       verses,
       ...box,
       verseBottom: box.verseBottom - shift,
@@ -5596,8 +5604,22 @@
     positionToast(anchor);
   }
 
+  /** The book and chapter of the section the current selection is in. */
+  function selectionChapter(): { book: string; chapter: number } {
+    const node: Node | null =
+      selectedSegments[0]?.verseEl ?? selectionRange?.startContainer ?? null;
+    const el = node instanceof Element ? node : node?.parentElement;
+    const section = el?.closest<HTMLElement>("[data-chapter-section]");
+    if (section?.dataset.book) {
+      return { book: section.dataset.book, chapter: Number(section.dataset.chapter) || currentChapter };
+    }
+    if (selectedMeasureCtx) return { book: selectedMeasureCtx.book, chapter: selectedMeasureCtx.chapter };
+    return { book: currentBook, chapter: currentChapter };
+  }
+
   function showToastAt(x: number, y: number, opts: { lookup?: boolean } = {}) {
     const { lookup = true } = opts;
+    ({ book: selBook, chapter: selChapter } = selectionChapter());
     // Clear any hover highlight — full unwrap required (see clearHoverHighlight)
     clearHoverHighlight();
 
@@ -5647,7 +5669,7 @@
     const ctx = selectedContext;
     const personRef =
       selectedVerseNumber != null
-        ? { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber }
+        ? { book: selBook, chapter: selChapter, verse: selectedVerseNumber }
         : null;
     // A phrase has no single term to look up, so the caller turns this off and
     // the toast drops Define/Bio/More Info instead of guessing.
@@ -5803,19 +5825,26 @@
   }
 
   // Expand a scope into the list of (book, chapter) targets to scan.
-  function getScopeChapters(scope: 'chapter' | 'book'): { book: string; chapter: number }[] {
-    if (scope === 'chapter') return [{ book: currentBook, chapter: currentChapter }];
-    const b = BIBLE_BOOKS.find((x) => x.name === currentBook);
+  function getScopeChapters(
+    scope: 'chapter' | 'book',
+    at = { book: currentBook, chapter: currentChapter },
+  ): { book: string; chapter: number }[] {
+    if (scope === 'chapter') return [at];
+    const b = BIBLE_BOOKS.find((x) => x.name === at.book);
     const n = b?.chapters ?? 1;
-    return Array.from({ length: n }, (_, i) => ({ book: currentBook, chapter: i + 1 }));
+    return Array.from({ length: n }, (_, i) => ({ book: at.book, chapter: i + 1 }));
   }
 
   // A book-intro pill, derived from synced word-highlights carrying a repeatWord.
   type IntroPill = { book: string; word: string; label: string; color: string; highlightIds: string[] };
 
   // Convert a repeat group into real, saved word highlights across the scope.
-  async function applyBulkRepeatHighlight(req: RepeatHighlightAllRequest, style: HighlightStyle) {
-    const targets = getScopeChapters(req.scope);
+  async function applyBulkRepeatHighlight(
+    req: RepeatHighlightAllRequest,
+    style: HighlightStyle,
+    at?: { book: string; chapter: number },
+  ) {
+    const targets = getScopeChapters(req.scope, at);
     // Stamp each highlight with the repeat word (rides inside the synced style)
     // so the book-intro pill can be derived from — and sync with — the highlights.
     const stampedStyle: HighlightStyle = { ...style, repeatWord: req.label };
@@ -6052,7 +6081,7 @@
             // Resolve the clicked word as a biblical character, disambiguating by
             // the verse it was clicked in (handles homonyms like the six Marys).
             const verseRefForPerson = selectedVerseNumber != null
-              ? { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber }
+              ? { book: selBook, chapter: selChapter, verse: selectedVerseNumber }
               : null;
             const characterData = await lookupPerson(text, verseRefForPerson);
             if (characterData) console.log('👤 Character match:', characterData.person.id, 'byVerse:', characterData.matchedByVerse);
@@ -6212,7 +6241,7 @@
           break;
         }
         const mapPersonRef = selectedVerseNumber != null
-          ? { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber }
+          ? { book: selBook, chapter: selChapter, verse: selectedVerseNumber }
           : null;
         (async () => {
           try {
@@ -6244,15 +6273,34 @@
           showToast = false;
           break;
         }
-        const hlRef = { book: currentBook, chapter: currentChapter, verse: selectedVerseNumber };
-        pendingHighlightVerses = [selectedVerseNumber];
+        const hlRef = { book: selBook, chapter: selChapter, verse: selectedVerseNumber };
+        const untouchedVerses =
+          verseSel && verseSelUntouched(verseSel) ? [...verseSel.verses] : null;
+
+        // Capture the selection's character runs now, synchronously, before the
+        // modal opens and the painted spans are torn down. One run per verse,
+        // so a phrase that crosses a verse boundary saves as several records.
+        pendingWordSpans =
+          !untouchedVerses && selectionMode === 'word'
+            ? selectedSegments.map(s => ({
+                verse: s.verse,
+                wordStart: s.start,
+                wordLength: s.length,
+              }))
+            : [];
+        pendingHighlightVerses = untouchedVerses ?? [selectedVerseNumber];
+
+        // The cached highlights are for whichever chapter loaded last, so the
+        // tapped verse's own chapter is read fresh.
+        [chapterVerseHighlights, chapterWordHighlights] = await Promise.all([
+          userDataStore.getChapterHighlights(hlRef.book, hlRef.chapter),
+          userDataStore.getChapterWordHighlights(hlRef.book, hlRef.chapter),
+        ]);
 
         // A verse-number selection left as tapped saves as verse highlights,
         // one per tapped verse. Extended or cut, it is a phrase like any other.
-        if (verseSel && verseSelUntouched(verseSel)) {
-          const verses = [...verseSel.verses];
-          pendingWordSpans = [];
-          pendingHighlightVerses = verses;
+        if (untouchedVerses) {
+          const verses = untouchedVerses;
           highlightModalRef = { ...hlRef, verse: verses[0] };
           highlightModalExisting =
             chapterVerseHighlights.find(h => verses.includes(h.reference.verse)) ?? null;
@@ -6264,17 +6312,6 @@
           break;
         }
 
-        // Capture the selection's character runs now, synchronously, before the
-        // modal opens and the painted spans are torn down. One run per verse,
-        // so a phrase that crosses a verse boundary saves as several records.
-        pendingWordSpans =
-          selectionMode === 'word'
-            ? selectedSegments.map(s => ({
-                verse: s.verse,
-                wordStart: s.start,
-                wordLength: s.length,
-              }))
-            : [];
         // Find existing highlight for this verse
         const existingV = chapterVerseHighlights.find(
           h => h.reference.verse === selectedVerseNumber
@@ -6316,7 +6353,7 @@
           }
         }
         if (verseNumForNote !== null) {
-          await openNotePopup(verseNumForNote, currentBook, currentChapter);
+          await openNotePopup(verseNumForNote, selBook, selChapter);
         }
         showToast = false;
         break;
@@ -6343,15 +6380,15 @@
           shareModalPassage = runs
             .map(run =>
               untouched
-                ? verseTextRange(currentBook, currentChapter, run[0].verse, run[run.length - 1].verse)
+                ? verseTextRange(selBook, selChapter, run[0].verse, run[run.length - 1].verse)
                 : segmentsText(run),
             )
             .filter(Boolean)
             .join(' … ');
           if (!shareModalPassage) break;
           shareModalRef = {
-            book: currentBook,
-            chapter: currentChapter,
+            book: selBook,
+            chapter: selChapter,
             startVerse,
             endVerse,
             verses: shareVerses,
@@ -6367,10 +6404,10 @@
         const isPhrase = selectionMode === 'word' && selectedWordCount > 1;
         shareModalPassage = isPhrase
           ? text
-          : verseTextRange(currentBook, currentChapter, startVerse, endVerse);
+          : verseTextRange(selBook, selChapter, startVerse, endVerse);
         if (!shareModalPassage) break;
 
-        shareModalRef = { book: currentBook, chapter: currentChapter, startVerse, endVerse };
+        shareModalRef = { book: selBook, chapter: selChapter, startVerse, endVerse };
         shareModalOpen = true;
         showToast = false;
         break;
@@ -6395,8 +6432,8 @@
         // Connections are counted in English numbering, which this translation
         // may not share: Hebrew Malachi 3:19 is English 4:1.
         const englishRefs = readerVerses.map(verse => {
-          const mapped = toEnglish(currentTranslation, { book: currentBook, chapter: currentChapter, verse });
-          return mapped.find(r => r.part !== 'title') ?? mapped[0] ?? { book: currentBook, chapter: currentChapter, verse };
+          const mapped = toEnglish(currentTranslation, { book: selBook, chapter: selChapter, verse });
+          return mapped.find(r => r.part !== 'title') ?? mapped[0] ?? { book: selBook, chapter: selChapter, verse };
         });
         if (englishRefs.length === 0) break;
         // A rare selection runs across two English chapters (Hebrew Numbers 17
@@ -6405,7 +6442,7 @@
         const sent = englishRefs.filter(r => r.chapter === englishChapter).map(r => r.verse);
         // Left open if the six-window cap turned us down, so the tap visibly
         // did nothing rather than quietly dismissing the menu for nothing.
-        if (!openConnectionsWindow(currentBook, englishChapter, sent)) return;
+        if (!openConnectionsWindow(selBook, englishChapter, sent)) return;
         showToast = false;
         break;
       }
@@ -6828,8 +6865,8 @@
       {extendArmed}
       canSpeak={selectionCanSpeak}
       verseLocked={!!verseSel}
-      book={currentBook}
-      chapter={currentChapter}
+      book={selBook}
+      chapter={selChapter}
       verse={selectedVerseNumber}
       lemma={selectedMorphology?.lemma ?? ""}
       strongs={selectedMorphology ? (selectedMorphology.strongsId ?? "") : selectedLink}
@@ -6958,13 +6995,14 @@
       }
 
       // Word that is an active repeat group, with "all repeating words" chosen:
-      // apply to every occurrence in the current chapter.
+      // apply to every occurrence in the tapped word's chapter.
       if (applyToAllRepeats && highlightModalRepeatGroup) {
         const grp = highlightModalRepeatGroup;
         highlightModalRepeatGroup = null;
         await applyBulkRepeatHighlight(
           { word: grp.word, label: grp.label, scope: 'chapter', colorIndex: grp.colorIndex },
           style,
+          highlightModalRef,
         );
         return;
       }
