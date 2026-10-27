@@ -76,6 +76,7 @@
     cancelSleepTimer,
     remainingMinutes,
   } from "../lib/tts/sleepTimer";
+  import { bibleFloating, dockDrag, tearOut, playerBarKey } from "../lib/tts/playerDock";
   import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
   import {
     Anchor,
@@ -2394,6 +2395,78 @@
     else if (value === "chapter") setStopAtChapterEnd();
     else startSleepTimer(parseInt(value, 10));
   }
+
+  // ── Pulling the player out ─────────────────────────────────────────────────
+  // Its tab drags. Until the finger is TEAR_PX past the bottom of the bar the
+  // tab only stretches a little and springs back, changing nothing; past it the
+  // player tears off into its floating pill (FloatingBiblePlayer), which takes
+  // over the same finger. lib/tts/playerDock.ts holds the bar down meanwhile.
+  const TEAR_PX = 20;
+  /** How far the tab stretches before letting go. Its strip ends 5px below it. */
+  const TAB_STRETCH_MAX = 4;
+
+  $: barKey = playerBarKey(windowId);
+
+  let tabPull = 0;
+  let tearPointer: number | null = null;
+  let tearStartY = 0;
+
+  function onTabPointerDown(event: PointerEvent): void {
+    if (event.button !== 0 || tearPointer !== null) return;
+    event.preventDefault();
+    tearPointer = event.pointerId;
+    tearStartY = event.clientY;
+    try {
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    } catch {
+      // Capture is a nicety; the window listeners below still hear the drag.
+    }
+    window.addEventListener("pointermove", onTearMove);
+    window.addEventListener("pointerup", endTear);
+    window.addEventListener("pointercancel", endTear);
+    dockDrag.set({ mode: "tear", bar: barKey, near: false });
+  }
+
+  function onTearMove(event: PointerEvent): void {
+    if (event.pointerId !== tearPointer) return;
+    const bar = navElement?.getBoundingClientRect();
+    if (bar && event.clientY > bar.bottom + TEAR_PX) {
+      const from = ttsControlsEl?.getBoundingClientRect();
+      stopTear();
+      if (!from) {
+        dockDrag.set(null);
+        return;
+      }
+      tearOut(barKey, {
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        from,
+      });
+      return;
+    }
+    tabPull = Math.min(TAB_STRETCH_MAX, Math.max(0, (event.clientY - tearStartY) / 4));
+  }
+
+  function endTear(event: PointerEvent): void {
+    if (event.pointerId !== tearPointer) return;
+    stopTear();
+    dockDrag.set(null);
+  }
+
+  function stopTear(): void {
+    tearPointer = null;
+    tabPull = 0;
+    window.removeEventListener("pointermove", onTearMove);
+    window.removeEventListener("pointerup", endTear);
+    window.removeEventListener("pointercancel", endTear);
+  }
+
+  onDestroy(() => {
+    if (tearPointer === null) return;
+    stopTear();
+    dockDrag.set(null);
+  });
 </script>
 
 <svelte:window on:keydown={onWindowKeydown} />
@@ -2736,8 +2809,8 @@
       </div>
       <div class="nav-spacer"></div>
     {/if}
-    <!-- ── Read Aloud controls (only while reading) ───────────────────────── -->
-    {#if $isBibleReadingActive}
+    <!-- ── Read Aloud controls (only while reading, and not pulled out) ───── -->
+    {#if $isBibleReadingActive && !$bibleFloating}
       <div class="nav-tts" bind:this={ttsControlsEl}>
         {#if $isPreparing}
           <!-- Generating audio, not playing. Without this the button would show
@@ -2809,11 +2882,14 @@
              finger) and the long-press that pins the bar (role=button). -->
         <span
           class="tts-nav-tab no-edge-gesture no-press"
+          class:pulling={tearPointer !== null}
+          style="--pull: {tabPull}px;"
           role="button"
           tabindex="0"
           data-no-drag-scroll
           title="Drag to move the player anywhere"
           aria-label="Move the player out of the bar"
+          on:pointerdown={onTabPointerDown}
         ><DotsSix size={12} weight="bold" /></span>
       </div>
       <div class="nav-spacer"></div>
@@ -3441,7 +3517,8 @@
     align-items: center;
     justify-content: center;
     width: 38px;
-    height: 11px;
+    /* Stretches as it is pulled (--pull), and springs back when let go. */
+    height: calc(11px + var(--pull, 0px));
     box-sizing: border-box;
     background: #1c1c1c;
     border: 1px solid rgba(157, 122, 245, 0.45);
@@ -3452,17 +3529,24 @@
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
+    transition: height var(--motion-dropdown-close-ms, 100ms) var(--ease-standard, ease);
+  }
+
+  .tts-nav-tab.pulling {
+    cursor: grabbing;
+    transition: none;
   }
 
   /* A bigger target than it looks, for a finger: wider, and down to the
-     bottom of the strip. Never up, where the player's own buttons are. */
+     bottom of the strip. Never up, where the player's own buttons are. Its
+     bottom stays put while the tab stretches, inside the strip. */
   .tts-nav-tab::after {
     content: "";
     position: absolute;
     left: -10px;
     right: -10px;
     top: 0;
-    bottom: -4px;
+    bottom: calc(var(--pull, 0px) - 4px);
   }
 
   .tts-nav-tab:hover,

@@ -55,8 +55,37 @@ export const dockDrag = writable<DockDrag | null>(null);
 /** The bar the player was last pulled out of. Its slot is offered first. */
 let originBar = MAIN_BAR;
 
-export function setOriginBar(bar: string): void {
+/**
+ * A tear-out handing its finger to the pill: where the pointer is, and the
+ * box the player had in the bar, for the pill to change shape out of. Taken
+ * by the pill as it appears; one that is not taken at once has gone stale.
+ */
+export interface TearOut {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  from: DOMRect;
+  at: number;
+}
+
+export const pendingTearOut = writable<TearOut | null>(null);
+
+/** How long a tear-out waits for the pill to take it. */
+const TEAR_OUT_FRESH_MS = 500;
+
+/** The tab has been pulled out of `bar`: the player floats from here on. */
+export function tearOut(bar: string, from: Omit<TearOut, 'at'>): void {
   originBar = bar;
+  pendingTearOut.set({ ...from, at: performance.now() });
+  dockDrag.set(null);
+  setBibleFloating(true);
+}
+
+/** The pill's half of the hand-off. Null when there is none, or it is stale. */
+export function takeTearOut(): TearOut | null {
+  const t = get(pendingTearOut);
+  pendingTearOut.set(null);
+  return t && performance.now() - t.at < TEAR_OUT_FRESH_MS ? t : null;
 }
 
 // --- Bars that carry the player ----------------------------------------------

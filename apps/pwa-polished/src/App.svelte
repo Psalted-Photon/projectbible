@@ -15,6 +15,7 @@
   import PackRunCard from "./components/PackRunCard.svelte";
   import AppConfirm from "./components/AppConfirm.svelte";
   import FloatingTtsPlayer from "./components/FloatingTtsPlayer.svelte";
+  import FloatingBiblePlayer from "./components/FloatingBiblePlayer.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
@@ -480,6 +481,10 @@
     <!-- Read Aloud for commentaries and devotionals. Draws nothing while
          scripture, or nothing, is being read. -->
     <FloatingTtsPlayer />
+
+    <!-- Read Aloud for scripture once its player is pulled out of the navbar.
+         Draws nothing while it is docked there. -->
+    <FloatingBiblePlayer />
 
     <!-- Wake alarm start screen — shown when opened from an alarm notification -->
     <WakeAlarmStart />

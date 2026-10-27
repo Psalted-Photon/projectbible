@@ -218,6 +218,74 @@ export function fadeIn(el: HTMLElement | null | undefined): void {
   el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: EASE_ENTER });
 }
 
+// --- Changing shape ----------------------------------------------------------
+
+/** How long the Read Aloud player takes to turn from its bar shape into its pill, or back. */
+const MORPH_MS = 180;
+
+/** `box` as a transform on `el`, which is where it really is. */
+function boxAsTransform(el: HTMLElement, box: DOMRect): string | null {
+  const own = el.getBoundingClientRect();
+  if (!own.width || !own.height || !box.width || !box.height) return null;
+  const dx = box.left - own.left;
+  const dy = box.top - own.top;
+  return `translate(${dx}px, ${dy}px) scale(${box.width / own.width}, ${box.height / own.height})`;
+}
+
+/**
+ * Something turning out of another shape into its own: it starts at `from`'s
+ * box and corners and settles into where it really is. The Read Aloud player
+ * pulled out of the navbar into its pill. On Reduced a short fade; on Off it
+ * just appears.
+ */
+export function morphFrom(el: HTMLElement | null | undefined, from: DOMRect, fromRadius: string): void {
+  if (!el || typeof el.animate !== 'function') return;
+  const level = motionLevel();
+  if (level === 'off') return;
+  if (level === 'reduced') {
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.reducedFadeMs, easing: EASE_ENTER });
+    return;
+  }
+  const transform = boxAsTransform(el, from);
+  if (!transform) return;
+  el.animate(
+    [
+      { transformOrigin: '0 0', transform, borderRadius: fromRadius },
+      { transformOrigin: '0 0', transform: 'none' },
+    ],
+    { duration: MORPH_MS, easing: EASE_ENTER },
+  );
+}
+
+/**
+ * The other way: it goes into `to`'s box and corners, and the promise settles
+ * once it is there, for whatever takes its place. The pill docking back into
+ * its slot. On Reduced a short fade out; on Off at once.
+ */
+export function morphInto(el: HTMLElement | null | undefined, to: DOMRect, toRadius: string): Promise<void> {
+  if (!el || typeof el.animate !== 'function') return Promise.resolve();
+  const level = motionLevel();
+  if (level === 'off') return Promise.resolve();
+  let anim: Animation;
+  if (level === 'reduced') {
+    anim = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: MOTION.reducedFadeMs, easing: EASE_EXIT, fill: 'forwards' });
+  } else {
+    const transform = boxAsTransform(el, to);
+    if (!transform) return Promise.resolve();
+    anim = el.animate(
+      [
+        { transformOrigin: '0 0', transform: 'none' },
+        { transformOrigin: '0 0', transform, borderRadius: toRadius, opacity: 0.6 },
+      ],
+      { duration: MORPH_MS, easing: EASE_STANDARD, fill: 'forwards' },
+    );
+  }
+  return anim.finished.then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
 // --- Svelte's transitions, following the setting ---------------------------
 //
 // Drop-ins for svelte/transition's fade, fly and scale: import them from here

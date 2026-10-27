@@ -5,15 +5,15 @@
  * The Comms Read Aloud pill was the first, and the Bible player is getting the
  * same treatment, so the gesture lives here once: place it at the saved spot
  * (or bottom-right), keep it wholly on screen, drag it by anything that is not
- * a button, and save the spot on release.
+ * a control, and save the spot on release.
  *
  * Positions are against the box `position: fixed` really resolves from — see
  * lib/fixedOrigin.ts — and that box is measured once at the start of a drag, so
  * a layout shift mid-gesture can't make it jump under the finger.
  *
  * The component binds its element and hands it to `place()` when it shows,
- * calls `teardown()` when it hides, and reads `left`, `top`, `ready` and
- * `dragging` from the store.
+ * calls `teardown()` when it hides, and reads `left`, `top`, `ready`,
+ * `dragging` and `moved` from the store.
  */
 
 import { tick } from 'svelte';
@@ -22,10 +22,21 @@ import { fixedOrigin } from './fixedOrigin';
 
 /** Gap kept from the screen's edges, for the default spot and the clamp. */
 const MARGIN = 8;
+/** How far a press travels before it counts as a drag rather than a touch. */
+const SLOP = 4;
+/** Controls, which keep their own presses; everything else is the handle. */
+const NOT_A_HANDLE = 'button, select, input';
 
 export interface FloatPos {
   x: number;
   y: number;
+}
+
+/** A pointer that is already down somewhere else, to carry on from. */
+export interface HeldPointer {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
 }
 
 export interface FloatDragOptions {
@@ -41,6 +52,8 @@ export interface FloatDragState {
   /** False until placed, so it never flashes in the top-left corner. */
   ready: boolean;
   dragging: boolean;
+  /** This drag has gone past the slop: it is being carried, not just touched. */
+  moved: boolean;
 }
 
 export interface FloatDrag extends Readable<FloatDragState> {
@@ -48,12 +61,18 @@ export interface FloatDrag extends Readable<FloatDragState> {
   place(el: HTMLElement): Promise<void>;
   /** It has been hidden, or is going away; the next `place()` starts afresh. */
   teardown(): void;
-  /** The pointerdown handler. Buttons are buttons; everything else is the handle. */
+  /** The pointerdown handler. Controls are controls; everything else is the handle. */
   start(e: PointerEvent): void;
+  /**
+   * Carry on a drag that began on something else — the Bible player's tab in
+   * the navbar. Puts the point `grab` (in its own box) under the pointer and
+   * follows it from there, already counted as moved. Placed first.
+   */
+  pickUp(pointer: HeldPointer, grab: FloatPos): void;
 }
 
 export function floatDrag(options: FloatDragOptions): FloatDrag {
-  const state = writable<FloatDragState>({ left: 0, top: 0, ready: false, dragging: false });
+  const state = writable<FloatDragState>({ left: 0, top: 0, ready: false, dragging: false, moved: false });
 
   let el: HTMLElement | null = null;
   let left = 0;
@@ -62,6 +81,7 @@ export function floatDrag(options: FloatDragOptions): FloatDrag {
   let ready = false;
 
   let dragging = false;
+  let moved = false;
   let startX = 0;
   let startY = 0;
   let startLeft = 0;
@@ -70,7 +90,7 @@ export function floatDrag(options: FloatDragOptions): FloatDrag {
   let observer: ResizeObserver | null = null;
 
   function publish() {
-    state.set({ left, top, ready, dragging });
+    state.set({ left, top, ready, dragging, moved });
   }
 
   async function place(target: HTMLElement) {
@@ -131,18 +151,33 @@ export function floatDrag(options: FloatDragOptions): FloatDrag {
   }
 
   function start(e: PointerEvent) {
-    if ((e.target as HTMLElement).closest('button')) return;
+    if ((e.target as HTMLElement).closest(NOT_A_HANDLE)) return;
     e.preventDefault();
     const origin = fixedOrigin(el);
     gestureBounds = { width: origin.width, height: origin.height };
-    startX = e.clientX;
-    startY = e.clientY;
+    begin(e, e.currentTarget as HTMLElement, false);
+  }
+
+  function pickUp(pointer: HeldPointer, grab: FloatPos) {
+    if (!el || !ready || dragging) return;
+    const origin = fixedOrigin(el);
+    gestureBounds = { width: origin.width, height: origin.height };
+    left = pointer.clientX - origin.left - grab.x;
+    top = pointer.clientY - origin.top - grab.y;
+    clamp();
+    begin(pointer, el, true);
+  }
+
+  function begin(pointer: HeldPointer, captor: HTMLElement | null, alreadyMoved: boolean) {
+    startX = pointer.clientX;
+    startY = pointer.clientY;
     startLeft = left;
     startTop = top;
     dragging = true;
+    moved = alreadyMoved;
     publish();
     try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      captor?.setPointerCapture(pointer.pointerId);
     } catch {
       /* capture is a nicety — the window listeners below still work */
     }
@@ -153,14 +188,18 @@ export function floatDrag(options: FloatDragOptions): FloatDrag {
 
   function onMove(e: PointerEvent) {
     if (!dragging) return;
-    left = startLeft + (e.clientX - startX);
-    top = startTop + (e.clientY - startY);
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!moved && dx * dx + dy * dy > SLOP * SLOP) moved = true;
+    left = startLeft + dx;
+    top = startTop + dy;
     clampIntoView();
   }
 
   function endDrag() {
     if (!dragging) return;
     dragging = false;
+    moved = false;
     gestureBounds = null;
     removeDragListeners();
     options.save({ x: Math.round(left), y: Math.round(top) });
@@ -173,5 +212,5 @@ export function floatDrag(options: FloatDragOptions): FloatDrag {
     window.removeEventListener('pointercancel', endDrag);
   }
 
-  return { subscribe: state.subscribe, place, teardown, start };
+  return { subscribe: state.subscribe, place, teardown, start, pickUp };
 }
