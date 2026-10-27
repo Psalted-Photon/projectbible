@@ -2437,15 +2437,22 @@
         dockDrag.set(null);
         return;
       }
-      tearOut(barKey, {
+      tearOut(barKey, from, {
         pointerId: event.pointerId,
         clientX: event.clientX,
         clientY: event.clientY,
-        from,
       });
       return;
     }
     tabPull = Math.min(TAB_STRETCH_MAX, Math.max(0, (event.clientY - tearStartY) / 4));
+  }
+
+  /** Enter (or Space) on the tab pops the player out to the pill's own spot. */
+  function onTabKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    const from = ttsControlsEl?.getBoundingClientRect();
+    if (from) tearOut(barKey, from, null);
   }
 
   function endTear(event: PointerEvent): void {
@@ -2930,6 +2937,7 @@
           title="Drag to move the player anywhere"
           aria-label="Move the player out of the bar"
           on:pointerdown={onTabPointerDown}
+          on:keydown={onTabKeydown}
         ><DotsSix size={12} weight="bold" /></span>
       </div>
       <div class="nav-spacer"></div>

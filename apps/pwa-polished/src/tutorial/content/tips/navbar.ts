@@ -79,7 +79,7 @@ export const NAVBAR_TIPS: Tip[] = [
     area,
     target: '.nav-tts',
     title: 'Read Aloud controls',
-    body: 'Pause, jump to a verse, stop, carry on into the next chapter, or set a sleep timer.',
+    body: 'Pause, jump to a verse, stop, carry on into the next chapter, or set a sleep timer. Drag the tab underneath to pull the player out and leave it anywhere.',
   },
   {
     id: 'nav-repeats',

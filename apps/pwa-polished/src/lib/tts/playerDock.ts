@@ -21,6 +21,7 @@
 
 import { writable, get } from 'svelte/store';
 import { getBibleTtsFloating, setBibleTtsFloating } from '../../adapters/settings';
+import type { HeldPointer } from '../floatDrag';
 
 /** The main reader has no window id; every other bar goes by its own. */
 export const MAIN_BAR = 'main';
@@ -52,10 +53,15 @@ export interface DockDrag {
 
 export const dockDrag = writable<DockDrag | null>(null);
 
-/** Whether the pill is in range of its slot, written only when it changes. */
+/**
+ * Whether the pill is in range of its slot, written only when it changes.
+ * Coming into range buzzes, as lightly as pinning the bar does.
+ */
 export function setDockNear(near: boolean): void {
   const d = get(dockDrag);
-  if (d && d.near !== near) dockDrag.set({ ...d, near });
+  if (!d || d.near === near) return;
+  dockDrag.set({ ...d, near });
+  if (near) navigator.vibrate?.(15);
 }
 
 /**
@@ -74,11 +80,10 @@ let originBar = MAIN_BAR;
  * A tear-out handing its finger to the pill: where the pointer is, and the
  * box the player had in the bar, for the pill to change shape out of. Taken
  * by the pill as it appears; one that is not taken at once has gone stale.
+ * No pointer when it came from the keyboard: the pill goes to its own spot.
  */
 export interface TearOut {
-  pointerId: number;
-  clientX: number;
-  clientY: number;
+  pointer: HeldPointer | null;
   from: DOMRect;
   at: number;
 }
@@ -89,9 +94,9 @@ export const pendingTearOut = writable<TearOut | null>(null);
 const TEAR_OUT_FRESH_MS = 500;
 
 /** The tab has been pulled out of `bar`: the player floats from here on. */
-export function tearOut(bar: string, from: Omit<TearOut, 'at'>): void {
+export function tearOut(bar: string, from: DOMRect, pointer: HeldPointer | null): void {
   originBar = bar;
-  pendingTearOut.set({ ...from, at: performance.now() });
+  pendingTearOut.set({ pointer, from, at: performance.now() });
   dockDrag.set(null);
   setBibleFloating(true);
 }

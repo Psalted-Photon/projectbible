@@ -154,25 +154,47 @@
   /** Let go in range: into the slot, and the bar's player takes over. */
   function dockIfNear(): boolean {
     const slot = $dockDrag?.near ? dockSlotRect() : null;
-    if (!slot || !el) return false;
-    docking = true;
-    void morphInto(el, slot, '8px').then(() => {
-      setBibleFloating(false);
-      dockDrag.set(null);
-      docking = false;
-    });
+    if (!slot) return false;
+    void goIn(slot, false);
     return true;
+  }
+
+  /**
+   * Enter (or Space) on the grip: the slot is shown just for this, and the
+   * pill goes into it the same way. The focus follows it to the bar's tab.
+   */
+  async function onGripKeydown(event: KeyboardEvent): Promise<void> {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    if (docking || $drag.dragging) return;
+    docking = true;
+    dockDrag.set({ mode: 'dock', bar: homeBar(), near: true });
+    await tick();
+    await goIn(dockSlotRect(), true);
+  }
+
+  async function goIn(slot: DOMRect | null, focusTab: boolean): Promise<void> {
+    docking = true;
+    if (slot && el) await morphInto(el, slot, '8px');
+    setBibleFloating(false);
+    dockDrag.set(null);
+    docking = false;
+    if (!focusTab) return;
+    await tick();
+    document.querySelector<HTMLElement>('.nav-tts:not(.nav-tts-slot) .tts-nav-tab')?.focus();
   }
 
   async function show(target: HTMLDivElement): Promise<void> {
     await drag.place(target);
     // Just torn out of the bar: take over the finger, holding the pill by its
-    // grip, and change shape out of the player it was a moment ago.
+    // grip, and change shape out of the player it was a moment ago. Popped out
+    // from the keyboard it stays at its own spot, and the grip takes the focus.
     const torn = takeTearOut();
     if (!torn || el !== target || !$drag.ready) return;
-    drag.pickUp(torn, gripCenter());
+    if (torn.pointer) drag.pickUp(torn.pointer, gripCenter());
     await tick();
     morphFrom(el, torn.from, '8px');
+    if (!torn.pointer) gripEl?.focus();
   }
 
   /** Where the grip is in the pill's own box. */
@@ -202,7 +224,17 @@
     on:pointerdown={drag.start}
   >
     <div class="row top">
-      <span class="grip" bind:this={gripEl} aria-hidden="true">
+      <!-- The handle by which it is carried, and for a keyboard the way back
+           into the bar. Not a <button>, so it still drags. -->
+      <span
+        class="grip no-press"
+        bind:this={gripEl}
+        role="button"
+        tabindex="0"
+        title="Drag to move the player, or back into the bar"
+        aria-label="Put the player back in the bar"
+        on:keydown={onGripKeydown}
+      >
         <DotsSixVertical size="1em" weight="bold" />
       </span>
       <span class="ref">{reference}</span>
@@ -334,8 +366,15 @@
     display: flex;
     flex-shrink: 0;
     padding: calc(2px * var(--s));
+    border-radius: calc(4px * var(--s));
     font-size: 0.85em;
     opacity: 0.4;
+  }
+
+  .grip:focus-visible {
+    opacity: 1;
+    outline: 1px solid #e6b84a;
+    outline-offset: 1px;
   }
 
   .ref {

@@ -157,6 +157,7 @@
 - Auto-advance
 - Continuous reading across chapters, with spoken announcements
 - Controls in the toolbar wherever you are
+- Pull the player out of the toolbar by its tab into a floating player; carry it back to dock it
 - App icon spins while generating
 - Lock-screen controls with verse counter
 - Sleep timer — by minutes or end of chapter, fades out, never navigates

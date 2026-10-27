@@ -22,6 +22,7 @@ import { tutorial } from '../state';
 import { navigationStore, availableTranslations } from '../../stores/navigationStore';
 import { normalizeBookName } from '../../lib/bibleData';
 import { isBibleReadingActive } from '../../lib/tts/readingEngine';
+import { bibleFloating } from '../../lib/tts/playerDock';
 import { packInstallFinished } from '../../adapters/db-manager';
 import { installAll, packsStillToInstall, voicesStillToInstall } from '../../lib/packInstaller';
 
@@ -308,9 +309,10 @@ export const PART_TWO: TourStep[] = [
     id: 'read-aloud-controls',
     target: () => inMainReader('.nav-tts'),
     reveal: true,
-    skipIf: () => !get(isBibleReadingActive),
+    // Pulled out into its floating pill, there is nothing up here to point at.
+    skipIf: () => !get(isBibleReadingActive) || get(bibleFloating),
     title: 'While it reads',
-    body: 'The controls wait up here: pause, jump to a verse, stop, carry on into the next chapter, and a sleep timer.',
+    body: 'The controls wait up here: pause, jump to a verse, stop, carry on into the next chapter, and a sleep timer. Drag the tab under them to pull them out and leave them anywhere.',
   },
 
   // ── Book introductions ───────────────────────────────────────────────────
