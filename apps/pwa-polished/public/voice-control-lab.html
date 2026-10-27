@@ -263,7 +263,7 @@
 </main>
 
 <script type="module">
-import { APP_KEYWORDS, HARD_NAMES, findCommentary } from '/voice-control-lab/tools.js';
+import { APP_KEYWORDS, HARD_NAMES, bibleWord, findCommentary } from '/voice-control-lab/tools.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -675,6 +675,15 @@ const argsOf = (c) => {
   return c.arguments || {};
 };
 
+/** A heard word as the Bible word it most likely is, with the sound-alikes a tap would switch to. */
+function soundsLike(heard) {
+  const b = bibleWord(heard);
+  const notes = [];
+  if (b.word !== String(heard ?? '').toLowerCase().trim()) notes.push(`heard "${heard}"`);
+  if (b.others.length) notes.push(`a tap for ${b.others.map((o) => `"${o}"`).join(' or ')}`);
+  return `"${b.word}"${notes.length ? ` (${notes.join('; ')})` : ''}`;
+}
+
 /** What the app would do with one call, in the words it would show. */
 function wouldDo(name, a) {
   switch (name) {
@@ -686,7 +695,7 @@ function wouldDo(name, a) {
         ? [`Open ${hit}${a.new_window ? ' in a new window' : ''}`]
         : [`Reply: "${a.author} isn't in the app."`, 'warn'];
     }
-    case 'word_study': return [`Word study on "${a.word}"`];
+    case 'word_study': return [`Word study on ${soundsLike(a.word)}`];
     case 'strongs': return [a.query ? `Strong's: ${a.query}` : "Open Strong's"];
     case 'highlight': {
       const v = String(a.verses ?? '');
@@ -697,7 +706,7 @@ function wouldDo(name, a) {
         : [`Select ${where} and open the highlighter${a.look ? ` on ${look}` : ''}`];
     }
     case 'search': return [`Search for "${a.query}"`];
-    case 'repeats': return [`Repeats: mark "${a.word}" everywhere`];
+    case 'repeats': return [`Repeats: mark ${soundsLike(a.word)} everywhere`];
     case 'window': return [`Open ${a.window}`];
     case 'close_window': return [a.window === 'all' ? 'Close every window' : a.window ? `Close ${a.window}` : 'Close the window on top'];
     case 'read_aloud': return [a.from_verse ? `Read aloud from verse ${a.from_verse}` : 'Read aloud'];

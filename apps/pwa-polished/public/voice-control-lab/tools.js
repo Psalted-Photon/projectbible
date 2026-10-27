@@ -520,6 +520,133 @@ export function findCommentary(spoken) {
   return null;
 }
 
+/**
+ * Words that sound alike, each with how often the KJV, WEB, BSB and NET use
+ * it together. Whistle can only guess which one was meant ("the word peace"
+ * came out "piece"), so a word for Repeats or a word study becomes the one the
+ * Bible uses at least 5 times as often, and otherwise stays as heard; the rest
+ * are a tap away. Groups whose common word is a little word ("him" and
+ * "hymn") are left out.
+ */
+const SOUNDALIKES = [
+  'peace:1556 piece:167',
+  'prophet:1053 profit:140',
+  'prophets:977 profits:14',
+  'pray:678 prey:215',
+  'praise:998 prays:24 preys:3',
+  'holy:2608 wholly:56',
+  'son:9540 sun:578',
+  'soul:1209 sole:36',
+  'souls:219 soles:32',
+  'altar:1535 alter:13',
+  'altars:241 alters:1',
+  'reign:673 rain:403 rein:0',
+  'reigned:569 rained:28 reined:0',
+  'reigns:35 rains:32 reins:18',
+  'mourning:214 morning:938',
+  'aloud:103 allowed:68',
+  'seen:971 scene:3',
+  'sow:152 sew:7',
+  'sowed:35 sewed:9',
+  'sowing:16 sewing:0',
+  'sower:22 sewer:2',
+  'heal:174 heel:28',
+  'healed:316 heeled:0',
+  'wait:396 weight:169',
+  'bread:1283 bred:4',
+  'flour:278 flower:65',
+  'flowers:63 flours:0',
+  'sent:2681 scent:16 cent:1',
+  'sea:1666 see:3731',
+  'knew:402 new:721',
+  'right:1654 write:319 rite:1',
+  'rose:368 rows:65',
+  'vain:280 vein:2 vane:0',
+  'way:2692 weigh:43',
+  'ways:748 weighs:20',
+  'whole:1179 hole:38',
+  'idol:100 idle:36',
+  'idols:565 idles:0',
+  'hear:1717 here:1324',
+  'heard:2416 herd:101',
+  'lessen:2 lesson:13',
+  'meat:570 meet:494 mete:8',
+  'passed:535 past:178',
+  'patience:88 patients:0',
+  'presence:676 presents:49',
+  'principal:30 principle:7',
+  'raise:281 rays:4 raze:2',
+  'reed:98 read:314',
+  'reeds:75 reads:70',
+  'road:229 rode:53 rowed:8',
+  'sail:55 sale:22',
+  'sight:1099 site:25 cite:0',
+  'steal:100 steel:5',
+  'tale:8 tail:55',
+  'throne:690 thrown:216',
+  'vial:11 vile:40',
+  'waste:230 waist:81',
+  'weak:220 week:54',
+  'rest:1213 wrest:5',
+  'ring:79 wring:6',
+  'blew:93 blue:197',
+  'bore:280 boar:3',
+  'bow:403 bough:13',
+  'bridal:4 bridle:31',
+  'council:109 counsel:374',
+  'dear:91 deer:39',
+  'dew:144 due:116',
+  'die:1280 dye:0',
+  'fair:107 fare:7',
+  'feet:1431 feat:0',
+  'fir:37 fur:2',
+  'flee:367 flea:8',
+  'fowl:39 foul:17',
+  'fowls:56 fouls:0',
+  'gate:1060 gait:0',
+  'grown:127 groan:65',
+  'hail:140 hale:1',
+  'need:306 knead:7',
+  'night:1246 knight:0',
+  'lone:5 loan:13',
+  'male:665 mail:15',
+  'main:37 mane:3',
+  'pale:24 pail:0',
+  'pain:143 pane:0',
+  'pair:36 pear:0 pare:2',
+  'plain:194 plane:5',
+  'pole:48 poll:5',
+  'pour:300 pore:1 poor:725',
+  'real:11 reel:8',
+  'root:161 route:19',
+  'wrote:243 rote:0',
+  'straight:145 strait:11',
+  'sweet:255 suite:0',
+  'vale:9 veil:121',
+  'whale:5 wail:96',
+  'wet:23 whet:5',
+  'isle:11 aisle:0',
+  'ark:912 arc:0',
+  'abel:107 able:647',
+  'cain:95 cane:14',
+  'manna:76 manner:243 manor:0',
+  'cymbal:4 symbol:11',
+  'censer:42 censor:0',
+  'mary:223 marry:129 merry:57',
+  'tares:8 tears:172',
+  'lamb:444 lam:0',
+].map((g) => g.split(' ').map((p) => [p.split(':')[0], Number(p.split(':')[1])]));
+
+/** The word a heard word most likely is in the Bible, and its sound-alikes to offer. */
+export function bibleWord(heard) {
+  const w = String(heard ?? '').toLowerCase().trim();
+  const group = SOUNDALIKES.find((g) => g.some(([x]) => x === w));
+  if (!group) return { word: w, others: [] };
+  const [best, most] = group.reduce((a, b) => (b[1] > a[1] ? b : a));
+  const word = most >= 5 * group.find(([x]) => x === w)[1] ? best : w;
+  return { word, others: group.filter(([x, n]) => x !== word && n > 0).map(([x]) => x) };
+}
+
 /** Names Whistle is told to favor: one per line, as people say them. */
 export const APP_KEYWORDS = [
   ...new Set(BOOKS.map((b) => b.replace(/^\d /, ''))),
