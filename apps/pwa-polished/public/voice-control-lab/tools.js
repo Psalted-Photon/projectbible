@@ -1,17 +1,27 @@
 /**
  * Voice Control lab — the actions Needle chooses from, written the way
- * Cactus's guide asks: one tool per action, named as people say it, formats in
- * the descriptions, fixed choices as enums.
+ * Cactus's guide asks: one tool per action, formats in the descriptions, fixed
+ * choices as enums.
+ *
+ * Each action is named after the thing it brings up, never after a verb.
+ * People say "open" (or "go to", "show me", "pull up") for nearly everything,
+ * so a verb in a name or description pulls every "open …" toward that one
+ * action: "open Habakkuk" landed on open_commentary that way. Each thing is
+ * owned by one action ("map" is only the map action, not also a window), and
+ * the descriptions lead with the thing.
  *
  * Every group has trigger words, and only the groups whose words were said are
  * sent. Above five actions Needle keeps the five it thinks closest to what was
- * said, and the rest can't be picked at all: "open James 5" lost the passage
- * action that way and landed on open_commentary. With no trigger word every
- * CORE action goes and Needle's own pick decides. The lab can also send
- * everything at once, to measure that drop.
+ * said, and the rest can't be picked at all. With no trigger word every CORE
+ * action goes and Needle's own pick decides. The lab can also send everything
+ * at once, to measure that drop.
  */
 
-const WINDOWS = [
+/** Windows that only the window action brings up; the rest belong to their own actions. */
+const WINDOWS = ['Bible', 'Harmonies', 'Art', 'Notes', 'Journal'];
+
+/** Every window, for closing. */
+const ALL_WINDOWS = [
   'Bible', 'Harmonies', 'Connections', 'Commentary', 'Encyclopedia', 'People',
   'Topical', 'Strongs', 'Map', 'Timeline', 'Art', 'Family Tree', 'Notes', 'Journal',
 ];
@@ -39,28 +49,52 @@ const BOOKS = [
   'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude', 'Revelation',
 ];
 
-// A book followed by a chapter ("james 5", "1 corinthians, chapter 16"), or
-// "the book of james". A book name alone is too often a person: "who was James".
-const NUMBER = String.raw`(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)`;
-const BOOK_WORDS = [...new Set(BOOKS.map((b) => b.replace(/^\d /, '').toLowerCase())), 'psalm', 'song of songs', 'revelations']
-  .map((b) => b.replace(/ /g, String.raw`\s+`))
-  .join('|');
-const PASSAGE = new RegExp(String.raw`\b(${BOOK_WORDS})[\s,]+(chapter\s+)?${NUMBER}\b|\bbook of\s+(${BOOK_WORDS})\b`);
+const BOOK_NAMES = [...new Set(BOOKS.map((b) => b.replace(/^\d /, '').toLowerCase())), 'psalm', 'song of songs', 'revelations'];
+const BOOK_RE = new RegExp(String.raw`\b(${BOOK_NAMES.map((b) => b.replace(/ /g, String.raw`\s+`)).join('|')})\b`);
+const LONG_BOOKS = BOOK_NAMES.filter((b) => !b.includes(' ') && b.length >= 5);
+
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * A book of the Bible is named, with or without a chapter, or close enough to
+ * one ("habukkuk") that Whistle probably misspelled it. A name that is also a
+ * person or a word ("who was James", "mark") still counts: the other group's
+ * action goes too, and Needle chooses between them.
+ */
+const passageSaid = {
+  test(t) {
+    if (BOOK_RE.test(t)) return true;
+    return (t.match(/[a-z]{5,}/g) || []).some((w) => {
+      const most = w.length >= 8 ? 2 : 1;
+      return LONG_BOOKS.some((b) => Math.abs(b.length - w.length) <= most && editDistance(w, b) <= most);
+    });
+  },
+};
 
 const str = (description) => ({ type: 'string', description });
 
 export const CORE = [
   {
     key: 'passage',
-    triggers: PASSAGE,
+    triggers: passageSaid,
     tools: [
       {
-        name: 'open_passage',
-        description: 'Open a book of the Bible at a chapter, and at a verse if one is said.',
+        name: 'passage',
+        description: 'A book of the Bible to read, at a chapter and verse if they are said.',
         parameters: {
           type: 'object',
           properties: {
-            reference: str('The book and chapter as spoken, e.g. "james 5", "1 corinthians 16", "first timothy 2 verse 4".'),
+            reference: str('The book, chapter and verse as spoken, e.g. "habakkuk", "james 5", "1 corinthians 16", "first timothy 2 verse 4".'),
           },
           required: ['reference'],
         },
@@ -69,11 +103,11 @@ export const CORE = [
   },
   {
     key: 'commentary',
-    triggers: /\b(commentar(y|ies)|comments?|henry|clarke?|barnes|spurgeon|bullinger|jamieson|fausset|jfb|calvin|lightfoot|wesley|luther|robertson|abbott?|aquinas|catena|treasury|tsk|family bible notes)\b/,
+    triggers: /\b(commentar(y|ies)|comments?|henry|clarke?|barnes|spurgeon|bullinger|jamieson|fausset|jfb|calvin|lightfoot|wesley|luther|robertson|abbott?|aquinas|catena|treasury|tsk)\b/,
     tools: [
       {
-        name: 'open_commentary',
-        description: 'Open a Bible commentary on the current passage.',
+        name: 'commentary',
+        description: "A commentator's notes on the passage being read.",
         parameters: {
           type: 'object',
           properties: {
@@ -90,7 +124,7 @@ export const CORE = [
     tools: [
       {
         name: 'word_study',
-        description: 'Open a word study for an English word: its Greek or Hebrew behind it and where it is used.',
+        description: 'A word study on an English word: the Greek or Hebrew behind it and where it is used.',
         parameters: {
           type: 'object',
           properties: { word: str('The English word, e.g. "rivers", "grace".') },
@@ -98,12 +132,11 @@ export const CORE = [
         },
       },
       {
-        name: 'strongs_lookup',
-        description: "Look up a Strong's number, or a Greek or Hebrew word, in the Strong's dictionary.",
+        name: 'strongs',
+        description: "The Strong's dictionary, at a number or a Greek or Hebrew word if one is said.",
         parameters: {
           type: 'object',
           properties: { query: str('A Strong\'s number like "G26" or "H430", or a word like "agape".') },
-          required: ['query'],
         },
       },
     ],
@@ -113,8 +146,8 @@ export const CORE = [
     triggers: new RegExp(String.raw`\b(highlight\w*|colou?r|underline|${COLORS.join('|')})\b`),
     tools: [
       {
-        name: 'highlight_verses',
-        description: 'Highlight verses in the open chapter with a color.',
+        name: 'highlight',
+        description: 'A colored highlight on verses of the chapter being read.',
         parameters: {
           type: 'object',
           properties: {
@@ -131,8 +164,8 @@ export const CORE = [
     triggers: /\b(search\w*|find|look for|where does it say|which verses?|verses? (about|that|with))\b/,
     tools: [
       {
-        name: 'search_bible',
-        description: 'Search the Bible text for words or a phrase.',
+        name: 'search',
+        description: 'A search of the Bible text for words or a phrase.',
         parameters: {
           type: 'object',
           properties: { query: str('The words to search for.') },
@@ -143,12 +176,13 @@ export const CORE = [
   },
   {
     key: 'windows',
-    // "in a new window" belongs to the commentary's new_window, not to these.
-    triggers: new RegExp(String.raw`\b((?<!new )windows?|panels?|panes?|close|shut|hide|${WINDOWS.filter((w) => w !== 'Bible').map((w) => w.toLowerCase().replace(/ /g, String.raw`\s+`)).join('|')})\b`),
+    // Only the windows no other action owns, and closing. "In a new window"
+    // belongs to the commentary's new_window.
+    triggers: /\b((?<!new )windows?|panels?|panes?|close|shut|hide|bible|harmon(y|ies)|art|notes|journal)\b/,
     tools: [
       {
-        name: 'open_window',
-        description: 'Open a window or panel in the app.',
+        name: 'window',
+        description: "One of the app's windows: the Bible, the Harmonies, Art, Notes or the Journal.",
         parameters: {
           type: 'object',
           properties: { window: { type: 'string', enum: WINDOWS } },
@@ -157,10 +191,10 @@ export const CORE = [
       },
       {
         name: 'close_window',
-        description: 'Close a window or panel, or all of them.',
+        description: 'Closing a window, or all of them.',
         parameters: {
           type: 'object',
-          properties: { window: { type: 'string', enum: [...WINDOWS, 'all'] } },
+          properties: { window: { type: 'string', enum: [...ALL_WINDOWS, 'all'] } },
           required: ['window'],
         },
       },
@@ -172,7 +206,7 @@ export const CORE = [
     tools: [
       {
         name: 'read_aloud',
-        description: 'Start reading the Bible aloud, from a verse if one is said.',
+        description: 'Reading the Bible aloud, from a verse if one is said.',
         parameters: {
           type: 'object',
           properties: { from_verse: { type: 'integer', description: 'The verse to start from.' } },
@@ -180,18 +214,18 @@ export const CORE = [
       },
       {
         name: 'stop_reading',
-        description: 'Stop or pause reading aloud.',
+        description: 'Stopping or pausing reading aloud.',
         parameters: { type: 'object', properties: {} },
       },
     ],
   },
   {
     key: 'translation',
-    triggers: /\b(translations?|versions?|switch|change|kjv|king james|web|world english|bsb|berean|net|lxx|septuagint|byzantine|majority text|textus receptus|tr)\b/,
+    triggers: /\b(translations?|versions?|kjv|king james|web|world english|bsb|berean|net|lxx|septuagint|byzantine|majority text|textus receptus)\b/,
     tools: [
       {
-        name: 'switch_translation',
-        description: 'Switch the Bible translation being read.',
+        name: 'translation',
+        description: 'The Bible translation to read in.',
         parameters: {
           type: 'object',
           properties: {
@@ -214,15 +248,14 @@ export const GROUPS = [
     triggers: /\b(maps?|where (is|was))\b/,
     tools: [
       {
-        name: 'show_on_map',
-        description: 'Show a Bible place on the map, at a year if one is said.',
+        name: 'map',
+        description: 'The Bible map, at a place and a year if they are said.',
         parameters: {
           type: 'object',
           properties: {
             place: str('The place, e.g. "jericho", "the sea of galilee".'),
             year: str('A year as spoken, e.g. "1000 bc".'),
           },
-          required: ['place'],
         },
       },
     ],
@@ -232,8 +265,8 @@ export const GROUPS = [
     triggers: /\b(connections?|cross ?references?|arcs?)\b/,
     tools: [
       {
-        name: 'show_connections',
-        description: 'Show the cross-reference connections for a passage.',
+        name: 'connections',
+        description: 'The cross-reference connections for a passage.',
         parameters: {
           type: 'object',
           properties: { reference: str('The passage as spoken; the current one if none is said.') },
@@ -247,11 +280,10 @@ export const GROUPS = [
     tools: [
       {
         name: 'family_tree',
-        description: 'Open the family tree on a person.',
+        description: 'The family tree, on a person if one is named.',
         parameters: {
           type: 'object',
           properties: { person: str('The person, e.g. "david", "mephibosheth".') },
-          required: ['person'],
         },
       },
     ],
@@ -261,12 +293,11 @@ export const GROUPS = [
     triggers: /\b(bio|biography|who (is|was)|person|people)\b/,
     tools: [
       {
-        name: 'person_bio',
-        description: 'Open the biography of a Bible person.',
+        name: 'biography',
+        description: 'The life of a Bible person, or the list of people if no one is named.',
         parameters: {
           type: 'object',
           properties: { person: str('The person, e.g. "ruth", "barnabas".') },
-          required: ['person'],
         },
       },
     ],
@@ -277,11 +308,10 @@ export const GROUPS = [
     tools: [
       {
         name: 'encyclopedia',
-        description: 'Open the encyclopedia article on a subject.',
+        description: 'The encyclopedia, at an article if a subject is said.',
         parameters: {
           type: 'object',
           properties: { topic: str('The subject, e.g. "tabernacle".') },
-          required: ['topic'],
         },
       },
     ],
@@ -292,11 +322,10 @@ export const GROUPS = [
     tools: [
       {
         name: 'topical',
-        description: "Open Nave's topical index on a subject.",
+        description: "Nave's topical index, at a subject if one is said.",
         parameters: {
           type: 'object',
           properties: { topic: str('The subject, e.g. "forgiveness".') },
-          required: ['topic'],
         },
       },
     ],
@@ -307,11 +336,10 @@ export const GROUPS = [
     tools: [
       {
         name: 'timeline',
-        description: 'Open the timeline on an event, person or era.',
+        description: 'The timeline, at an event, person or era if one is said.',
         parameters: {
           type: 'object',
           properties: { event: str('The event, e.g. "the exodus", "the exile".') },
-          required: ['event'],
         },
       },
     ],

@@ -678,8 +678,8 @@ const argsOf = (c) => {
 /** What the app would do with one call, in the words it would show. */
 function wouldDo(name, a) {
   switch (name) {
-    case 'open_passage': return [`Go to ${a.reference}`];
-    case 'open_commentary': {
+    case 'passage': return [`Go to ${a.reference}`];
+    case 'commentary': {
       if (!a.author) return [`Open the commentary last used${a.new_window ? ' in a new window' : ''}`];
       const hit = findCommentary(a.author);
       return hit
@@ -687,21 +687,21 @@ function wouldDo(name, a) {
         : [`Reply: "${a.author} isn't in the app."`, 'warn'];
     }
     case 'word_study': return [`Word study on "${a.word}"`];
-    case 'strongs_lookup': return [`Strong's: ${a.query}`];
-    case 'highlight_verses': return [`Highlight verse ${a.verses} in ${a.color}`];
-    case 'search_bible': return [`Search for "${a.query}"`];
-    case 'open_window': return [`Open ${a.window}`];
+    case 'strongs': return [a.query ? `Strong's: ${a.query}` : "Open Strong's"];
+    case 'highlight': return [`Highlight verse ${a.verses} in ${a.color}`];
+    case 'search': return [`Search for "${a.query}"`];
+    case 'window': return [`Open ${a.window}`];
     case 'close_window': return [a.window === 'all' ? 'Close every window' : `Close ${a.window}`];
     case 'read_aloud': return [a.from_verse ? `Read aloud from verse ${a.from_verse}` : 'Read aloud'];
     case 'stop_reading': return ['Stop reading'];
-    case 'switch_translation': return [`Switch to ${a.translation}`];
-    case 'show_on_map': return [`Map: ${a.place}${a.year ? ' in ' + a.year : ''}`];
-    case 'show_connections': return [`Connections for ${a.reference || 'this passage'}`];
-    case 'family_tree': return [`Family tree on ${a.person}`];
-    case 'person_bio': return [`Bio of ${a.person}`];
-    case 'encyclopedia': return [`Encyclopedia: ${a.topic}`];
-    case 'topical': return [`Topical: ${a.topic}`];
-    case 'timeline': return [`Timeline: ${a.event}`];
+    case 'translation': return [`Switch to ${a.translation}`];
+    case 'map': return [a.place ? `Map: ${a.place}${a.year ? ' in ' + a.year : ''}` : 'Open the map'];
+    case 'connections': return [`Connections for ${a.reference || 'this passage'}`];
+    case 'family_tree': return [a.person ? `Family tree on ${a.person}` : 'Open the family tree'];
+    case 'biography': return [a.person ? `Bio of ${a.person}` : 'Open People'];
+    case 'encyclopedia': return [a.topic ? `Encyclopedia: ${a.topic}` : 'Open the encyclopedia'];
+    case 'topical': return [a.topic ? `Topical: ${a.topic}` : 'Open Topical'];
+    case 'timeline': return [a.event ? `Timeline: ${a.event}` : 'Open the timeline'];
     default: return [JSON.stringify(a)];
   }
 }
@@ -840,6 +840,11 @@ $('typed').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('typedB
 
 const EXAMPLES = [
   'go to Romans 6, open the King Comments in a new window, word study rivers',
+  'open Habakkuk',
+  'open James 5',
+  'open notes',
+  'open the map',
+  'open the King Comments',
   'open Keil and Delitzsch',
   'highlight verses 16 to 18 in yellow',
   'read from verse 4',
