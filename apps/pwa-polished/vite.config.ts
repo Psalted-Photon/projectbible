@@ -307,6 +307,9 @@ export default defineConfig({
         //                     view. Built from the app's source, the same way.
         //   connections-chord-lab  tunes the chord ring and the reader strip.
         //                     Built from the app's source, the same way.
+        //   voice-control-lab  the go/no-go test for Voice Control. Its folder
+        //                     (worker, engine, actions) stays out as well; the
+        //                     models it downloads are kept in its own cache.
         //   reset.html       the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -332,6 +335,8 @@ export default defineConfig({
           '**/assets/connections-grid-lab-*.js',
           '**/connections-chord-lab.html',
           '**/assets/connections-chord-lab-*.js',
+          '**/voice-control-lab.html',
+          '**/voice-control-lab/**',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
@@ -344,6 +349,7 @@ export default defineConfig({
           /^\/connections-lab\.html$/,
           /^\/connections-grid-lab\.html$/,
           /^\/connections-chord-lab\.html$/,
+          /^\/voice-control-lab\.html$/,
         ],
         runtimeCaching: [
           {

@@ -32,7 +32,7 @@
       ]
     },
     {
-      "source": "/((?!voice-lab\\.html|familytree\\.html|gem-lab\\.html|reset\\.html|email/).*)",
+      "source": "/((?!voice-lab\\.html|voice-control-lab|familytree\\.html|gem-lab\\.html|reset\\.html|email/).*)",
       "headers": [
         {
           "key": "Content-Security-Policy-Report-Only",
