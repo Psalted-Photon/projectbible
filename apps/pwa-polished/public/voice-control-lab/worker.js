@@ -10,7 +10,7 @@
 
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort.wasm.min.mjs';
 import { NeedleEngine, Punctuator, SileroVad, planChunks, VAD_FRAME } from './engine.js';
-import { toolsFor } from './tools.js';
+import { tidy, toolsFor } from './tools.js';
 
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
 // Threads need a cross-origin isolated page, which the app is not.
@@ -208,7 +208,8 @@ function useTools(system, toolsJson) {
   return { initMs: performance.now() - t, prefix };
 }
 
-function choose(text, system, everything, maxNewTokens) {
+function choose(heard, system, everything, maxNewTokens) {
+  const text = tidy(heard);
   const picked = toolsFor(text, everything);
   const toolsJson = JSON.stringify(picked.tools);
   const tools = useTools(system, toolsJson);
@@ -223,7 +224,7 @@ function choose(text, system, everything, maxNewTokens) {
     useTools(system, toolsJson);
     answer = eng.complete(text, maxNewTokens);
   }
-  return { answer, needleMs: performance.now() - t, ...tools, toolCount: picked.tools.length, toolNames: picked.tools.map((x) => x.name), groups: picked.groups };
+  return { answer, needleMs: performance.now() - t, ...tools, toolCount: picked.tools.length, toolNames: picked.tools.map((x) => x.name), groups: picked.groups, tidied: text };
 }
 
 /**

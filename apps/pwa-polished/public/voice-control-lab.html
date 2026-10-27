@@ -688,10 +688,18 @@ function wouldDo(name, a) {
     }
     case 'word_study': return [`Word study on "${a.word}"`];
     case 'strongs': return [a.query ? `Strong's: ${a.query}` : "Open Strong's"];
-    case 'highlight': return [`Highlight verse ${a.verses} in ${a.color}`];
+    case 'highlight': {
+      const v = String(a.verses ?? '');
+      const where = /^\d+$/.test(v.trim()) ? `verse ${v}` : /^\d/.test(v.trim()) && !/:/.test(v) ? `verses ${v}` : v;
+      const look = { marker: 'marker', letters: 'letters', underline: 'underline', dashed: 'dashed underline', squiggle: 'squiggle', box: 'box' }[a.look] || 'marker';
+      return a.color
+        ? [`Highlight ${where}: ${a.color} ${look}`]
+        : [`Select ${where} and open the highlighter${a.look ? ` on ${look}` : ''}`];
+    }
     case 'search': return [`Search for "${a.query}"`];
+    case 'repeats': return [`Repeats: mark "${a.word}" everywhere`];
     case 'window': return [`Open ${a.window}`];
-    case 'close_window': return [a.window === 'all' ? 'Close every window' : `Close ${a.window}`];
+    case 'close_window': return [a.window === 'all' ? 'Close every window' : a.window ? `Close ${a.window}` : 'Close the window on top'];
     case 'read_aloud': return [a.from_verse ? `Read aloud from verse ${a.from_verse}` : 'Read aloud'];
     case 'stop_reading': return ['Stop reading'];
     case 'translation': return [`Switch to ${a.translation}`];
@@ -747,13 +755,14 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
   const answer = r.answer;
   const calls = answer?.function_calls || [];
   const row = {
-    said, typed: typed != null, calls: [], confidence: answer?.confidence ?? null, whistleMs: r.whistleMs, needleMs: r.needleMs,
+    said, typed: typed != null, tidied: r.tidied && r.tidied !== said ? r.tidied : null, calls: [], confidence: answer?.confidence ?? null, whistleMs: r.whistleMs, needleMs: r.needleMs,
     speechSec: pcm ? pcm.length / 16000 : null, tools: r.toolCount, sent: r.toolNames || [],
     held: (answer?.suppressed_calls || []).map((c) => callText(c) + (c.reason ? ` (${c.reason})` : '')), check: engineCheck(answer),
   };
   let html = said.trim()
     ? `<div class="said">“${esc(said)}”${typed != null ? ' <span class="times">(typed)</span>' : ''}</div>`
     : `<div class="said"><i>Heard nothing.</i> The app would say "Didn't catch that".</div>`;
+  if (row.tidied) html += `<div class="times">Written for Needle as: “${esc(row.tidied)}”</div>`;
   if (answer) {
     if (answer.success === false || answer.error) html += `<div class="err">${esc(answer.error || 'Needle reported a failure')}</div>`;
     if (calls.length) {
@@ -846,7 +855,13 @@ const EXAMPLES = [
   'open the map',
   'open the King Comments',
   'open Keil and Delitzsch',
+  'highlight verse 16',
+  'highlight John 316',
+  'highlight John chapter 3 verse 16',
+  'highlight John 316 blue letters',
+  'highlight verse 16 with a green squiggle',
   'highlight verses 16 to 18 in yellow',
+  'show repeats of the word peace',
   'read from verse 4',
   'switch to the King James',
   'open Matthew Henry',
@@ -1353,6 +1368,7 @@ function reportText() {
   L.push(`Commands (${R.commands.length}):`);
   for (const c of R.commands) {
     L.push(`  "${c.said}"${c.typed ? ' (typed)' : ''}`);
+    if (c.tidied) L.push(`    written as: "${c.tidied}"`);
     L.push(`    → ${c.calls.length ? c.calls.join('; ') : 'nothing'}${c.confidence != null ? ` · confidence ${c.confidence.toFixed(2)}` : ''}`);
     if (c.held?.length) L.push(`    held back: ${c.held.join('; ')}${c.check ? ` · ${c.check}` : ''}`);
     if (c.sent?.length) L.push(`    shown: ${c.sent.join(', ')}`);
