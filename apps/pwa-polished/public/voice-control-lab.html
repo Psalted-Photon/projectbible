@@ -164,7 +164,7 @@
   <div class="opts" style="margin-top:12px">
     <label><input type="checkbox" id="optNames" checked> Favor the app's names (books, commentary authors, windows)</label>
     <label><input type="checkbox" id="optKeep" checked> Keep the mic open between presses (catches your first word)</label>
-    <label><input type="checkbox" id="optAll"> Send every action at once, not only the groups a trigger word picks</label>
+    <label><input type="checkbox" id="optAll"> Send every action at once, not only the groups a trigger word picks (Needle then keeps the 5 it thinks closest)</label>
     <label>Act at <input type="number" id="actAt" value="0.8" min="0" max="1" step="0.05"> · ask "Did you mean…?" at <input type="number" id="askAt" value="0.4" min="0" max="1" step="0.05"></label>
   </div>
   <div class="row">
@@ -678,9 +678,10 @@ const argsOf = (c) => {
 /** What the app would do with one call, in the words it would show. */
 function wouldDo(name, a) {
   switch (name) {
-    case 'go_to_passage': return [`Go to ${a.reference}`];
+    case 'open_passage': return [`Go to ${a.reference}`];
     case 'open_commentary': {
-      const hit = findCommentary(a.author || '');
+      if (!a.author) return [`Open the commentary last used${a.new_window ? ' in a new window' : ''}`];
+      const hit = findCommentary(a.author);
       return hit
         ? [`Open ${hit}${a.new_window ? ' in a new window' : ''}`]
         : [`Reply: "${a.author} isn't in the app."`, 'warn'];
@@ -703,6 +704,18 @@ function wouldDo(name, a) {
     case 'timeline': return [`Timeline: ${a.event}`];
     default: return [JSON.stringify(a)];
   }
+}
+
+const callText = (c) => `${c.name}(${Object.entries(argsOf(c)).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')})`;
+
+/** Why the engine held calls back: the parts of its validation report that found something. */
+function engineCheck(answer) {
+  const v = answer?.validation;
+  if (!v || typeof v !== 'object') return '';
+  return Object.entries(v)
+    .filter(([, x]) => x && (!Array.isArray(x) || x.length) && (typeof x !== 'object' || Object.keys(x).length))
+    .map(([k, x]) => `${k}: ${typeof x === 'string' ? x : JSON.stringify(x)}`)
+    .join(' · ');
 }
 
 function verdictOf(answer) {
@@ -733,7 +746,11 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
   const said = typed ?? r.transcript?.text ?? '';
   const answer = r.answer;
   const calls = answer?.function_calls || [];
-  const row = { said, typed: typed != null, calls: [], confidence: answer?.confidence ?? null, whistleMs: r.whistleMs, needleMs: r.needleMs, speechSec: pcm ? pcm.length / 16000 : null, tools: r.toolCount };
+  const row = {
+    said, typed: typed != null, calls: [], confidence: answer?.confidence ?? null, whistleMs: r.whistleMs, needleMs: r.needleMs,
+    speechSec: pcm ? pcm.length / 16000 : null, tools: r.toolCount, sent: r.toolNames || [],
+    held: (answer?.suppressed_calls || []).map((c) => callText(c) + (c.reason ? ` (${c.reason})` : '')), check: engineCheck(answer),
+  };
   let html = said.trim()
     ? `<div class="said">“${esc(said)}”${typed != null ? ' <span class="times">(typed)</span>' : ''}</div>`
     : `<div class="said"><i>Heard nothing.</i> The app would say "Didn't catch that".</div>`;
@@ -744,7 +761,7 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
       for (const c of calls) {
         const a = argsOf(c);
         const [text, cls] = wouldDo(c.name, a);
-        row.calls.push(`${c.name}(${Object.entries(a).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')})`);
+        row.calls.push(callText(c));
         html += `<li><code>${esc(c.name)}</code> <span class="args">${esc(Object.entries(a).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(' · '))}</span>`;
         html += `<div class="would ${cls || ''}">→ ${esc(text)}</div></li>`;
       }
@@ -752,9 +769,8 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
     }
     const [cls, text] = verdictOf(answer);
     html += `<div class="verdict ${cls}">${esc(text)}</div>`;
-    if (answer.suppressed_calls?.length) {
-      html += `<div class="times">Held back by the engine: ${esc(answer.suppressed_calls.map((c) => c.name).join(', '))}</div>`;
-    }
+    if (row.held.length) html += `<div class="times">Held back by the engine: ${esc(row.held.join('; '))}</div>`;
+    if (row.check) html += `<div class="times">Engine check: ${esc(row.check)}</div>`;
     if (answer.reasoning) html += `<div class="times">Why: ${esc(answer.reasoning)}</div>`;
   }
   const t = [];
@@ -763,7 +779,10 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
   if (r.whistleMs != null) t.push(`Whistle ${ms(r.whistleMs)}`);
   if (r.needleMs != null) t.push(`Needle ${ms(r.needleMs)}`);
   if (r.initMs) t.push(`tool setup ${ms(r.initMs)}${r.prefix ? ` (${r.prefix} tokens)` : ''}`);
-  if (r.toolCount) t.push(`${r.toolCount} actions sent${r.groups?.length ? ' (+ ' + r.groups.join(', ') + ')' : ''}`);
+  if (r.toolCount) {
+    const why = r.groups?.length ? `trigger words: ${r.groups.join(', ')}` : 'no trigger word';
+    html += `<div class="times">Shown to Needle (${esc(why)}): ${esc(row.sent.join(', '))}${r.toolCount > 5 ? ' — over 5, so Needle keeps the 5 it thinks closest' : ''}</div>`;
+  }
   if (answer?.peak_ram_mb) t.push(`peak ${Math.round(answer.peak_ram_mb)} MB`);
   t.push(`total ${ms(total)}`);
   html += `<div class="times">${esc(t.join(' · '))}</div>`;
@@ -1330,6 +1349,8 @@ function reportText() {
   for (const c of R.commands) {
     L.push(`  "${c.said}"${c.typed ? ' (typed)' : ''}`);
     L.push(`    → ${c.calls.length ? c.calls.join('; ') : 'nothing'}${c.confidence != null ? ` · confidence ${c.confidence.toFixed(2)}` : ''}`);
+    if (c.held?.length) L.push(`    held back: ${c.held.join('; ')}${c.check ? ` · ${c.check}` : ''}`);
+    if (c.sent?.length) L.push(`    shown: ${c.sent.join(', ')}`);
     L.push(`    ${[c.speechSec != null && `speech ${c.speechSec.toFixed(1)} s`, c.whistleMs != null && `Whistle ${ms(c.whistleMs)}`, c.needleMs != null && `Needle ${ms(c.needleMs)}`, c.tools && `${c.tools} actions`].filter(Boolean).join(' · ')}`);
   }
   const spoken = R.commands.filter((c) => !c.typed && c.whistleMs != null);

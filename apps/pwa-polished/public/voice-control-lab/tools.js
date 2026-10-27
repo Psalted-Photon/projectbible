@@ -3,9 +3,12 @@
  * Cactus's guide asks: one tool per action, named as people say it, formats in
  * the descriptions, fixed choices as enums.
  *
- * CORE is always sent. Each extra group is sent only when one of its trigger
- * words is in what was said, because Needle gets less accurate as the list
- * grows. The lab can also send everything at once, to measure that drop.
+ * Every group has trigger words, and only the groups whose words were said are
+ * sent. Above five actions Needle keeps the five it thinks closest to what was
+ * said, and the rest can't be picked at all: "open James 5" lost the passage
+ * action that way and landed on open_commentary. With no trigger word every
+ * CORE action goes and Needle's own pick decides. The lab can also send
+ * everything at once, to measure that drop.
  */
 
 const WINDOWS = [
@@ -17,116 +20,191 @@ export const TRANSLATIONS = ['KJV', 'WEB', 'BSB', 'NET', 'LXX', 'Byzantine', 'Te
 
 export const COLORS = ['yellow', 'green', 'blue', 'pink', 'orange', 'purple', 'red'];
 
+/** The commentaries as people say them: the shortest name that is always said, so it's in the words. */
+const COMMENTARY_NAMES = [
+  'Matthew Henry', 'Clarke', 'Barnes', 'Spurgeon', 'Bullinger', 'Jamieson Fausset Brown',
+  'Calvin', 'Lightfoot', 'Wesley', 'King Comments', 'Luther', 'Robertson', 'Abbott',
+  'Family Bible Notes', 'Aquinas', 'Treasury of Scripture Knowledge',
+];
+
+const BOOKS = [
+  'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
+  '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra',
+  'Nehemiah', 'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon',
+  'Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos',
+  'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah',
+  'Malachi', 'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians',
+  '2 Corinthians', 'Galatians', 'Ephesians', 'Philippians', 'Colossians',
+  '1 Thessalonians', '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon',
+  'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude', 'Revelation',
+];
+
+// A book followed by a chapter ("james 5", "1 corinthians, chapter 16"), or
+// "the book of james". A book name alone is too often a person: "who was James".
+const NUMBER = String.raw`(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)`;
+const BOOK_WORDS = [...new Set(BOOKS.map((b) => b.replace(/^\d /, '').toLowerCase())), 'psalm', 'song of songs', 'revelations']
+  .map((b) => b.replace(/ /g, String.raw`\s+`))
+  .join('|');
+const PASSAGE = new RegExp(String.raw`\b(${BOOK_WORDS})[\s,]+(chapter\s+)?${NUMBER}\b|\bbook of\s+(${BOOK_WORDS})\b`);
+
 const str = (description) => ({ type: 'string', description });
 
 export const CORE = [
   {
-    name: 'go_to_passage',
-    description: 'Go to a Bible passage: a book and chapter, and a verse if one is said.',
-    parameters: {
-      type: 'object',
-      properties: {
-        reference: str('The passage exactly as spoken, e.g. "romans 6", "first timothy 2 verse 4", "john 3 16".'),
-      },
-      required: ['reference'],
-    },
-  },
-  {
-    name: 'open_commentary',
-    description: 'Open a Bible commentary by its author, on the current passage.',
-    parameters: {
-      type: 'object',
-      properties: {
-        author: str('The commentator as spoken, e.g. "matthew henry", "king comments", "calvin".'),
-        new_window: { type: 'boolean', description: 'True only when a new window is asked for.' },
-      },
-      required: ['author'],
-    },
-  },
-  {
-    name: 'word_study',
-    description: 'Open a word study for an English word: its Greek or Hebrew behind it and where it is used.',
-    parameters: {
-      type: 'object',
-      properties: { word: str('The English word, e.g. "rivers", "grace".') },
-      required: ['word'],
-    },
-  },
-  {
-    name: 'strongs_lookup',
-    description: "Look up a Strong's number, or a Greek or Hebrew word, in the Strong's dictionary.",
-    parameters: {
-      type: 'object',
-      properties: { query: str('A Strong\'s number like "G26" or "H430", or a word like "agape".') },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'highlight_verses',
-    description: 'Highlight verses in the open chapter with a color.',
-    parameters: {
-      type: 'object',
-      properties: {
-        verses: str('Verse numbers as spoken, e.g. "16", "16 to 18".'),
-        color: { type: 'string', enum: COLORS },
-      },
-      required: ['verses', 'color'],
-    },
-  },
-  {
-    name: 'search_bible',
-    description: 'Search the Bible text for words or a phrase.',
-    parameters: {
-      type: 'object',
-      properties: { query: str('The words to search for.') },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'open_window',
-    description: 'Open a window or panel in the app.',
-    parameters: {
-      type: 'object',
-      properties: { window: { type: 'string', enum: WINDOWS } },
-      required: ['window'],
-    },
-  },
-  {
-    name: 'close_window',
-    description: 'Close a window or panel, or all of them.',
-    parameters: {
-      type: 'object',
-      properties: { window: { type: 'string', enum: [...WINDOWS, 'all'] } },
-      required: ['window'],
-    },
-  },
-  {
-    name: 'read_aloud',
-    description: 'Start reading the Bible aloud, from a verse if one is said.',
-    parameters: {
-      type: 'object',
-      properties: { from_verse: { type: 'integer', description: 'The verse to start from.' } },
-    },
-  },
-  {
-    name: 'stop_reading',
-    description: 'Stop or pause reading aloud.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
-    name: 'switch_translation',
-    description: 'Switch the Bible translation being read.',
-    parameters: {
-      type: 'object',
-      properties: {
-        translation: {
-          type: 'string',
-          enum: TRANSLATIONS,
-          description: 'KJV is the King James, WEB the World English Bible, BSB the Berean Standard Bible, NET the NET Bible, LXX the Septuagint.',
+    key: 'passage',
+    triggers: PASSAGE,
+    tools: [
+      {
+        name: 'open_passage',
+        description: 'Open a book of the Bible at a chapter, and at a verse if one is said.',
+        parameters: {
+          type: 'object',
+          properties: {
+            reference: str('The book and chapter as spoken, e.g. "james 5", "1 corinthians 16", "first timothy 2 verse 4".'),
+          },
+          required: ['reference'],
         },
       },
-      required: ['translation'],
-    },
+    ],
+  },
+  {
+    key: 'commentary',
+    triggers: /\b(commentar(y|ies)|comments?|henry|clarke?|barnes|spurgeon|bullinger|jamieson|fausset|jfb|calvin|lightfoot|wesley|luther|robertson|abbott?|aquinas|catena|treasury|tsk|family bible notes)\b/,
+    tools: [
+      {
+        name: 'open_commentary',
+        description: 'Open a Bible commentary on the current passage.',
+        parameters: {
+          type: 'object',
+          properties: {
+            author: { type: 'string', enum: COMMENTARY_NAMES, description: 'The commentator, when one is named.' },
+            new_window: { type: 'boolean', description: 'True only when a new window is asked for.' },
+          },
+        },
+      },
+    ],
+  },
+  {
+    key: 'word',
+    triggers: /\b(word stud(y|ies)|study the word|greek|hebrew|strong'?s|lexicon|original|mean(s|ing)?|definition|define|[gh] ?\d+)\b/,
+    tools: [
+      {
+        name: 'word_study',
+        description: 'Open a word study for an English word: its Greek or Hebrew behind it and where it is used.',
+        parameters: {
+          type: 'object',
+          properties: { word: str('The English word, e.g. "rivers", "grace".') },
+          required: ['word'],
+        },
+      },
+      {
+        name: 'strongs_lookup',
+        description: "Look up a Strong's number, or a Greek or Hebrew word, in the Strong's dictionary.",
+        parameters: {
+          type: 'object',
+          properties: { query: str('A Strong\'s number like "G26" or "H430", or a word like "agape".') },
+          required: ['query'],
+        },
+      },
+    ],
+  },
+  {
+    key: 'highlight',
+    triggers: new RegExp(String.raw`\b(highlight\w*|colou?r|underline|${COLORS.join('|')})\b`),
+    tools: [
+      {
+        name: 'highlight_verses',
+        description: 'Highlight verses in the open chapter with a color.',
+        parameters: {
+          type: 'object',
+          properties: {
+            verses: str('Verse numbers as spoken, e.g. "16", "16 to 18".'),
+            color: { type: 'string', enum: COLORS },
+          },
+          required: ['verses', 'color'],
+        },
+      },
+    ],
+  },
+  {
+    key: 'search',
+    triggers: /\b(search\w*|find|look for|where does it say|which verses?|verses? (about|that|with))\b/,
+    tools: [
+      {
+        name: 'search_bible',
+        description: 'Search the Bible text for words or a phrase.',
+        parameters: {
+          type: 'object',
+          properties: { query: str('The words to search for.') },
+          required: ['query'],
+        },
+      },
+    ],
+  },
+  {
+    key: 'windows',
+    // "in a new window" belongs to the commentary's new_window, not to these.
+    triggers: new RegExp(String.raw`\b((?<!new )windows?|panels?|panes?|close|shut|hide|${WINDOWS.filter((w) => w !== 'Bible').map((w) => w.toLowerCase().replace(/ /g, String.raw`\s+`)).join('|')})\b`),
+    tools: [
+      {
+        name: 'open_window',
+        description: 'Open a window or panel in the app.',
+        parameters: {
+          type: 'object',
+          properties: { window: { type: 'string', enum: WINDOWS } },
+          required: ['window'],
+        },
+      },
+      {
+        name: 'close_window',
+        description: 'Close a window or panel, or all of them.',
+        parameters: {
+          type: 'object',
+          properties: { window: { type: 'string', enum: [...WINDOWS, 'all'] } },
+          required: ['window'],
+        },
+      },
+    ],
+  },
+  {
+    key: 'reading',
+    triggers: /\b(read\w*|aloud|listen|play|stop|pause|resume|quiet)\b/,
+    tools: [
+      {
+        name: 'read_aloud',
+        description: 'Start reading the Bible aloud, from a verse if one is said.',
+        parameters: {
+          type: 'object',
+          properties: { from_verse: { type: 'integer', description: 'The verse to start from.' } },
+        },
+      },
+      {
+        name: 'stop_reading',
+        description: 'Stop or pause reading aloud.',
+        parameters: { type: 'object', properties: {} },
+      },
+    ],
+  },
+  {
+    key: 'translation',
+    triggers: /\b(translations?|versions?|switch|change|kjv|king james|web|world english|bsb|berean|net|lxx|septuagint|byzantine|majority text|textus receptus|tr)\b/,
+    tools: [
+      {
+        name: 'switch_translation',
+        description: 'Switch the Bible translation being read.',
+        parameters: {
+          type: 'object',
+          properties: {
+            translation: {
+              type: 'string',
+              enum: TRANSLATIONS,
+              description: 'KJV is the King James, WEB the World English Bible, BSB the Berean Standard Bible, NET the NET Bible, LXX the Septuagint.',
+            },
+          },
+          required: ['translation'],
+        },
+      },
+    ],
   },
 ];
 
@@ -240,11 +318,14 @@ export const GROUPS = [
   },
 ];
 
-/** The tools to send for what was said. */
+/** The tools to send for what was said, and the groups whose trigger words picked them. */
 export function toolsFor(text, everything = false) {
+  const all = [...CORE, ...GROUPS];
+  if (everything) return { tools: all.flatMap((g) => g.tools), groups: ['everything'] };
   const t = text.toLowerCase();
-  const groups = GROUPS.filter((g) => everything || g.triggers.test(t));
-  return { tools: [...CORE, ...groups.flatMap((g) => g.tools)], groups: groups.map((g) => g.key) };
+  const hit = all.filter((g) => g.triggers.test(t));
+  if (hit.length) return { tools: hit.flatMap((g) => g.tools), groups: hit.map((g) => g.key) };
+  return { tools: CORE.flatMap((g) => g.tools), groups: [] };
 }
 
 /** The commentaries the app ships, for the "not installed" reply. */
@@ -272,18 +353,6 @@ export function findCommentary(spoken) {
   if (s === 'tsk') return 'Treasury of Scripture Knowledge';
   return null;
 }
-
-const BOOKS = [
-  'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
-  '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra',
-  'Nehemiah', 'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon',
-  'Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos',
-  'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah',
-  'Malachi', 'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians',
-  '2 Corinthians', 'Galatians', 'Ephesians', 'Philippians', 'Colossians',
-  '1 Thessalonians', '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon',
-  'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude', 'Revelation',
-];
 
 /** Names Whistle is told to favor: one per line, as people say them. */
 export const APP_KEYWORDS = [

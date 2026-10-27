@@ -223,7 +223,7 @@ function choose(text, system, everything, maxNewTokens) {
     useTools(system, toolsJson);
     answer = eng.complete(text, maxNewTokens);
   }
-  return { answer, needleMs: performance.now() - t, ...tools, toolCount: picked.tools.length, groups: picked.groups };
+  return { answer, needleMs: performance.now() - t, ...tools, toolCount: picked.tools.length, toolNames: picked.tools.map((x) => x.name), groups: picked.groups };
 }
 
 /**
