@@ -106,6 +106,7 @@
     Pause,
     Stop,
     ArrowFatLinesRight,
+    DotsSix,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
@@ -1443,6 +1444,15 @@
   const GROUP_SELECTOR =
     ".nav-pill, .nav-interlinear, .nav-tts, .nav-repeat-pills";
 
+  // Tabs hang below their group, so they are not groups themselves — one would
+  // drag the whole bar's depth down with it. Each gets a bulge of its own in
+  // the edge instead, just under it: the Read Aloud player's grab tab. The
+  // membrane draws with overflow visible, so a bulge past its height still shows.
+  const TAB_SELECTOR = ".tts-nav-tab";
+  /** Room the bulge leaves around a tab, at bar size 1. */
+  const TAB_PAD_X = 3;
+  const TAB_PAD_Y = 3;
+
   let navContentEl: HTMLElement;
 
   // ── The overflow fade ──────────────────────────────────────────────────────
@@ -1609,10 +1619,13 @@
     return baseline + (m.actualBoundingBoxDescent ?? 0);
   }
 
+  /** A tab's bulge: its sides in the bar's own space, and how deep it goes. */
+  type Bump = { a: number; b: number; depth: number };
+
   /** Live group rects in the bar's own space, merged only on real overlap. */
-  function measureGroups(): { spans: number[][]; hFull: number } {
+  function measureGroups(): { spans: number[][]; hFull: number; bumps: Bump[] } {
     if (!navContentEl || !navElement)
-      return { spans: [], hFull: CONTOUR.height };
+      return { spans: [], hFull: CONTOUR.height, bumps: [] };
 
     const barRect = navElement.getBoundingClientRect();
     const spans: number[][] = [];
@@ -1626,7 +1639,19 @@
       spans.push([r.left - barRect.left, r.right - barRect.left]);
       deepest = Math.max(deepest, r.bottom - barRect.top);
     }
-    if (!spans.length) return { spans: [], hFull: CONTOUR.height };
+    if (!spans.length) return { spans: [], hFull: CONTOUR.height, bumps: [] };
+
+    const s = $barScale;
+    const bumps: Bump[] = [];
+    for (const el of navContentEl.querySelectorAll<HTMLElement>(TAB_SELECTOR)) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0) continue;
+      bumps.push({
+        a: r.left - barRect.left - TAB_PAD_X * s,
+        b: r.right - barRect.left + TAB_PAD_X * s,
+        depth: r.bottom - barRect.top + TAB_PAD_Y * s,
+      });
+    }
 
     // Padding is applied later, so a tight gap survives as a crevice here
     // rather than being swallowed by this merge.
@@ -1641,6 +1666,27 @@
     return {
       spans: merged,
       hFull: Math.min(CONTOUR.height, deepest + CONTOUR.padY),
+      bumps,
+    };
+  }
+
+  /**
+   * The edge with each tab's bulge pressed into it: flat under the tab, easing
+   * back up to the edge over a sharp shoulder either side. Taken as the deeper
+   * of the two, so a bulge can only ever push the edge down.
+   */
+  function withBumps(sample: (x: number) => number, bumps: Bump[]): (x: number) => number {
+    if (!bumps.length) return sample;
+    const sw = CONTOUR.shoulderSharp;
+    return (x: number): number => {
+      let y = sample(x);
+      for (const t of bumps) {
+        const d = x < t.a ? t.a - x : x > t.b ? x - t.b : 0;
+        if (d >= sw) continue;
+        const yb = y + (t.depth - y) * smoothstep(1 - d / sw);
+        if (yb > y) y = yb;
+      }
+      return y;
     };
   }
 
@@ -1931,12 +1977,12 @@
     const W = navElement.clientWidth;
     if (!W) return null;
 
-    const { spans, hFull } = measureGroups();
+    const { spans, hFull, bumps } = measureGroups();
     if (!spans.length) return null;
 
     const n = CONTOUR.samples;
     const r = Math.min(CONTOUR.corner, W / 2);
-    const sample = makeSampler(spans, W, hFull);
+    const sample = withBumps(makeSampler(spans, W, hFull), bumps);
 
     membraneW = W;
     sampleXs = new Array(n);
@@ -2756,6 +2802,19 @@
           <option value="60">60 min</option>
           <option value="chapter">End of chapter</option>
         </select>
+
+        <!-- The grab tab: hangs below the player into the bar's edge, which
+             bulges to carry it (see TAB_SELECTOR). Kept out of the top 40px's
+             edge swipe, the strip's sideways drag (touch-action too, for a
+             finger) and the long-press that pins the bar (role=button). -->
+        <span
+          class="tts-nav-tab no-edge-gesture no-press"
+          role="button"
+          tabindex="0"
+          data-no-drag-scroll
+          title="Drag to move the player anywhere"
+          aria-label="Move the player out of the bar"
+        ><DotsSix size={12} weight="bold" /></span>
       </div>
       <div class="nav-spacer"></div>
     {/if}
@@ -3357,6 +3416,7 @@
   /* Its own group between the two pills, same shape as the repeat pills. The
      nav strip scrolls sideways, so this never crushes the pills either side. */
   .nav-tts {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -3367,6 +3427,52 @@
     border-radius: 8px;
     padding: 3px 6px;
     height: 38px;
+  }
+
+  /* Hangs from the player's bottom edge, overlapping its border by a pixel so
+     the two read as one piece. It has to end inside the strip's 58px box: the
+     strip scrolls, so anything lower would be cut off. */
+  .tts-nav-tab {
+    position: absolute;
+    top: calc(100% - 1px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 11px;
+    box-sizing: border-box;
+    background: #1c1c1c;
+    border: 1px solid rgba(157, 122, 245, 0.45);
+    border-top: none;
+    border-radius: 0 0 7px 7px;
+    color: rgba(183, 157, 247, 0.7);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* A bigger target than it looks, for a finger: wider, and down to the
+     bottom of the strip. Never up, where the player's own buttons are. */
+  .tts-nav-tab::after {
+    content: "";
+    position: absolute;
+    left: -10px;
+    right: -10px;
+    top: 0;
+    bottom: -4px;
+  }
+
+  .tts-nav-tab:hover,
+  .tts-nav-tab:focus-visible {
+    color: #b79df7;
+  }
+
+  .tts-nav-tab:focus-visible {
+    outline: 1px solid #9d7af5;
+    outline-offset: 1px;
   }
 
   .tts-nav-btn {
