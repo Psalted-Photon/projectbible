@@ -9,10 +9,10 @@
    * Dark by design and carries `themed`, so light and sepia flip it the same
    * way they flip the reader, and Custom paints it with the reader's colors.
    */
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { DotsSixVertical, SkipBack, SkipForward, Play, Pause, Stop, X } from 'phosphor-svelte';
   import { portal } from '../lib/portal';
-  import { fixedOrigin } from '../lib/fixedOrigin';
+  import { floatDrag } from '../lib/floatDrag';
   import { getTtsPlayerPos, setTtsPlayerPos } from '../adapters/settings';
   import {
     readingState,
@@ -26,9 +26,6 @@
   } from '../lib/tts/readingEngine';
   import BrandSpinner from './BrandSpinner.svelte';
 
-  /** Gap kept from the screen's edges, for the default spot and the clamp. */
-  const MARGIN = 8;
-
   $: isText = $readingSource.kind === 'text';
   $: title = $readingSource.kind === 'text' ? $readingSource.title : '';
   $: failed = $readingState === 'error';
@@ -41,115 +38,13 @@
       : 0;
 
   let el: HTMLDivElement | null = null;
-  let left = 0;
-  let top = 0;
-  let placed = false;
-  /** Hidden until placed, so it never flashes in the top-left corner. */
-  let ready = false;
+  /** Placing, clamping and dragging live in lib/floatDrag.ts. */
+  const drag = floatDrag({ load: getTtsPlayerPos, save: setTtsPlayerPos });
 
-  let dragging = false;
-  let startX = 0;
-  let startY = 0;
-  let startLeft = 0;
-  let startTop = 0;
-  let gestureBounds: { width: number; height: number } | null = null;
-  let observer: ResizeObserver | null = null;
+  $: if (visible && el) void drag.place(el);
+  $: if (!visible) drag.teardown();
 
-  $: if (visible && el && !placed) void place();
-  $: if (!visible) teardown();
-
-  /** First showing: the remembered spot, or bottom-right. */
-  async function place() {
-    placed = true;
-    await tick();
-    if (!el) return;
-    const saved = getTtsPlayerPos();
-    const { width, height } = bounds();
-    if (saved) {
-      left = saved.x;
-      top = saved.y;
-    } else {
-      left = width - el.offsetWidth - MARGIN;
-      top = height - el.offsetHeight - MARGIN;
-    }
-    clampIntoView();
-    ready = true;
-    // The title changes length as the reading moves on, and unfolding the
-    // phone changes the screen — either can push it off an edge.
-    window.addEventListener('resize', clampIntoView);
-    observer = new ResizeObserver(() => clampIntoView());
-    observer.observe(el);
-  }
-
-  function teardown() {
-    placed = false;
-    ready = false;
-    window.removeEventListener('resize', clampIntoView);
-    observer?.disconnect();
-    observer = null;
-  }
-
-  /** The box it is placed in. See lib/fixedOrigin.ts. */
-  function bounds(): { width: number; height: number } {
-    if (gestureBounds) return gestureBounds;
-    const origin = fixedOrigin(el);
-    return { width: origin.width, height: origin.height };
-  }
-
-  /** Wholly on screen — it is small enough that a sliver would be useless. */
-  function clampIntoView() {
-    if (!el) return;
-    const { width, height } = bounds();
-    left = Math.min(Math.max(left, MARGIN), Math.max(MARGIN, width - el.offsetWidth - MARGIN));
-    top = Math.min(Math.max(top, MARGIN), Math.max(MARGIN, height - el.offsetHeight - MARGIN));
-  }
-
-  function startDrag(e: PointerEvent) {
-    // Buttons are buttons; everything else is the handle.
-    if ((e.target as HTMLElement).closest('button')) return;
-    e.preventDefault();
-    const origin = fixedOrigin(el);
-    gestureBounds = { width: origin.width, height: origin.height };
-    startX = e.clientX;
-    startY = e.clientY;
-    startLeft = left;
-    startTop = top;
-    dragging = true;
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      /* capture is a nicety — the window listeners below still work */
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', endDrag);
-    window.addEventListener('pointercancel', endDrag);
-  }
-
-  function onMove(e: PointerEvent) {
-    if (!dragging) return;
-    left = startLeft + (e.clientX - startX);
-    top = startTop + (e.clientY - startY);
-    clampIntoView();
-  }
-
-  function endDrag() {
-    if (!dragging) return;
-    dragging = false;
-    gestureBounds = null;
-    removeDragListeners();
-    setTtsPlayerPos({ x: Math.round(left), y: Math.round(top) });
-  }
-
-  function removeDragListeners() {
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', endDrag);
-    window.removeEventListener('pointercancel', endDrag);
-  }
-
-  onDestroy(() => {
-    teardown();
-    removeDragListeners();
-  });
+  onDestroy(() => drag.teardown());
 </script>
 
 {#if visible}
@@ -157,12 +52,12 @@
     bind:this={el}
     use:portal
     class="ftp themed"
-    class:dragging
+    class:dragging={$drag.dragging}
     class:failed
-    style="left: {left}px; top: {top}px; visibility: {ready ? 'visible' : 'hidden'};"
+    style="left: {$drag.left}px; top: {$drag.top}px; visibility: {$drag.ready ? 'visible' : 'hidden'};"
     role="region"
     aria-label="Read Aloud"
-    on:pointerdown={startDrag}
+    on:pointerdown={drag.start}
   >
     <span class="grip" aria-hidden="true"><DotsSixVertical size="1em" weight="bold" /></span>
 
