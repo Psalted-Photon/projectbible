@@ -22,8 +22,9 @@
     ArrowFatLinesRight,
   } from 'phosphor-svelte';
   import { portal } from '../lib/portal';
-  import { floatDrag } from '../lib/floatDrag';
-  import { morphFrom } from '../lib/motion';
+  import { floatDrag, type FloatPos } from '../lib/floatDrag';
+  import { fixedOrigin } from '../lib/fixedOrigin';
+  import { morphFrom, morphInto } from '../lib/motion';
   import { getBibleTtsPlayerPos, setBibleTtsPlayerPos } from '../adapters/settings';
   import { continuousPlay } from '../stores/audioStore';
   import {
@@ -46,7 +47,15 @@
     cancelSleepTimer,
     remainingMinutes,
   } from '../lib/tts/sleepTimer';
-  import { bibleFloating, takeTearOut } from '../lib/tts/playerDock';
+  import {
+    bibleFloating,
+    setBibleFloating,
+    takeTearOut,
+    dockDrag,
+    homeBar,
+    setDockNear,
+    dockSlotRect,
+  } from '../lib/tts/playerDock';
   import BrandSpinner from './BrandSpinner.svelte';
 
   $: visible = $isBibleReadingActive && $bibleFloating;
@@ -88,10 +97,72 @@
   let el: HTMLDivElement | null = null;
   let gripEl: HTMLElement | null = null;
   /** Placing, clamping and dragging live in lib/floatDrag.ts. */
-  const drag = floatDrag({ load: getBibleTtsPlayerPos, save: setBibleTtsPlayerPos });
+  const drag = floatDrag({
+    load: getBibleTtsPlayerPos,
+    save: setBibleTtsPlayerPos,
+    adjust: leanTowardSlot,
+    drop: dockIfNear,
+  });
 
   $: if (visible && el) void show(el);
   $: if (!visible) drag.teardown();
+
+  // ── Docking back ───────────────────────────────────────────────────────────
+  // Carrying the pill offers its slot back: the bar it came from comes down
+  // and shows a glowing gap where the player sat (NavigationBar). Within
+  // NEAR_PX of it the glow brightens and the pill leans in; let go there and
+  // it goes back into the bar. Let go anywhere else and it just stays put.
+  const NEAR_PX = 16;
+  /** How far toward the slot it leans: a share of the way, up to a cap. */
+  const LEAN = 0.3;
+  const LEAN_MAX = 28;
+
+  /** Going into the slot; the slot has to stay until it is in. */
+  let docking = false;
+
+  $: carrying = $drag.dragging && $drag.moved;
+  $: if (carrying && !$dockDrag) {
+    dockDrag.set({ mode: 'dock', bar: homeBar(), near: false });
+  } else if (!carrying && !docking && $dockDrag?.mode === 'dock') {
+    dockDrag.set(null);
+  }
+
+  function leanTowardSlot(pos: FloatPos): FloatPos {
+    const slot = dockSlotRect();
+    if (!slot || !el) {
+      setDockNear(false);
+      return pos;
+    }
+    const origin = fixedOrigin(el);
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = origin.left + pos.x;
+    const top = origin.top + pos.y;
+    const near =
+      left < slot.right + NEAR_PX &&
+      left + w > slot.left - NEAR_PX &&
+      top < slot.bottom + NEAR_PX &&
+      top + h > slot.top - NEAR_PX;
+    setDockNear(near);
+    if (!near) return pos;
+    const dx = slot.left + slot.width / 2 - (left + w / 2);
+    const dy = slot.top + slot.height / 2 - (top + h / 2);
+    const k = Math.min(LEAN, LEAN_MAX / Math.max(1, Math.hypot(dx, dy)));
+    return { x: pos.x + dx * k, y: pos.y + dy * k };
+  }
+
+  /** Let go in range: into the slot, and the bar's player takes over. */
+  function dockIfNear(): boolean {
+    const slot = $dockDrag?.near ? dockSlotRect() : null;
+    if (!slot || !el) return false;
+    docking = true;
+    void morphInto(el, slot, '8px').then(() => {
+      setBibleFloating(false);
+      dockDrag.set(null);
+      docking = false;
+    });
+    return true;
+  }
 
   async function show(target: HTMLDivElement): Promise<void> {
     await drag.place(target);
@@ -124,6 +195,7 @@
     use:portal
     class="fbp themed no-edge-gesture"
     class:dragging={$drag.dragging}
+    class:docking
     style="left: {$drag.left}px; top: {$drag.top}px; visibility: {$drag.ready ? 'visible' : 'hidden'};"
     role="region"
     aria-label="Read Aloud"
@@ -241,6 +313,11 @@
 
   .fbp.dragging {
     cursor: grabbing;
+  }
+
+  /* On its way into the bar: nothing on it can be pressed any more. */
+  .fbp.docking {
+    pointer-events: none;
   }
 
   .row {

@@ -52,6 +52,21 @@ export interface DockDrag {
 
 export const dockDrag = writable<DockDrag | null>(null);
 
+/** Whether the pill is in range of its slot, written only when it changes. */
+export function setDockNear(near: boolean): void {
+  const d = get(dockDrag);
+  if (d && d.near !== near) dockDrag.set({ ...d, near });
+}
+
+/**
+ * The empty slot's box on screen, while a bar is showing one. Only the home
+ * bar ever draws it, and it marks it `data-dock-slot`.
+ */
+export function dockSlotRect(): DOMRect | null {
+  const slot = document.querySelector<HTMLElement>('[data-dock-slot]');
+  return slot ? slot.getBoundingClientRect() : null;
+}
+
 /** The bar the player was last pulled out of. Its slot is offered first. */
 let originBar = MAIN_BAR;
 

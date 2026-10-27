@@ -44,6 +44,10 @@ export interface FloatDragOptions {
   load: () => FloatPos | null;
   /** Remember the spot it was let go in. */
   save: (pos: FloatPos) => void;
+  /** Where a drag would put it, nudged: the Bible pill leaning toward its slot. */
+  adjust?: (pos: FloatPos) => FloatPos;
+  /** Let go: true when that was taken care of (docked), so the spot is not saved. */
+  drop?: () => boolean;
 }
 
 export interface FloatDragState {
@@ -120,7 +124,7 @@ export function floatDrag(options: FloatDragOptions): FloatDrag {
 
   function teardown() {
     // Hidden mid-drag (the reading ran out): keep the spot it had reached.
-    endDrag();
+    finish(false);
     placed = false;
     ready = false;
     el = null;
@@ -193,16 +197,27 @@ export function floatDrag(options: FloatDragOptions): FloatDrag {
     if (!moved && dx * dx + dy * dy > SLOP * SLOP) moved = true;
     left = startLeft + dx;
     top = startTop + dy;
+    if (options.adjust) {
+      const nudged = options.adjust({ x: left, y: top });
+      left = nudged.x;
+      top = nudged.y;
+    }
     clampIntoView();
   }
 
   function endDrag() {
+    finish(true);
+  }
+
+  /** `letGo`: a real release, which `drop` may take. Not when it is just being hidden. */
+  function finish(letGo: boolean) {
     if (!dragging) return;
     dragging = false;
     moved = false;
     gestureBounds = null;
     removeDragListeners();
-    options.save({ x: Math.round(left), y: Math.round(top) });
+    const taken = letGo && (options.drop?.() ?? false);
+    if (!taken) options.save({ x: Math.round(left), y: Math.round(top) });
     publish();
   }
 

@@ -76,7 +76,7 @@
     cancelSleepTimer,
     remainingMinutes,
   } from "../lib/tts/sleepTimer";
-  import { bibleFloating, dockDrag, tearOut, playerBarKey } from "../lib/tts/playerDock";
+  import { bibleFloating, dockDrag, tearOut, playerBarKey, registerPlayerBar } from "../lib/tts/playerDock";
   import { COMMENTARY_AUTHORS } from "../lib/annotationConfig";
   import {
     Anchor,
@@ -2462,7 +2462,37 @@
     window.removeEventListener("pointercancel", endTear);
   }
 
+  // ── Docking it back ────────────────────────────────────────────────────────
+  // While the pill is carried, the bar it goes back to shows the player's place
+  // as a glowing empty slot: the player itself, drawn invisible and inert, so
+  // it is exactly the right size and the membrane already has the shape it
+  // will keep once the player is back in. Only bars that carry the player can
+  // be offered it.
+  let unregisterPlayerBar: (() => void) | null = null;
+  $: if (!isMinimal && !unregisterPlayerBar) {
+    unregisterPlayerBar = registerPlayerBar(barKey);
+  } else if (isMinimal && unregisterPlayerBar) {
+    unregisterPlayerBar();
+    unregisterPlayerBar = null;
+  }
+
+  $: slotHere = $bibleFloating && $dockDrag?.mode === "dock" && $dockDrag.bar === barKey;
+  $: slotNear = slotHere && !!$dockDrag?.near;
+
+  // Scroll the strip so the slot is in view the moment it appears.
+  let wasSlotHere = false;
+  $: if (slotHere !== wasSlotHere) {
+    wasSlotHere = slotHere;
+    if (slotHere) void centerTtsControls();
+  }
+
+  /** The slot fades as the pill is let go elsewhere; the player itself just goes, as it always has. */
+  function slotOut(node: Element) {
+    return node.classList.contains("nav-tts-slot") ? fadeAway(node) : { duration: 0 };
+  }
+
   onDestroy(() => {
+    unregisterPlayerBar?.();
     if (tearPointer === null) return;
     stopTear();
     dockDrag.set(null);
@@ -2809,9 +2839,19 @@
       </div>
       <div class="nav-spacer"></div>
     {/if}
-    <!-- ── Read Aloud controls (only while reading, and not pulled out) ───── -->
-    {#if $isBibleReadingActive && !$bibleFloating}
-      <div class="nav-tts" bind:this={ttsControlsEl}>
+    <!-- ── Read Aloud controls (only while reading, and not pulled out) ─────
+         Or their empty slot, while the pulled-out pill is carried back. -->
+    {#if $isBibleReadingActive && (!$bibleFloating || slotHere)}
+      <div
+        class="nav-tts"
+        class:nav-tts-slot={$bibleFloating}
+        class:near={slotNear}
+        data-dock-slot={$bibleFloating ? "" : undefined}
+        inert={$bibleFloating}
+        aria-hidden={$bibleFloating ? "true" : undefined}
+        bind:this={ttsControlsEl}
+        out:slotOut
+      >
         {#if $isPreparing}
           <!-- Generating audio, not playing. Without this the button would show
                pause while the app was busy, which reads as broken. -->
@@ -3557,6 +3597,44 @@
   .tts-nav-tab:focus-visible {
     outline: 1px solid #9d7af5;
     outline-offset: 1px;
+  }
+
+  /* The empty slot the pill docks back into: the player's own box with nothing
+     showing in it, breathing a soft glow in the player's color. The tab keeps
+     its place too, so the bar's edge is already the shape it will be. */
+  .nav-tts.nav-tts-slot {
+    background: rgba(157, 122, 245, 0.05);
+    border-style: dashed;
+    border-color: rgba(157, 122, 245, 0.55);
+    animation: slot-breathe 2.4s ease-in-out infinite;
+  }
+
+  .nav-tts-slot > * {
+    visibility: hidden;
+  }
+
+  /* In range: let go now and it goes in. */
+  .nav-tts.nav-tts-slot.near {
+    background: rgba(157, 122, 245, 0.16);
+    border-color: #b79df7;
+    box-shadow: 0 0 14px 3px rgba(157, 122, 245, 0.6);
+    animation: none;
+  }
+
+  @keyframes slot-breathe {
+    0%,
+    100% {
+      box-shadow: 0 0 3px 0 rgba(157, 122, 245, 0.2);
+    }
+    50% {
+      box-shadow: 0 0 12px 2px rgba(157, 122, 245, 0.5);
+    }
+  }
+
+  /* Motion off: a steady glow. */
+  :global(:root[data-motion="off"]) .nav-tts.nav-tts-slot:not(.near) {
+    animation: none;
+    box-shadow: 0 0 8px 1px rgba(157, 122, 245, 0.35);
   }
 
   .tts-nav-btn {
