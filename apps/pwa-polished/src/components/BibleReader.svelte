@@ -219,6 +219,7 @@
   import { ttsCurrentVerse } from "../stores/audioStore";
   import { getSharedTtsAudio } from "../adapters/tts";
   import { readingPosition, isBibleReadingActive, currentVerseWindow } from "../lib/tts/readingEngine";
+  import { dockDrag, bibleFloating, playerBarKey } from "../lib/tts/playerDock";
   import { startGlow } from "../lib/ttsGlow";
   import {
     showVerseHighlight,
@@ -2040,11 +2041,26 @@
   }
 
   // Starting to read reveals the navbar, because that is where the controls now
-  // live — otherwise they would appear somewhere the user cannot see.
+  // live — otherwise they would appear somewhere the user cannot see. Not when
+  // they have been pulled out into their own pill: then the bar has nothing new.
   let wasReadingActive = false;
   $: if ($isBibleReadingActive !== wasReadingActive) {
     wasReadingActive = $isBibleReadingActive;
-    if ($isBibleReadingActive) navBarOffset = 0;
+    if ($isBibleReadingActive && !$bibleFloating) navBarOffset = 0;
+  }
+
+  // The Read Aloud player being pulled out of this bar, or carried back to it
+  // (lib/tts/playerDock.ts). The bar comes down and stays down for the whole
+  // drag, so neither the tab nor the empty slot can slide away under the
+  // finger; then it goes back to where it was, hidden again if it was hidden.
+  let barHeldFrom: number | null = null;
+  $: barHeld = $dockDrag?.bar === playerBarKey(windowId);
+  $: if (barHeld && barHeldFrom === null) {
+    barHeldFrom = navBarOffset;
+    navBarOffset = 0;
+  } else if (!barHeld && barHeldFrom !== null) {
+    navBarOffset = navBarPinned ? 0 : barHeldFrom;
+    barHeldFrom = null;
   }
 
   // Listen for settings updates
@@ -3715,8 +3731,8 @@
       const scrollDelta = scrollTop - lastScrollTop;
 
       // Update navbar offset based on scroll - it moves with the content
-      if (navBarPinned) {
-        // Pinned down: scrolling never moves it.
+      if (navBarPinned || barHeldFrom !== null) {
+        // Pinned down, or held for the Read Aloud player: scrolling never moves it.
         navBarOffset = 0;
       } else if (performance.now() < navBarStillUntil) {
         // One of our own nudges is moving the page, not the reader.

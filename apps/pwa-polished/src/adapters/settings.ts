@@ -253,6 +253,12 @@ export interface UserSettings {
   // top-left of the screen. Per-device: a spot on a phone means nothing on a
   // desktop. Unset puts it bottom-right.
   ttsPlayerPos?: { x: number; y: number };
+  // The Bible's Read Aloud player was pulled out of the navbar into a pill of
+  // its own, so the next reading shows it floating too. See lib/tts/playerDock.ts.
+  bibleTtsFloating?: boolean; // default false = in the navbar
+  // Where that pill was left. Kept apart from ttsPlayerPos so the two players
+  // each remember their own spot. Per-device, unset puts it bottom-right.
+  bibleTtsPlayerPos?: { x: number; y: number };
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected
@@ -449,6 +455,26 @@ export function getTtsPlayerPos(): { x: number; y: number } | null {
 /** Remember where the floating Read Aloud player was dragged to. */
 export function setTtsPlayerPos(pos: { x: number; y: number }): void {
   updateSettings({ ttsPlayerPos: pos });
+}
+
+/** Was the Bible player last left floating rather than in the navbar? */
+export function getBibleTtsFloating(): boolean {
+  return getSettings().bibleTtsFloating ?? false;
+}
+
+/** Remember whether the Bible player floats. */
+export function setBibleTtsFloating(floating: boolean): void {
+  updateSettings({ bibleTtsFloating: floating });
+}
+
+/** Where the floating Bible player sits, or null for its default spot. */
+export function getBibleTtsPlayerPos(): { x: number; y: number } | null {
+  return getSettings().bibleTtsPlayerPos ?? null;
+}
+
+/** Remember where the floating Bible player was dragged to. */
+export function setBibleTtsPlayerPos(pos: { x: number; y: number }): void {
+  updateSettings({ bibleTtsPlayerPos: pos });
 }
 
 /** Is the shoulder clock showing? Defaults to on. */
