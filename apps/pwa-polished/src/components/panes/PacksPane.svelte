@@ -42,6 +42,7 @@
   import { askConfirm } from "../../stores/confirmStore";
   import CloseX from "../CloseX.svelte";
   import InstallBar from "../InstallBar.svelte";
+  import VoiceControlDownloads from "../VoiceControlDownloads.svelte";
   import PackIcon from "../icons/PackIcon.svelte";
   import {
     BookOpen,
@@ -851,6 +852,10 @@
       style="display:none"
     />
   {/if}
+
+  <!-- Settings lists only what's still to download; here they can be deleted. -->
+  <h3 class="sub-head"><Microphone size={14} weight="bold" class="ph-inline" /> Voice Control</h3>
+  <VoiceControlDownloads />
 
   <p class="footnote">
     <Warning size={13} weight="bold" class="ph-inline" /> Only install packs from sources you trust. Removing

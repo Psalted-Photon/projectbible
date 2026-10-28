@@ -797,7 +797,7 @@ Steer the app by talking, and turn what you say into notes. It all runs **on you
 
 ### 27.3 Downloads
 
-- **Voice Control**, about 53 MB, once: Whistle hears and Needle chooses. From Settings → Voice Control, the mic button's own card, or Install everything. Settings lists only what's still to download, so once both are in, nothing shows there.
+- **Voice Control**, about 53 MB, once: Whistle hears and Needle chooses. From Settings → Voice Control, the mic button's own card, or Install everything. Settings lists only what's still to download, so once both are in, nothing shows there; to delete them, Dev Options → Manage Packs → Voice Control.
 - **The Transcribe add-on**, about 10 MB: punctuation and a voice detector. Offered the first time you tap Transcribe.
 - New versions show in Storage & updates like any pack.
 

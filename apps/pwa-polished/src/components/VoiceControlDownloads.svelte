@@ -6,6 +6,7 @@
    *
    * Settings passes `hideInstalled`: there a download that's in, and up to
    * date, is no row at all, so an empty list means everything is downloaded.
+   * Manage Packs lists both in full, with the Delete.
    *
    * Looks like GetPacksCard, but these are model files kept by
    * lib/voice/voicePack.ts, not catalog packs, so nothing needs a restart.
