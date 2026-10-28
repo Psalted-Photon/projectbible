@@ -138,6 +138,8 @@ export type CrumbKind =
   /** A reference tapped in a devotional reading; the crumb reopens the reading where you were. */
   | 'devotional'
   | 'link'
+  /** A place a voice command went to; there is no panel to bring back. */
+  | 'voice'
   /**
    * A spot you left by the trail rather than by a link, where nothing recorded
    * a panel to bring back. Drawn without an icon.

@@ -149,8 +149,9 @@ export class IndexedDBCommentaryStore {
         const store = transaction.objectStore('commentary_entries');
         const index = store.index('author');
         
+        // Each author once, by its key alone, rather than walking every entry.
         const authors = new Set<string>();
-        const request = index.openCursor();
+        const request = index.openKeyCursor(null, 'nextunique');
         
         request.onsuccess = () => {
           const cursor = request.result;

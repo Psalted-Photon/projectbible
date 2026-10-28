@@ -147,6 +147,7 @@
   import type { RepeatGroup } from "../stores/repeatsStore";
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightAllRequest } from "../stores/repeatBulkStore";
+  import { voiceHighlightRequest, type VoiceHighlightRequest } from "../stores/voiceHighlightStore";
   import { applyRepeatsToSection, clearRepeatsInSection, findRepeatOccurrences } from "../lib/repeatRenderer";
   import {
     countCrossRepeatsInBook,
@@ -5873,6 +5874,61 @@
     openBulkHighlightModal(req);
   }
 
+  // A highlight asked for by voice (lib/voice/actions.ts). Only the main reader
+  // answers: Voice Control always works on it.
+  $: if (!windowId && $voiceHighlightRequest) {
+    const req = $voiceHighlightRequest;
+    voiceHighlightRequest.set(null);
+    void highlightByVoice(req);
+  }
+
+  /**
+   * With a color said, the verses are saved straight away, the same as the
+   * highlighter's Save. With none, the highlighter opens on them, the same as
+   * tapping their verse numbers and choosing Highlight.
+   */
+  async function highlightByVoice(req: VoiceHighlightRequest) {
+    if (needsAccount('Highlights')) return;
+    const ref = { book: req.book, chapter: req.chapter, verse: req.verses[0] };
+    if (req.style) {
+      await saveVerseHighlights(ref, req.verses, req.style);
+      await loadAndApplyHighlights(req.book, req.chapter);
+      return;
+    }
+    const stored = await userDataStore.getChapterHighlights(req.book, req.chapter);
+    pendingWordSpans = [];
+    pendingHighlightVerses = req.verses;
+    highlightModalRef = ref;
+    highlightModalExisting = stored.find(h => req.verses.includes(h.reference.verse)) ?? null;
+    highlightSelectionType = 'verse';
+    bulkRepeatRequest = null;
+    highlightModalRepeatGroup = null;
+    highlightModalOpen = true;
+  }
+
+  /** One record per verse, replacing whatever each had. */
+  async function saveVerseHighlights(
+    ref: { book: string; chapter: number; verse: number },
+    verses: number[],
+    style: HighlightStyle,
+  ) {
+    // From storage, not the cache: that can hold another chapter, with the same verse numbers.
+    const stored = await userDataStore.getChapterHighlights(ref.book, ref.chapter);
+    for (const verse of verses) {
+      const prev = stored.find(h => h.reference.verse === verse);
+      if (prev) {
+        await userDataStore.deleteHighlight(prev.id);
+        await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: prev.id });
+      }
+      const saved = await userDataStore.saveHighlight({ reference: { ...ref, verse }, style });
+      await syncQueue.enqueue({ type: 'INSERT', table: 'user_highlights', id: saved.id, data: {
+        id: saved.id, book: saved.reference.book, chapter: saved.reference.chapter,
+        verse: saved.reference.verse, color: saved.style.color,
+        style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
+      }});
+    }
+  }
+
   function openBulkHighlightModal(req: RepeatHighlightAllRequest) {
     if (needsAccount('Highlights')) return;
     bulkRepeatRequest = req;
@@ -7103,21 +7159,7 @@
         const verses = pendingHighlightVerses.length > 0
           ? pendingHighlightVerses
           : [highlightModalRef.verse];
-        // From storage, for the same reason as the word branch above.
-        const stored = await userDataStore.getChapterHighlights(highlightModalRef.book, highlightModalRef.chapter);
-        for (const verse of verses) {
-          const prev = stored.find(h => h.reference.verse === verse);
-          if (prev) {
-            await userDataStore.deleteHighlight(prev.id);
-            await syncQueue.enqueue({ type: 'DELETE', table: 'user_highlights', id: prev.id });
-          }
-          const saved = await userDataStore.saveHighlight({ reference: { ...highlightModalRef, verse }, style });
-          await syncQueue.enqueue({ type: 'INSERT', table: 'user_highlights', id: saved.id, data: {
-            id: saved.id, book: saved.reference.book, chapter: saved.reference.chapter,
-            verse: saved.reference.verse, color: saved.style.color,
-            style: JSON.stringify(saved.style), created_at: saved.createdAt.toISOString(),
-          }});
-        }
+        await saveVerseHighlights(highlightModalRef, verses, style);
       }
       // Re-apply all highlights for the chapter, both kinds read together so
       // neither is left over from another chapter.

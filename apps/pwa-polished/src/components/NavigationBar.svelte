@@ -67,7 +67,7 @@
   import { checkupDot } from "../lib/packCheckup";
   import WindowTypeMenu from "./WindowTypeMenu.svelte";
   import HarmonyPicker from "./HarmonyPicker.svelte";
-  import { openWindowOfType, openHarmonyView, openFamilyTree, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
+  import { openWindowOfType, openHarmonyView, openFamilyTree, harmonyPickerRequest, type WindowChoice, type HarmonyChoice } from "../lib/windowTypes";
   import {
     sleepRemaining,
     stopAtChapterEnd,
@@ -108,6 +108,7 @@
     Stop,
     ArrowFatLinesRight,
     DotsSix,
+    Microphone,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
@@ -224,6 +225,18 @@
   function openHarmonyFromApps(e: CustomEvent<HarmonyChoice>) {
     showHarmonyPicker = false;
     openHarmonyView(e.detail);
+  }
+
+  // "Open the Harmonies" by voice asks for the same picker the apps button
+  // opens. Only the main reader's bar answers, and only a request made while it
+  // was here, the same way as the search trigger below.
+  let seenHarmonyRequest = get(harmonyPickerRequest);
+  $: answerHarmonyRequest($harmonyPickerRequest);
+
+  function answerHarmonyRequest(count: number) {
+    if (count === seenHarmonyRequest) return;
+    seenHarmonyRequest = count;
+    if (!windowId) showHarmonyPicker = true;
   }
   let searchExpanded = false;
   let searchResultsEl: HTMLDivElement | null = null;
@@ -998,6 +1011,7 @@
     // A book with a ribbon. The praying hands are kept for the prayer section.
     devotional: BookBookmark,
     link: Graph,
+    voice: Microphone,
     // Left by the trail, not a link: there is no "how you left" to show.
     plain: null,
   };

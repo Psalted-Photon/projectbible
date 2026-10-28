@@ -18,10 +18,9 @@
     lookupReader,
     registerScreenSurface,
     trailFor,
-    MAIN_READER,
   } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { clearCarriedWorks, openWorkIndex, type WorkKey } from "../lib/openWork";
+  import { closeLookupCard, openWorkIndex, type WorkKey } from "../lib/openWork";
   import PackUpdateNotice from "./PackUpdateNotice.svelte";
 
   /** The packs behind each work, so the card can say when one has a new version. */
@@ -152,17 +151,8 @@
   function close() {
     closing = true;
     saved = {};
-    // The subject the tabs were carrying goes with them.
-    clearCarriedWorks();
-    // Take the card down and drop every work's state with it, so reopening
-    // later starts clean rather than on whatever was last on screen.
-    isbeModalStore.close();
-    navesModalStore.close();
-    personModalStore.close();
-    lexicalModalStore.close();
-    strongsModalStore.close();
-    lookupStore.close();
-    lookupReader.set(MAIN_READER);
+    // The subject the tabs were carrying goes with it.
+    closeLookupCard();
     // The teardown lands in the flush after this returns; take the guard off
     // once it has been and gone.
     tick().then(() => {

@@ -4,6 +4,8 @@ import { navesModalStore } from '../stores/navesModalStore';
 import { personModalStore } from '../stores/personModalStore';
 import { lexicalModalStore } from '../stores/lexicalModalStore';
 import { strongsModalStore } from '../stores/strongsModalStore';
+import { lookupStore } from '../stores/lookupStore';
+import { lookupReader, MAIN_READER } from '../stores/navigationStore';
 import { EMPTY_WORKS, type WorksResolution } from '../adapters/lexicon-lookup';
 import type { DBMorphology } from '../adapters/db';
 
@@ -171,6 +173,22 @@ export function carriedWorks(work: WorkKey, key: string | null): WorksResolution
 
 export function clearCarriedWorks(): void {
   carried = null;
+}
+
+/**
+ * Take the lookup card down and drop every work's state with it, so reopening
+ * later starts clean rather than on whatever was last on screen. The card's ×
+ * and Voice Control's "close" both come here.
+ */
+export function closeLookupCard(): void {
+  clearCarriedWorks();
+  isbeModalStore.close();
+  navesModalStore.close();
+  personModalStore.close();
+  lexicalModalStore.close();
+  strongsModalStore.close();
+  lookupStore.close();
+  lookupReader.set(MAIN_READER);
 }
 
 /**

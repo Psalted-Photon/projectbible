@@ -10,7 +10,7 @@
  * type added or recolored once shows the same everywhere.
  */
 
-import { get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { windowStore, MAX_WINDOWS, type WindowContentType } from './stores/windowStore';
 import { dockEdge, DOCK_SIZE } from './dockEdge';
 import { navigationStore, availableTranslations } from '../stores/navigationStore';
@@ -156,9 +156,10 @@ export function showWindowLimitNotice() {
 /**
  * Open a new window of this type where the phone expects one: under the text
  * in portrait, beside it in landscape. Harmonies isn't a window, so callers
- * send it to the set picker instead. Returns false at the window cap.
+ * send it to the set picker instead. `extra` is laid over how the type starts
+ * out (a voice command's commentator, say). Returns false at the window cap.
  */
-export function openWindowOfType(type: WindowContentChoice): boolean {
+export function openWindowOfType(type: WindowContentChoice, extra: Record<string, unknown> = {}): boolean {
   // Worked out before the window exists: a commentary checks whether it is
   // the first one open, and the empty window doesn't count either way.
   const state = initialContentFor(type);
@@ -167,9 +168,15 @@ export function openWindowOfType(type: WindowContentChoice): boolean {
     showWindowLimitNotice();
     return false;
   }
-  windowStore.setWindowContent(id, type, state);
+  windowStore.setWindowContent(id, type, { ...state, ...extra });
   return true;
 }
+
+/**
+ * Asks the main reader's bar for the Harmonies set picker, which lives there.
+ * Voice Control's "open the Harmonies" bumps it.
+ */
+export const harmonyPickerRequest = writable(0);
 
 /**
  * Show something else in an open window. Its old settings are dropped rather

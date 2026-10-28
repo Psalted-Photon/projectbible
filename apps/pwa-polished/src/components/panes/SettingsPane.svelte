@@ -45,6 +45,7 @@
   import SettingsSection from "../SettingsSection.svelte";
   import PacksCheckup from "../PacksCheckup.svelte";
   import VoiceControlDownloads from "../VoiceControlDownloads.svelte";
+  import VoiceCommandTry from "../VoiceCommandTry.svelte";
   import InstallBar from "../InstallBar.svelte";
   import { checkupDot } from "../../lib/packCheckup";
   import { DOT_SIZES, DOT_COLORS, applyNotifyDot, type DotSize, type DotColor } from "../../lib/notifyDot";
@@ -1623,14 +1624,15 @@
         </button>
       </div>
 
-      <!-- Voice Control's model files, here until the mic button arrives and
-           they move to their own Settings section. -->
+      <!-- Voice Control's model files and a place to try commands, here until
+           the mic button arrives and they move to their own Settings section. -->
       <div class="sub-block divided">
         <h3>Voice Control</h3>
         <p class="section-description">
-          The voice models, kept on this device. Nothing uses them yet: the mic button comes later.
+          The voice models, kept on this device. Try a command below; the mic button comes later.
         </p>
         <VoiceControlDownloads />
+        <VoiceCommandTry />
       </div>
 
       <div class="sub-block divided">
