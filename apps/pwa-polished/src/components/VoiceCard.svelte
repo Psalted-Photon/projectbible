@@ -14,7 +14,7 @@
   import { portal } from '../lib/portal';
   import CloseX from './CloseX.svelte';
   import VoiceControlDownloads from './VoiceControlDownloads.svelte';
-  import { voiceCard, voiceReady, allowMic } from '../lib/voice/holdToTalk';
+  import { voiceCard, voiceReady, allowMic, micFor } from '../lib/voice/holdToTalk';
 
   let asking = false;
 
@@ -73,10 +73,17 @@
         <VoiceControlDownloads ids={['voice-control']} />
       {:else if $voiceCard === 'ask'}
         <h3 id="vcard-title"><Microphone size={20} weight="bold" /> The microphone</h3>
-        <p>
-          Voice Control hears you through the microphone, only while you hold the
-          button. What you say stays on this device.
-        </p>
+        {#if $micFor === 'record'}
+          <p>
+            Notes records through the microphone, only while a recording runs. The
+            recording stays on this device.
+          </p>
+        {:else}
+          <p>
+            Voice Control hears you through the microphone, only while you hold the
+            button. What you say stays on this device.
+          </p>
+        {/if}
         <p class="quiet">Your browser asks next. Choose Allow.</p>
         <div class="actions">
           <button type="button" class="btn" on:click={close}>Not now</button>
@@ -92,13 +99,16 @@
             allow irisbible.com.
           </li>
         </ul>
-        <p class="quiet">Then come back and hold the mic again.</p>
+        <p class="quiet">Then come back and {$micFor === 'record' ? 'tap Record' : 'hold the mic'} again.</p>
         <div class="actions">
           <button type="button" class="btn yes" on:click={close}>OK</button>
         </div>
       {:else}
         <h3 id="vcard-title"><MicrophoneSlash size={20} weight="bold" /> No microphone found</h3>
-        <p>Plug one in, or check that it's switched on. The mic button comes alive as soon as there is one.</p>
+        <p>
+          Plug one in, or check that it's switched on.
+          {$micFor === 'record' ? 'Then tap Record again.' : 'The mic button comes alive as soon as there is one.'}
+        </p>
         <div class="actions">
           <button type="button" class="btn yes" on:click={close}>OK</button>
         </div>

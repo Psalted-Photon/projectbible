@@ -466,6 +466,7 @@
     `${navBarClock ? "" : " · No clock"}` +
     ` · Rotation ${allowRotation ? "on" : "off"}`;
   $: voiceSummary = `Mic button ${$micButtonOn ? "on" : "off"}`;
+  let recordQuality: "speech" | "music" = getSettings().recordQuality === "music" ? "music" : "speech";
   $: storageSummary = `Space · Updates${autoCheckUpdates ? "" : " (manual)"}`;
   $: devSummary = `Packs · Cache · eruda ${$showEruda ? "shown" : "hidden"}`;
 
@@ -1496,6 +1497,26 @@
     <div class="setting-group">
       <span class="label-text">Try a command</span>
       <VoiceCommandTry />
+    </div>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">Recording quality</span>
+        <select
+          value={recordQuality}
+          on:change={(e) => {
+            recordQuality = e.currentTarget.value === 'music' ? 'music' : 'speech';
+            updateSettings({ recordQuality });
+          }}
+        >
+          <option value="speech">Speech (about 15 MB an hour)</option>
+          <option value="music">Music (about 58 MB an hour)</option>
+        </select>
+      </label>
+      <p class="section-description dev-note">
+        For recordings in Notes. Speech is cleaned up for the words; Music keeps singing and
+        instruments as they are. On this device only.
+      </p>
     </div>
   </SettingsSection>
 

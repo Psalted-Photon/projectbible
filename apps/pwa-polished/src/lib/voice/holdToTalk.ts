@@ -91,14 +91,52 @@ export type VoiceCardKind = 'download' | 'ask' | 'blocked' | 'nomic';
 
 export const voiceCard = writable<VoiceCardKind | null>(null);
 
-/** What stands in the way of a press, if anything. */
-function blocker(): VoiceCardKind | null {
+/** What the card is asking the mic for: a hold to talk, or a recording in Notes. */
+export const micFor = writable<'talk' | 'record'>('talk');
+
+/** A recording waiting on the ask card's Continue. */
+let afterAllow: (() => void) | null = null;
+
+function openCard(kind: VoiceCardKind, purpose: 'talk' | 'record', then: (() => void) | null = null): void {
+  micFor.set(purpose);
+  afterAllow = then;
+  voiceCard.set(kind);
+}
+
+/** What stands in the way of a press, if anything. A recording doesn't need Voice Control downloaded. */
+function blocker(needsDownload = true): VoiceCardKind | null {
   const r = get(voiceReady);
-  if (r.installed === false) return 'download';
+  if (needsDownload && r.installed === false) return 'download';
   if (r.mic === false) return 'nomic';
   if (r.permission === 'denied') return 'blocked';
   if (r.permission === 'prompt' || (r.permission === 'unknown' && !askedBefore())) return 'ask';
   return null;
+}
+
+/**
+ * Record's tap: true when the mic can open now. Otherwise the card for what's
+ * missing opens, and after the ask card's Continue `then` starts the recording.
+ */
+export function micReadyToRecord(then: () => void): boolean {
+  watchVoiceReady();
+  const stop = blocker(false);
+  if (stop) openCard(stop, 'record', stop === 'ask' ? then : null);
+  return !stop;
+}
+
+/** A recording's mic didn't open: the card for why, if there is one. True when a card opened. */
+export function recordMicFailed(err: unknown): boolean {
+  if (isBlocked(err)) {
+    set({ permission: 'denied' });
+    openCard('blocked', 'record');
+    return true;
+  }
+  if (isNoMic(err)) {
+    set({ mic: false });
+    openCard('nomic', 'record');
+    return true;
+  }
+  return false;
 }
 
 /** The ask card's Continue: the browser's own question, from a tap. */
@@ -112,8 +150,12 @@ export async function allowMic(): Promise<void> {
     }
     set({ permission: 'granted', mic: true });
     voiceCard.set(null);
-    showNotice('The mic is ready. Hold the button while you speak.');
+    const then = afterAllow;
+    afterAllow = null;
+    if (then) then();
+    else showNotice('The mic is ready. Hold the button while you speak.');
   } catch (err) {
+    afterAllow = null;
     if (isNoMic(err)) {
       set({ mic: false });
       voiceCard.set('nomic');
@@ -208,7 +250,7 @@ export function startTalk(anchor: HTMLElement, source: TalkSource, pointerId?: n
   if (talkBusy(get(talk))) return;
   const stop = blocker();
   if (stop) {
-    voiceCard.set(stop);
+    openCard(stop, 'talk');
     return;
   }
   if (pointerId != null) {
@@ -239,11 +281,11 @@ export function startTalk(anchor: HTMLElement, source: TalkSource, pointerId?: n
       t.cancel();
       if (isBlocked(err)) {
         set({ permission: 'denied' });
-        voiceCard.set('blocked');
+        openCard('blocked', 'talk');
         end('');
       } else if (isNoMic(err)) {
         set({ mic: false });
-        voiceCard.set('nomic');
+        openCard('nomic', 'talk');
         end('');
       } else {
         end(micTrouble(err));

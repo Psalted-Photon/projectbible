@@ -1,5 +1,6 @@
 /**
- * Keeping the phone awake while a pack installs.
+ * Keeping the phone awake while a pack installs, a recording runs or a
+ * recording is transcribed.
  *
  * Two holds, both taken when an install starts and both let go when it ends
  * or fails:
@@ -13,10 +14,14 @@
  *
  * Either can be missing or refused (no support, low battery, a page that
  * isn't visible); the install simply runs without it.
+ *
+ * Each one holds on by name, and both holds stay until the last one lets go,
+ * so a pack finishing can't let the screen sleep under a recording.
  */
 
 type WakeLockSentinelLike = { release(): Promise<void> };
 
+const holders = new Set<string>();
 let active = false;
 let wakeLock: WakeLockSentinelLike | null = null;
 let requesting = false;
@@ -59,8 +64,9 @@ function takeWebLock(): void {
   locks.request(name, () => held).catch(() => {});
 }
 
-/** Hold both while an install runs. Safe to call when already holding. */
-export function stayAwake(): void {
+/** Hold both while an install (or `who`) runs. Safe to call when already holding. */
+export function stayAwake(who = 'install'): void {
+  holders.add(who);
   if (active) return;
   active = true;
   takeWebLock();
@@ -68,9 +74,10 @@ export function stayAwake(): void {
   void takeWakeLock();
 }
 
-/** Let go of both. Safe to call when not holding. */
-export function allowSleep(): void {
-  if (!active) return;
+/** Let go of both once nothing else holds them. Safe to call when not holding. */
+export function allowSleep(who = 'install'): void {
+  holders.delete(who);
+  if (!active || holders.size) return;
   active = false;
   document.removeEventListener('visibilitychange', onVisibility);
   const sentinel = wakeLock;

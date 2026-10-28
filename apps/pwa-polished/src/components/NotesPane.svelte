@@ -11,8 +11,10 @@
    * at every panel width, so a 20%-wide sliver and a 50/50 split both work.
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { ArrowLeft, UsersThree, CloudArrowUp, NotePencil } from 'phosphor-svelte';
+  import { ArrowLeft, UsersThree, CloudArrowUp, NotePencil, Microphone } from 'phosphor-svelte';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
+  import RecordingsList from './RecordingsList.svelte';
+  import { recorder, recordingLive, startRecording } from '../lib/recorder/recorder';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
   import type { SearchTreeNode } from '../lib/searchTree';
@@ -1378,6 +1380,11 @@
     debouncedSave();
   }
 
+  function recordIntoPage() {
+    if (target?.kind !== 'page') return;
+    void startRecording({ page: { notebookId: target.notebookId, pageId: target.pageId } });
+  }
+
   function handleBlur() {
     if (isDirty) void save();
   }
@@ -1631,6 +1638,21 @@
 
       {#if target?.kind === 'verse'}
         <button class="icon-btn" title="Go to this verse" on:click={jumpToVerse}><ArrowUpRight size={17} weight="bold" /></button>
+      {/if}
+
+      <!-- Records into this page: once transcribed, the words land here. The
+           recording itself is in Recordings, on this device. -->
+      {#if target?.kind === 'page'}
+        <button
+          class="icon-btn"
+          class:rec-on={$recorder.page?.pageId === target.pageId && recordingLive($recorder)}
+          title="Record into this page"
+          aria-label="Record into this page"
+          disabled={recordingLive($recorder)}
+          on:click={recordIntoPage}
+        >
+          <Microphone size={17} weight="bold" />
+        </button>
       {/if}
 
       <!-- A page of your own can be sent to a notebook you share with other
@@ -1944,6 +1966,8 @@
               <button class="ghost-btn" on:click={() => (creatingNotebook = true)}>+ New notebook</button>
             {/if}
           </section>
+
+          <RecordingsList />
         {/if}
       {:else}
         <!-- ── Shared ────────────────────────────────────────────────────── -->
@@ -2177,6 +2201,15 @@
   .icon-btn:hover {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
+  }
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  /* Recording into this page right now. */
+  .icon-btn.rec-on {
+    opacity: 1;
+    color: #ff6b6f;
   }
 
   /* Matches the app's other back affordances — icon plus the word, Milonga

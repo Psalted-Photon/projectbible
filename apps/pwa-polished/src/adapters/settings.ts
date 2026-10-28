@@ -264,6 +264,12 @@ export interface UserSettings {
   micButton?: boolean; // default false
   // Where the mic button was left. Per-device, unset puts it bottom-right.
   micButtonPos?: { x: number; y: number };
+  // How Notes records: 'speech' (about 15 MB an hour) or 'music' (about 58 MB
+  // an hour, without the speech clean-up that flattens singing). Per-device,
+  // the way the mic is. See lib/recorder/recorder.ts.
+  recordQuality?: 'speech' | 'music'; // default 'speech'
+  // Where the recording pill was left. Per-device, unset puts it top-right.
+  recorderPos?: { x: number; y: number };
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected
@@ -490,6 +496,16 @@ export function getMicButtonPos(): { x: number; y: number } | null {
 /** Remember where the mic button was dragged to. */
 export function setMicButtonPos(pos: { x: number; y: number }): void {
   updateSettings({ micButtonPos: pos });
+}
+
+/** Where the recording pill sits, or null for its default spot. */
+export function getRecorderPos(): { x: number; y: number } | null {
+  return getSettings().recorderPos ?? null;
+}
+
+/** Remember where the recording pill was dragged to. */
+export function setRecorderPos(pos: { x: number; y: number }): void {
+  updateSettings({ recorderPos: pos });
 }
 
 /** Is the shoulder clock showing? Defaults to on. */
