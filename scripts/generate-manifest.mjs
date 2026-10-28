@@ -198,6 +198,30 @@ for (const filename of readdirSync(PACKS_DIR)
   };
 }
 
+// Voice Control's model files, fetched by fetch-voice-models.mjs. They aren't
+// sqlite packs: the app downloads them itself (lib/voice/voicePack.ts) into its
+// own folder on the device, and the id prefix says which download each belongs
+// to. Type 'study', a type every shipped build accepts, for the reason given on
+// the art shards above; no build imports them, since none lists them.
+const VOICE_FILES = {
+  'voice-needle.js': 'voice-control-engine-js',
+  'voice-needle.wasm': 'voice-control-engine-wasm',
+  'voice-whistle.cact': 'voice-control-whistle',
+  'voice-needle3.cact': 'voice-control-needle',
+  'voice-punct.int8.onnx': 'voice-transcribe-punct',
+  'voice-punct.vocab': 'voice-transcribe-vocab',
+  'voice-vad.onnx': 'voice-transcribe-vad',
+};
+for (const [filename, id] of Object.entries(VOICE_FILES)) {
+  PACK_CONFIGS[filename] = {
+    id,
+    type: 'study',
+    name: id.startsWith('voice-control') ? 'Voice Control model file' : 'Transcribe add-on model file',
+    description: 'Downloaded with Voice Control in Settings. Apache-2.0 (Cactus Whistle, Needle; sherpa-onnx punctuation) or MIT (Silero VAD).',
+    dependencies: [],
+  };
+}
+
 console.log('📝 Generating Pack Manifest...\n');
 
 /**
@@ -259,8 +283,8 @@ for (const [filename, config] of Object.entries(PACK_CONFIGS)) {
   console.log(`   Computing SHA-256...`);
   const sha256 = computeHash(packPath);
   
-  // Get metadata from database
-  const dbMetadata = getPackMetadata(packPath);
+  // Get metadata from database (the voice model files aren't databases)
+  const dbMetadata = filename.endsWith('.sqlite') ? getPackMetadata(packPath) : {};
   
   // Build pack entry
   // Every pack downloads through the /api/packs/ proxy to GitHub Releases

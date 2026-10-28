@@ -80,6 +80,10 @@ apps/pwa-polished/public/packs/consolidated/atlas-map.sqlite
 apps/pwa-polished/public/packs/consolidated/atlas-map-*.sqlite
 apps/pwa-polished/public/packs/consolidated/atlas-places.sqlite
 
+# Voice Control's model files — 63 MB fetched by scripts/fetch-voice-models.mjs
+# from their pinned sources. They ship via the GitHub release like the map.
+packs/consolidated/voice-*
+
 # What the map is built FROM. Intermediates, not products: 162 MB that never
 # reaches a device, rebuilt by the scripts in scripts/atlas/ from Natural Earth,
 # OpenStreetMap, the Barrington Atlas and GeoNames.

@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1.0.0",
   "releaseTag": "packs-v1.0.0",
-  "createdAt": "2026-10-28T01:13:55.252Z",
+  "createdAt": "2026-10-28T15:03:42.255Z",
   "packs": [
     {
       "id": "ancient-languages",
@@ -31,7 +31,7 @@
       "sha256": "4f9c8ad2f0ef64a0bff2dbd6d853dffb851ff904f0b445d901be85269c80b662",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map.sqlite",
-      "createdAt": "2026-10-28T01:13:56.513Z"
+      "createdAt": "2026-10-28T15:03:43.159Z"
     },
     {
       "id": "atlas-map-01",
@@ -46,7 +46,7 @@
       "sha256": "2de681fd98d2b5202446f3ec468461c912ade9a8fcfd7f378ed91630376f7bfd",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map-01.sqlite",
-      "createdAt": "2026-10-28T01:13:56.602Z"
+      "createdAt": "2026-10-28T15:03:43.224Z"
     },
     {
       "id": "atlas-map-02",
@@ -61,7 +61,7 @@
       "sha256": "61b2b9f6ce5671fefed269357f23e2c6ee288c68f79e282cf03baccc97516185",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-map-02.sqlite",
-      "createdAt": "2026-10-28T01:13:56.619Z"
+      "createdAt": "2026-10-28T15:03:43.235Z"
     },
     {
       "id": "atlas-map-places",
@@ -76,7 +76,7 @@
       "sha256": "f2761d1ffd5e8c672fe4a07a92cc64c4646284940d97ef43e388db19ea1d6966",
       "dependencies": [],
       "downloadUrl": "/api/packs/atlas-places.sqlite",
-      "createdAt": "2026-10-28T01:13:56.584Z"
+      "createdAt": "2026-10-28T15:03:43.213Z"
     },
     {
       "id": "biblical-art",
@@ -226,7 +226,7 @@
       "sha256": "3dbc698da339d9c3b0f8050e5ec0374b734c4ba57a85f4a7925b6af9a1fa9239",
       "dependencies": [],
       "downloadUrl": "/api/packs/commentaries.sqlite",
-      "createdAt": "2026-10-28T01:13:56.409Z"
+      "createdAt": "2026-10-28T15:03:43.065Z"
     },
     {
       "id": "connections",
@@ -241,7 +241,7 @@
       "sha256": "c828a75dc0e0de455c08b4747631c2dc9b51d8a6d6383cf90351a45f01fdf5fa",
       "dependencies": [],
       "downloadUrl": "/api/packs/connections.sqlite",
-      "createdAt": "2026-10-28T01:13:56.542Z"
+      "createdAt": "2026-10-28T15:03:43.178Z"
     },
     {
       "id": "devotionals",
@@ -256,7 +256,7 @@
       "sha256": "1cfc91c7dc9b0a4b76c1aa90178fea606be6ae5941b7cfac68ef804a65a075b3",
       "dependencies": [],
       "downloadUrl": "/api/packs/devotionals.sqlite",
-      "createdAt": "2026-10-28T01:13:56.534Z"
+      "createdAt": "2026-10-28T15:03:43.172Z"
     },
     {
       "id": "dictionary-en",
@@ -271,7 +271,7 @@
       "sha256": "1bd67240913ebbbf4f78f70add13279e150a989f6abb55eaf001e816a0f3a50a",
       "dependencies": [],
       "downloadUrl": "/api/packs/dictionary-en.sqlite",
-      "createdAt": "2026-10-28T01:13:56.067Z"
+      "createdAt": "2026-10-28T15:03:42.867Z"
     },
     {
       "id": "encyclotopical",
@@ -286,7 +286,7 @@
       "sha256": "4e470274c6763fdf59141bf377772cae0b276e7c59c5a756bbde8ba2a866721b",
       "dependencies": [],
       "downloadUrl": "/api/packs/encyclotopical.sqlite",
-      "createdAt": "2026-10-28T01:13:56.504Z"
+      "createdAt": "2026-10-28T15:03:43.153Z"
     },
     {
       "id": "greek-critical",
@@ -331,7 +331,7 @@
       "sha256": "f3b9835d5a3027a4b0e973097819ef3446b3c403d8dacfacc8657eacff42cdd9",
       "dependencies": [],
       "downloadUrl": "/api/packs/people.sqlite",
-      "createdAt": "2026-10-28T01:13:55.984Z"
+      "createdAt": "2026-10-28T15:03:42.820Z"
     },
     {
       "id": "timeline",
@@ -346,7 +346,7 @@
       "sha256": "31fd975bad09a832020b7130d5b4efa8dee83bc8f91a47a6361453560c4d305e",
       "dependencies": [],
       "downloadUrl": "/api/packs/timeline.sqlite",
-      "createdAt": "2026-10-28T01:13:56.537Z"
+      "createdAt": "2026-10-28T15:03:43.175Z"
     },
     {
       "id": "translations",
@@ -376,7 +376,112 @@
       "sha256": "c4541999b5170cfb5c2bf05cc512712e0e3b1e387226a331d2fb85db007238dc",
       "dependencies": [],
       "downloadUrl": "/api/packs/tsk-references.sqlite",
-      "createdAt": "2026-10-28T01:13:55.969Z"
+      "createdAt": "2026-10-28T15:03:42.815Z"
+    },
+    {
+      "id": "voice-control-engine-js",
+      "type": "study",
+      "name": "Voice Control model file",
+      "description": "Downloaded with Voice Control in Settings. Apache-2.0 (Cactus Whistle, Needle; sherpa-onnx punctuation) or MIT (Silero VAD).",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 62082,
+      "sizeMB": 0.06,
+      "sha256": "a675c66f506a1b6f922d852c0cc0b82a843ce9d0fab6a80a408106f516df126f",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/voice-needle.js",
+      "createdAt": "2026-10-28T15:03:43.326Z"
+    },
+    {
+      "id": "voice-control-engine-wasm",
+      "type": "study",
+      "name": "Voice Control model file",
+      "description": "Downloaded with Voice Control in Settings. Apache-2.0 (Cactus Whistle, Needle; sherpa-onnx punctuation) or MIT (Silero VAD).",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 930545,
+      "sizeMB": 0.89,
+      "sha256": "7b73d09c17923bf81d6bdb82e19b3c343b8994f83d512ddec52eec9f6b029802",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/voice-needle.wasm",
+      "createdAt": "2026-10-28T15:03:43.327Z"
+    },
+    {
+      "id": "voice-control-needle",
+      "type": "study",
+      "name": "Voice Control model file",
+      "description": "Downloaded with Voice Control in Settings. Apache-2.0 (Cactus Whistle, Needle; sherpa-onnx punctuation) or MIT (Silero VAD).",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 35335380,
+      "sizeMB": 33.7,
+      "sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/voice-needle3.cact",
+      "createdAt": "2026-10-28T15:03:43.368Z"
+    },
+    {
+      "id": "voice-control-whistle",
+      "type": "study",
+      "name": "Voice Control model file",
+      "description": "Downloaded with Voice Control in Settings. Apache-2.0 (Cactus Whistle, Needle; sherpa-onnx punctuation) or MIT (Silero VAD).",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 16919407,
+      "sizeMB": 16.14,
+      "sha256": "b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/voice-whistle.cact",
+      "createdAt": "2026-10-28T15:03:43.341Z"
+    },
+    {
+      "id": "voice-transcribe-punct",
+      "type": "study",
+      "name": "Transcribe add-on model file",
+      "description": "Downloaded with Voice Control in Settings. Apache-2.0 (Cactus Whistle, Needle; sherpa-onnx punctuation) or MIT (Silero VAD).",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 7490500,
+      "sizeMB": 7.14,
+      "sha256": "9d611f445fe4a46186080fe161be6059d87d72eb88d3a8cb00c1a06e83a6067e",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/voice-punct.int8.onnx",
+      "createdAt": "2026-10-28T15:03:43.375Z"
+    },
+    {
+      "id": "voice-transcribe-vad",
+      "type": "study",
+      "name": "Transcribe add-on model file",
+      "description": "Downloaded with Voice Control in Settings. Apache-2.0 (Cactus Whistle, Needle; sherpa-onnx punctuation) or MIT (Silero VAD).",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 2243022,
+      "sizeMB": 2.14,
+      "sha256": "a4a068cd6cf1ea8355b84327595838ca748ec29a25bc91fc82e6c299ccdc5808",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/voice-vad.onnx",
+      "createdAt": "2026-10-28T15:03:43.378Z"
+    },
+    {
+      "id": "voice-transcribe-vocab",
+      "type": "study",
+      "name": "Transcribe add-on model file",
+      "description": "Downloaded with Voice Control in Settings. Apache-2.0 (Cactus Whistle, Needle; sherpa-onnx punctuation) or MIT (Silero VAD).",
+      "version": "1.0.0",
+      "schemaVersion": "1",
+      "minAppVersion": "1.0.0",
+      "size": 149430,
+      "sizeMB": 0.14,
+      "sha256": "e118b7ad88c54db562517df49e1cffd4836d166c34fb190fd311d7f34eb238f5",
+      "dependencies": [],
+      "downloadUrl": "/api/packs/voice-punct.vocab",
+      "createdAt": "2026-10-28T15:03:43.376Z"
     },
     {
       "id": "word-links",

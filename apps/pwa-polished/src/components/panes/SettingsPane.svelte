@@ -44,6 +44,7 @@
   import InterlinearControls from "../InterlinearControls.svelte";
   import SettingsSection from "../SettingsSection.svelte";
   import PacksCheckup from "../PacksCheckup.svelte";
+  import VoiceControlDownloads from "../VoiceControlDownloads.svelte";
   import InstallBar from "../InstallBar.svelte";
   import { checkupDot } from "../../lib/packCheckup";
   import { DOT_SIZES, DOT_COLORS, applyNotifyDot, type DotSize, type DotColor } from "../../lib/notifyDot";
@@ -1620,6 +1621,16 @@
           <span class="text">Manage Packs</span>
           <span class="arrow"><ArrowRight size="1em" weight="bold" /></span>
         </button>
+      </div>
+
+      <!-- Voice Control's model files, here until the mic button arrives and
+           they move to their own Settings section. -->
+      <div class="sub-block divided">
+        <h3>Voice Control</h3>
+        <p class="section-description">
+          The voice models, kept on this device. Nothing uses them yet: the mic button comes later.
+        </p>
+        <VoiceControlDownloads />
       </div>
 
       <div class="sub-block divided">
