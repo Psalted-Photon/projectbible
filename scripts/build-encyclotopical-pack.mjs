@@ -4,9 +4,9 @@
  * Build the Encyclotopical Pack — ISBE Encyclopedia + Nave's Topical Bible
  *
  * One pack holding two reference works. The ISBE half is carried over from
- * isbe.sqlite exactly as it was built, table for table, so anyone who already
- * has the encyclopedia installed keeps working through the changeover. The
- * Nave's half is new.
+ * isbe.sqlite exactly as it was built, table for table (bar the article
+ * renames in ISBE_RENAMES), so anyone who already has the encyclopedia
+ * installed keeps working through the changeover. The Nave's half is new.
  *
  * Nave's (Orville J. Nave, 1900s, public domain) is the topical counterpart to
  * ISBE's prose: 5,322 topics that answer "where does Scripture speak about
@@ -281,6 +281,24 @@ console.log(`✓ Carried over ISBE tables from ${ISBE_PACK}`);
 
 const db = new Database(PACK_OUTPUT);
 db.pragma('journal_mode = DELETE');
+
+// Article names shown differently from the 1915 print. Only the name changes;
+// the article text stays as written. "Jewess" is dated and widely taken as
+// offensive, and the bare "jew" lets the JEWS article's "See JEW" link land.
+const ISBE_RENAMES = [
+  { from: 'JEW, JEWESS, JEWISH', title: 'JEW, JEWISH', primary: 'Jew, Jewish', names: ['jew, jewish', 'jew jewish', 'jew'] },
+];
+for (const r of ISBE_RENAMES) {
+  const row = db.prepare('SELECT entry_id FROM entries WHERE title = ?').get(r.from);
+  if (!row) {
+    console.error(`❌ No ISBE article titled "${r.from}" to rename`);
+    process.exit(1);
+  }
+  db.prepare('UPDATE entries SET title = ?, primary_name = ? WHERE entry_id = ?').run(r.title, r.primary, row.entry_id);
+  db.prepare('DELETE FROM entry_names WHERE entry_id = ?').run(row.entry_id);
+  for (const n of r.names) db.prepare('INSERT INTO entry_names (name_lower, entry_id) VALUES (?, ?)').run(n, row.entry_id);
+}
+console.log(`✓ Renamed ${ISBE_RENAMES.length} ISBE article(s)`);
 
 db.exec(`
   DROP TABLE IF EXISTS topics;
