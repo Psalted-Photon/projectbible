@@ -731,13 +731,6 @@ const GROUPS: Group[] = [
   },
 ];
 
-/**
- * The extra groups the app can't carry out yet. They come with the map, people
- * and the other lookups. Their trigger words still count, as the lab tested
- * them, so "who was James" is known for a question about a person rather than
- * taken as the book; they just aren't shown to Needle.
- */
-const NOT_YET = new Set(['repeats', 'map', 'connections', 'tree', 'people', 'encyclopedia', 'topical', 'timeline']);
 const ALL_GROUPS = [...CORE, ...GROUPS];
 
 /**
@@ -749,8 +742,6 @@ const ALL_GROUPS = [...CORE, ...GROUPS];
  * - stop words beat reading, and closing beats opening
  * - "where" means the map, even with a person named
  * - with a person named, family words mean the tree and bio words the bio
- *
- * No tools with groups named means only groups the app can't do yet fired.
  */
 export function toolsFor(text: string): { tools: ToolSpec[]; groups: string[] } {
   const t = text.toLowerCase();
@@ -772,7 +763,7 @@ export function toolsFor(text: string): { tools: ToolSpec[]; groups: string[] } 
   }
   const hit = ALL_GROUPS.filter((g) => keys.has(g.key));
   if (!hit.length) return { tools: CORE.flatMap((g) => g.tools), groups: [] };
-  return { tools: hit.filter((g) => !NOT_YET.has(g.key)).flatMap((g) => g.tools), groups: hit.map((g) => g.key) };
+  return { tools: hit.flatMap((g) => g.tools), groups: hit.map((g) => g.key) };
 }
 
 /**

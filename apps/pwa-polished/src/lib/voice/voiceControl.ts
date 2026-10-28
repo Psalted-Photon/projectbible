@@ -27,7 +27,7 @@ const STAGES: Record<string, string> = {
   engine: 'Starting Voice Control…',
   whistle: 'Loading Whistle…',
   needle: 'Loading Needle…',
-  verses: 'Reading the verses…',
+  verses: 'Reading the verses and people…',
 };
 
 // ── The worker ──────────────────────────────────────────────────────────────
@@ -73,6 +73,20 @@ function call<T>(action: string, payload?: Record<string, unknown>, onStage?: (s
 
 let loaded: Promise<void> | null = null;
 
+// A pack in or out (a translation, the people list): the worker reads the
+// verses and people again, once the installs settle.
+let rereadTimer: ReturnType<typeof setTimeout> | null = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('packsUpdated', () => {
+    if (!loaded) return;
+    if (rereadTimer) clearTimeout(rereadTimer);
+    rereadTimer = setTimeout(() => {
+      rereadTimer = null;
+      loaded?.then(() => call('data')).catch(() => {});
+    }, 3000);
+  });
+}
+
 /** Load the models, once a session. A failed load isn't kept, so the next command tries again. */
 export function loadVoiceControl(): Promise<void> {
   if (!loaded) {
@@ -104,8 +118,6 @@ const ASK_AT = 0.4;
 
 const CANT_ANSWER = "I can steer the wheel, but can't answer questions.";
 const NOT_CAUGHT = "Didn't catch that.";
-/** The map, people, timeline and the other lookups, which voice can't open yet. */
-const NOT_YET = "I can't do that one yet.";
 const QUESTION_RE = /^\s*(who|whom|whose|what|what's|whats|when|where|why|how|which|is|are|was|were|does|do|did|can|could|will|would|should)\b|\?\s*$/i;
 
 type Verdict = 'act' | 'ask' | 'no';
@@ -154,7 +166,7 @@ export function decide(said: string, choice: VoiceChoice | null): VoicePlan {
   }
   const refProblem = choice.pieces.map((p) => p.refProblem).find(Boolean);
   if (refProblem) return { kind: 'reply', text: refProblem };
-  if (choice.pieces.some((p) => p.notYet)) return { kind: 'reply', text: NOT_YET };
+  if (choice.answer) return { kind: 'reply', text: choice.answer };
   return { kind: 'reply', text: QUESTION_RE.test(said) ? CANT_ANSWER : NOT_CAUGHT };
 }
 
@@ -181,7 +193,12 @@ async function runCalls(calls: VoiceCall[]): Promise<string[]> {
   return done;
 }
 
-async function carryOut(heard: string, plan: VoicePlan): Promise<VoiceOutcome> {
+/**
+ * Do it, or ask, or reply. `answer` is a family count the people list gave
+ * ("how many sons…"), said in a notice alongside whatever else is done.
+ */
+async function carryOut(heard: string, plan: VoicePlan, answer: string | null = null): Promise<VoiceOutcome> {
+  if (answer && plan.kind !== 'reply') showNotice(answer, 'info');
   if (plan.kind === 'act') return { heard, plan, done: await runCalls(plan.calls) };
   if (plan.kind === 'ask') {
     showNotice(plan.question, 'info', { action: { label: 'Yes', run: () => void runCalls(plan.calls) } });
@@ -218,12 +235,12 @@ export async function hearCommand(pcm: Float32Array, opts: { orSearch?: boolean 
   await loadVoiceControl();
   const { heard, choice } = await call<{ heard: string; choice: VoiceChoice | null }>('command', { pcm, system: systemFacts() }, undefined, [pcm.buffer as ArrayBuffer]);
   const plan = decide(heard, choice);
-  return carryOut(heard, opts.orSearch ? orSearch(heard, plan) : plan);
+  return carryOut(heard, opts.orSearch ? orSearch(heard, plan) : plan, choice?.answer);
 }
 
 /** A typed command, the same way, without Whistle. */
 export async function typedCommand(text: string): Promise<VoiceOutcome> {
   await loadVoiceControl();
   const choice = await call<VoiceChoice>('choose', { text, system: systemFacts() });
-  return carryOut(text, decide(text, choice));
+  return carryOut(text, decide(text, choice), choice.answer);
 }

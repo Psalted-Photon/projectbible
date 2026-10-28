@@ -29,6 +29,22 @@ import { closeLookupCard } from '../openWork';
 import { classicId } from '../strongs/entry';
 import { HIGHLIGHT_PALETTE } from '../highlightCategories';
 import { PACK_CATALOG, installPack } from '../packInstaller';
+import { packInstallFinished } from '../../adapters/db-manager';
+import { lookupPerson, searchIsbeEntries, searchNaves } from '../../adapters/lexicon-lookup';
+import { personModalStore } from '../../stores/personModalStore';
+import { isbeModalStore } from '../../stores/isbeModalStore';
+import { navesModalStore } from '../../stores/navesModalStore';
+import { repeatsStore, normalizeRepeatWord } from '../../stores/repeatsStore';
+import { MAX_REPEAT_GROUPS } from '../repeatColors';
+import { openFamilyTree } from '../windowTypes';
+import { openWorkIndex } from '../openWork';
+import { openMapWindow } from '../openMapWindow';
+import { openConnectionsWindow } from '../openConnectionsWindow';
+import { openTimelineWindow } from '../openTimelineWindow';
+import { atlasInstalled, loadAtlasIndex, getAtlasJson } from '../atlas/data';
+import { ScriptureSearch } from '../atlas/search.js';
+import { timelineInstalled, loadTimeline } from '../timeline/data';
+import { searchItems } from '../timeline/query';
 import { voiceForTap, useVoice } from '../tts/voiceForTap';
 import { canSpeakOriginal } from '../tts/originalText';
 import { originalLanguageOf } from '../translationKind';
@@ -386,6 +402,199 @@ function translation(name: unknown): string {
   return `Switched to ${key}`;
 }
 
+// ── Repeats ─────────────────────────────────────────────────────────────────
+
+function repeats(word: unknown): string {
+  const w = bibleWord(word);
+  if (!w) {
+    say("Didn't catch the word.");
+    return 'No word';
+  }
+  const groups = get(repeatsStore);
+  if (groups.some((g) => g.word === normalizeRepeatWord(w))) {
+    say(`"${w}" is already marked everywhere.`);
+    return `Already marking "${w}"`;
+  }
+  if (groups.length >= MAX_REPEAT_GROUPS) {
+    say(`Repeats holds ${MAX_REPEAT_GROUPS} words. Take one off first.`);
+    return 'Repeats is full';
+  }
+  repeatsStore.add(w, { translation: get(navigationStore).translation });
+  return `Marking "${w}" everywhere`;
+}
+
+// ── Map ─────────────────────────────────────────────────────────────────────
+
+/** A year as said ("1000 BC", "AD 30"), negative for BC. Without either, BC: the Bible map's eras mostly are. */
+function yearOf(spoken: unknown): number | null {
+  const m = /(\d{1,4})/.exec(String(spoken ?? ''));
+  if (!m) return null;
+  return /\b(AD|CE)\b/i.test(String(spoken)) ? +m[1] : -m[1];
+}
+
+const yearLabel = (year: number) => (year < 0 ? `${-year} BC` : `AD ${year}`);
+
+/** The place Scripture names (or an ancient name) that was said, from the map pack. */
+async function findPlace(name: string): Promise<{ name: string; lat: number; lon: number; modern?: string; type?: string } | null> {
+  const index = await loadAtlasIndex();
+  const [places, ancient] = await Promise.all([getAtlasJson(index.biblicalPlaces.file), getAtlasJson(index.ancientNames.file)]);
+  return new ScriptureSearch(places, ancient).search(name.replace(/^the\s+/i, ''), 1)[0] ?? null;
+}
+
+async function map(a: Record<string, any>): Promise<string> {
+  if (!(await atlasInstalled())) return offerPack('atlas-map', "The Historical Map isn't downloaded yet.");
+  const year = a.year ? yearOf(a.year) : null;
+  const said = String(a.place ?? '').trim();
+  const place = said ? await findPlace(said) : null;
+  const when = year != null ? ` in ${yearLabel(year)}` : '';
+  if (said && !place) say(`Couldn't find ${said} on the map.`);
+  if (place) {
+    const marker = { name: place.name, latitude: place.lat, longitude: place.lon, modernName: place.modern || null, placeType: place.type || null };
+    if (!openMapWindow(place.name, [marker], year != null ? { year } : {})) return 'No room for another window';
+    return `Map at ${place.name}${when}`;
+  }
+  if (year != null) return openMapWindow('', [], { year }) ? `Map${when}` : 'No room for another window';
+  if (get(windowStore).some((w) => w.contentType === 'map')) return 'The map is open';
+  return openWindowOfType('map') ? 'Opened the map' : 'No room for another window';
+}
+
+// ── Connections ─────────────────────────────────────────────────────────────
+
+function connections(reference: unknown): string {
+  const spoken = String(reference ?? '').trim();
+  const nav = get(navigationStore);
+  const ref = spoken ? readQueryAsRef(spoken) : null;
+  if (spoken && ref?.kind !== 'ref' && ref?.kind !== 'book') {
+    say(`Couldn't find ${spoken}.`);
+    return `No passage "${spoken}"`;
+  }
+  const at = ref?.kind === 'ref' || ref?.kind === 'book' ? ref : null;
+  const book = at?.book ?? nav.book;
+  const chapter = at?.chapter ?? nav.chapter;
+  // A chapter alone lands on its first verse; only a verse said lights one.
+  const verses = at?.kind === 'ref' && spoken.includes(':') ? [at.verse] : undefined;
+  if (!openConnectionsWindow(book, chapter, verses)) return 'No room for another window';
+  return `Connections for ${at?.label ?? `${book} ${chapter}`}`;
+}
+
+// ── People ──────────────────────────────────────────────────────────────────
+
+const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+
+/**
+ * The person a call names, from the people list: the most-mentioned one of
+ * that name, with the others alongside. Says why when there's no one.
+ */
+async function personFor(call: VoiceCall): Promise<{ found: NonNullable<Awaited<ReturnType<typeof lookupPerson>>>; said: string } | string> {
+  const said = String(call.args.person ?? '').trim();
+  const found = await lookupPerson(call.person ?? said);
+  if (found) {
+    // Only the people it is the name of, as the worker found them.
+    const keep = call.personIds?.length ? new Set(call.personIds) : null;
+    if (keep) {
+      const all = [found.person, ...found.alternates].filter((p) => keep.has(p.id));
+      all.sort((a, b) => call.personIds!.indexOf(a.id) - call.personIds!.indexOf(b.id));
+      if (all.length) {
+        found.person = all[0];
+        found.alternates = all.slice(1);
+      }
+    }
+    return { found, said: titleCase(call.person ?? said) };
+  }
+  if (!(await packInstallFinished('people-biblical-v1').catch(() => false))) {
+    return offerPack('people-biblical-v1', "The people list isn't downloaded yet.");
+  }
+  say(`Couldn't find ${said} in the people list.`);
+  return `No one named "${said}"`;
+}
+
+async function familyTree(call: VoiceCall): Promise<string> {
+  if (!String(call.args.person ?? '').trim()) {
+    openFamilyTree();
+    return 'Opened the family tree';
+  }
+  const who = await personFor(call);
+  if (typeof who === 'string') return who;
+  const p = who.found.person;
+  familyTreeStore.open({ focusId: p.id });
+  return `Family tree on ${p.displayTitle || p.name}`;
+}
+
+/** The bio, with everyone else of that name to pick from ("Who was James?"). */
+async function biography(call: VoiceCall): Promise<string> {
+  lookupReader.set(MAIN_READER);
+  if (!String(call.args.person ?? '').trim()) {
+    openWorkIndex('people', null);
+    return 'Opened the people list';
+  }
+  const who = await personFor(call);
+  if (typeof who === 'string') return who;
+  const r = who.found;
+  personModalStore.open({
+    personId: r.person.id,
+    primaryName: r.person.displayTitle || r.person.name,
+    lookup: r.alternates.length ? r : null,
+    clickedWord: who.said,
+  });
+  return r.alternates.length
+    ? `Bio of ${r.person.displayTitle || r.person.name}, with ${r.alternates.length} more named ${who.said}`
+    : `Bio of ${r.person.displayTitle || r.person.name}`;
+}
+
+// ── Encyclopedia and topical ────────────────────────────────────────────────
+
+const subject = (topic: unknown) => String(topic ?? '').trim().replace(/^(the|a|an)\s+/i, '');
+
+async function encyclopedia(topic: unknown): Promise<string> {
+  if (!(await packInstallFinished('encyclotopical').catch(() => false))) {
+    return offerPack('encyclotopical', "The encyclopedia isn't downloaded yet.");
+  }
+  lookupReader.set(MAIN_READER);
+  const q = subject(topic);
+  if (!q) {
+    openWorkIndex('encyclopedia', null);
+    return 'Opened the encyclopedia';
+  }
+  const [row] = await searchIsbeEntries(q, 1);
+  if (!row) {
+    say(`The encyclopedia has no article on ${q}.`);
+    return `No article on "${q}"`;
+  }
+  isbeModalStore.open({ kind: 'entry', entryId: Number(row.id), placeId: null, primaryName: row.name });
+  return `Encyclopedia: ${row.name}`;
+}
+
+async function topical(topic: unknown): Promise<string> {
+  if (!(await packInstallFinished('encyclotopical').catch(() => false))) {
+    return offerPack('encyclotopical', "The topical index isn't downloaded yet.");
+  }
+  lookupReader.set(MAIN_READER);
+  const q = subject(topic);
+  if (!q) {
+    openWorkIndex('topical', null);
+    return 'Opened the topical index';
+  }
+  const [row] = await searchNaves(q, 1);
+  if (!row) {
+    say(`The topical index has nothing on ${q}.`);
+    return `No topic "${q}"`;
+  }
+  navesModalStore.open({ topicId: Number(row.id), primaryName: row.name });
+  return `Topical: ${row.name}`;
+}
+
+// ── Timeline ────────────────────────────────────────────────────────────────
+
+async function timeline(event: unknown): Promise<string> {
+  if (!(await timelineInstalled())) return offerPack('timeline', "The Timeline isn't downloaded yet.");
+  const q = subject(event);
+  const [item] = q ? searchItems(await loadTimeline(), q, 1) : [];
+  if (item) return openTimelineWindow(item.id) ? `Timeline at ${item.title}` : 'No room for another window';
+  if (q) say(`Couldn't find ${q} on the timeline.`);
+  if (get(windowStore).some((w) => w.contentType === 'timeline')) return 'The timeline is open';
+  return openWindowOfType('timeline') ? 'Opened the timeline' : 'No room for another window';
+}
+
 // ── All of them ─────────────────────────────────────────────────────────────
 
 /** Carry out one call. Returns what was done, in a short line. */
@@ -403,7 +612,15 @@ export async function runCall(call: VoiceCall): Promise<string> {
     case 'read_aloud': return readAloud(a.from_verse);
     case 'stop_reading': return stopReading();
     case 'translation': return translation(a.translation);
-    default: return `Can't do ${call.name} yet`;
+    case 'repeats': return repeats(a.word);
+    case 'map': return map(a);
+    case 'connections': return connections(a.reference);
+    case 'family_tree': return familyTree(call);
+    case 'biography': return biography(call);
+    case 'encyclopedia': return encyclopedia(a.topic);
+    case 'topical': return topical(a.topic);
+    case 'timeline': return timeline(a.event);
+    default: return `Can't do ${call.name}`;
   }
 }
 
@@ -422,6 +639,14 @@ export function describeCall(call: VoiceCall): string {
     case 'read_aloud': return a.from_verse ? `read aloud from verse ${a.from_verse}` : 'read aloud';
     case 'stop_reading': return 'pause reading';
     case 'translation': return `switch to ${a.translation}`;
+    case 'repeats': return `mark "${bibleWord(a.word)}" everywhere`;
+    case 'map': return `the map${a.place ? ` at ${a.place}` : ''}${a.year ? ` in ${a.year}` : ''}`;
+    case 'connections': return `the connections for ${a.reference || 'this chapter'}`;
+    case 'family_tree': return `the family tree${a.person ? ` of ${titleCase(call.person ?? String(a.person))}` : ''}`;
+    case 'biography': return a.person ? `the bio of ${titleCase(call.person ?? String(a.person))}` : 'the people list';
+    case 'encyclopedia': return a.topic ? `the encyclopedia on "${subject(a.topic)}"` : 'the encyclopedia';
+    case 'topical': return a.topic ? `the topical index on "${subject(a.topic)}"` : 'the topical index';
+    case 'timeline': return a.event ? `the timeline at ${a.event}` : 'the timeline';
     default: return call.name;
   }
 }

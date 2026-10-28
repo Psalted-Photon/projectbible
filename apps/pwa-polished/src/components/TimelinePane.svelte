@@ -73,6 +73,7 @@
     type LaneLayout,
   } from '../lib/timeline/lanes';
   import { buildHereIndex, findHere, momentAt, searchItems, type HereIndex } from '../lib/timeline/query';
+  import type { TimelineTarget } from '../lib/openTimelineWindow';
   import CloseX from './CloseX.svelte';
 
   export let windowId: string | undefined = undefined;
@@ -839,6 +840,20 @@
 
   function selectItem(item: TimelineItem) {
     selected = item;
+  }
+
+  // An item handed over by openTimelineWindow (a voice command): shown once
+  // the strip is laid out, then cleared so a reload doesn't send it again.
+  let appliedTargetSeq = 0;
+  $: target = windowState?.contentState?.target as TimelineTarget | null | undefined;
+  $: if (data && target && target.seq !== appliedTargetSeq) applyTarget(target);
+
+  function applyTarget(next: TimelineTarget) {
+    appliedTargetSeq = next.seq;
+    remember({ target: null });
+    const item = data?.byId.get(next.itemId);
+    // After load's own placing, which waits a frame for the stage's size.
+    if (item) requestAnimationFrame(() => requestAnimationFrame(() => focusItem(item)));
   }
 
   function selectEra(era: TimelineItem) {

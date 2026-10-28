@@ -1,7 +1,8 @@
 /**
  * Voice Control's worker: Whistle and Needle run here, off the page's thread,
  * the way Read Aloud's voices run, along with the rules that put Needle's
- * picks right and the verse text spoken quotes are matched against.
+ * picks right, the verse text spoken quotes are matched against, and the
+ * people list that names are matched against.
  *
  * Requests:  { id, action, payload }
  * Responses: { id, ok: true, result } | { id, ok: false, error }
@@ -11,12 +12,28 @@
  */
 
 import { NeedleEngine, type NeedleAnswer } from './engine';
-import { tidy, toolsFor, splitCommands, findRefs, noopReply, APP_KEYWORDS, type ToolSpec } from './rules';
+import {
+  tidy,
+  toolsFor,
+  splitCommands,
+  findRefs,
+  noopReply,
+  usePeopleNames,
+  personNamed,
+  isEveryday,
+  editDistance,
+  APP_KEYWORDS,
+  type ToolSpec,
+} from './rules';
 
 /** One action, as the app carries it out. */
 export interface VoiceCall {
   name: string;
   args: Record<string, any>;
+  /** The person named, as the people list has the name ("mephibosheth" for "Mefi Bosheth"). */
+  person?: string;
+  /** Everyone that is the name of, most-mentioned first: not those it is only in the title of ("Joseph, son of Jacob"). */
+  personIds?: string[];
 }
 
 /** One piece of what was said, with Needle's picks put right. */
@@ -32,8 +49,6 @@ export interface VoicePiece {
   grounded: boolean;
   /** "Did you mean Psalm 119:105?", or "There's no John 30". */
   refProblem: string | null;
-  /** Only actions the app can't do yet were asked for, so Needle wasn't asked. */
-  notYet: boolean;
 }
 
 /** A verse the words quote, or why they don't. */
@@ -54,6 +69,8 @@ export interface VoiceChoice {
   noop: string | null;
   pieces: VoicePiece[];
   quote: QuoteMatch | null;
+  /** "How many sons…", answered from the people list: "Jacob: 12 sons (Reuben, …)". */
+  answer: string | null;
 }
 
 // The files voicePack.ts downloads, in the same folder of the browser's file storage.
@@ -82,14 +99,15 @@ async function load(post: (stage: string) => void): Promise<void> {
   post('needle');
   engine.load(await readFile(FILES.needle));
   post('verses');
-  verses = await loadVerses();
+  await loadAppData();
   eng = engine;
 }
 
-// ── The app's verse text ────────────────────────────────────────────────────
-// Read once from the app's own database, for matching spoken quotes. Only
-// read: the connection closes as soon as the verses are in, so it can never
-// hold up the app opening a newer version of the database.
+// ── The app's verse text and people ─────────────────────────────────────────
+// Read once from the app's own database, for matching spoken quotes and
+// naming people, and again when a pack comes in. Only read: the connection
+// closes as soon as they are in, so it can never hold up the app opening a
+// newer version of the database.
 
 interface VerseWords {
   ref: string;
@@ -114,10 +132,11 @@ function openAppDb(): Promise<IDBDatabase | null> {
   });
 }
 
-function versesOf(db: IDBDatabase, translationId: string): Promise<any[]> {
+function getAll(db: IDBDatabase, store: string, index?: string, key?: IDBValidKey): Promise<any[]> {
   return new Promise((resolve) => {
-    if (!db.objectStoreNames.contains('verses')) return resolve([]);
-    const req = db.transaction('verses', 'readonly').objectStore('verses').index('translationId').getAll(translationId);
+    if (!db.objectStoreNames.contains(store)) return resolve([]);
+    const s = db.transaction(store, 'readonly').objectStore(store);
+    const req = index ? s.index(index).getAll(key) : s.getAll();
     req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => resolve([]);
   });
@@ -134,21 +153,151 @@ const verseWords = (text: unknown) =>
     .replace(/[\x10-\x12]/g, ' ')
     .replace(/[\x00-\x1f]/g, ''));
 
-async function loadVerses(): Promise<VerseWords[]> {
-  const out: VerseWords[] = [];
+async function loadAppData(): Promise<void> {
+  const nextVerses: VerseWords[] = [];
+  const byId = new Map<string, any>();
+  const byName = new Map<string, string[]>();
   const db = await openAppDb();
-  if (!db) return out;
-  try {
-    for (const tid of QUOTE_TRANSLATIONS) {
-      for (const v of await versesOf(db, tid)) {
-        const words = verseWords(v.text);
-        out.push({ ref: `${v.book} ${v.chapter}:${v.verse}`, words: ` ${words} `, count: words ? words.split(' ').length : 0 });
+  if (db) {
+    try {
+      for (const tid of QUOTE_TRANSLATIONS) {
+        for (const v of await getAll(db, 'verses', 'translationId', tid)) {
+          const words = verseWords(v.text);
+          nextVerses.push({ ref: `${v.book} ${v.chapter}:${v.verse}`, words: ` ${words} `, count: words ? words.split(' ').length : 0 });
+        }
       }
+      for (const p of await getAll(db, 'people')) byId.set(p.id, p);
+      for (const n of await getAll(db, 'person_names')) {
+        if (!byName.has(n.nameLower)) byName.set(n.nameLower, []);
+        byName.get(n.nameLower)!.push(n.personId);
+      }
+    } finally {
+      db.close();
     }
-  } finally {
-    db.close();
   }
-  return out;
+  verses = nextVerses;
+  const single = [...byName.keys()].filter((k) => /^[a-z]+$/.test(k));
+  people = { byId, byName, keys: single.map((k) => [k, soundKey(k)]) };
+  // Their names bring in the family tree and bio actions (rules.ts).
+  usePeopleNames(single);
+}
+
+// ── People ──────────────────────────────────────────────────────────────────
+
+let people: { byId: Map<string, any>; byName: Map<string, string[]>; keys: [string, string][] } = {
+  byId: new Map(),
+  byName: new Map(),
+  keys: [],
+};
+
+const parseList = (v: unknown): any[] => {
+  if (Array.isArray(v)) return v;
+  try {
+    const x = JSON.parse(String(v || '[]'));
+    return Array.isArray(x) ? x : [];
+  } catch {
+    return [];
+  }
+};
+
+/** How a name sounds, roughly: "mephibosheth" and "mefa boshes" both come out "mfps(t)". */
+function soundKey(s: string): string {
+  const k = s.replace(/[^a-z]/g, '')
+    .replace(/ph/g, 'f').replace(/sh/g, 's').replace(/th/g, 't').replace(/ch/g, 'k').replace(/gh/g, 'g')
+    .replace(/c(?=[eiy])/g, 's').replace(/[cq]/g, 'k').replace(/x/g, 'ks')
+    .replace(/d/g, 't').replace(/g/g, 'k').replace(/b/g, 'p').replace(/v/g, 'f').replace(/z/g, 's');
+  if (!k) return '';
+  return (k[0] + k.slice(1).replace(/[aeiouhwy]/g, '')).replace(/(.)\1+/g, '$1');
+}
+
+/** The name in the people list that a misheard name sounds most like, or null. */
+function soundAlike(q: string): string | null {
+  const flat = q.replace(/ /g, '');
+  const key = soundKey(flat);
+  if (key.length < 3) return null;
+  let best: { name: string; kd: number; fd: number } | null = null;
+  for (const [name, k] of people.keys) {
+    const kd = editDistance(key, k);
+    if (kd > (key.length >= 5 ? 2 : 1)) continue;
+    const fd = editDistance(flat, name);
+    if (fd > Math.max(2, Math.round(name.length * 0.45))) continue;
+    if (!best || kd < best.kd || (kd === best.kd && fd < best.fd)) best = { name, kd, fd };
+  }
+  return best?.name ?? null;
+}
+
+const TITLE_WORDS = /\b(the|apostle|prophet|prophetess|king|queen|saint|st|priest|judge|named|called)\b/g;
+const ownNames = (p: any) =>
+  [p.name, String(p.displayTitle || '').replace(/\s*\(.*$/, ''), ...String(p.alsoCalled || '').split(/[,;]/)].map(plain).filter(Boolean);
+
+/**
+ * Who a spoken name means: the name as the people list has it, and everyone
+ * with that name, most-mentioned first. A name not in the list as heard is
+ * matched by how it sounds ("Mefi Bosheth"). Null when nobody fits.
+ */
+function resolvePerson(heard: string): { name: string; people: any[] } | null {
+  if (!people.byName.size) return null;
+  const q = plain(String(heard).replace(/'s\b/gi, '')).replace(TITLE_WORDS, ' ').replace(/\s+/g, ' ').trim();
+  if (!q) return null;
+  let key: string | null | undefined = q;
+  let ids = people.byName.get(q);
+  // A name heard as two words ("Matthew Bosheth") is tried by sound as a whole
+  // before its words are tried one at a time.
+  if (!ids && q.includes(' ')) {
+    key = soundAlike(q);
+    ids = key ? people.byName.get(key) : undefined;
+  }
+  if (!ids) {
+    key = q.split(' ').find((w) => people.byName.has(w) && !isEveryday(w));
+    ids = key ? people.byName.get(key) : undefined;
+  }
+  if (!ids) {
+    key = soundAlike(q);
+    ids = key ? people.byName.get(key) : undefined;
+  }
+  if (!ids || !key) return null;
+  const name = key;
+  let ps = ids.map((id) => people.byId.get(id)).filter(Boolean);
+  // The index also files "Joseph (son of Jacob)" under jacob; keep the people it's the name of.
+  const own = ps.filter((p) => ownNames(p).includes(name));
+  if (own.length) ps = own;
+  ps.sort((a, b) => (b.verseCount || 0) - (a.verseCount || 0));
+  return { name, people: ps };
+}
+
+const COUNT_RE = /\bhow many (sons|daughters|children|kids|wives|husbands|brothers|sisters)\b/i;
+const PLACE_OF_RE = /\bwhere (?:was|is|were) (.+?) (born|from|raised|buried)\b|\bwhere did (.+?) (die|come from|grow up|get buried)\b/i;
+
+/** "How many sons…" answered from the people list, never from Needle. */
+function familyCount(p: any, what: string): string {
+  const kin = (field: string) => parseList(p[field]).map((k) => ({ name: String(k.name), female: people.byId.get(k.slug)?.gender === 'Female' }));
+  const who = p.displayTitle || p.name;
+  const list = (xs: { name: string }[]) => xs.map((x) => x.name).join(', ');
+  const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+  if (what === 'sons' || what === 'daughters') {
+    const xs = kin('children').filter((k) => k.female === (what === 'daughters'));
+    return `${who}: ${n(xs.length, what.slice(0, -1), what)}${xs.length ? ` (${list(xs)})` : ''}`;
+  }
+  if (what === 'children' || what === 'kids') {
+    const xs = kin('children');
+    const d = xs.filter((k) => k.female).length;
+    return `${who}: ${n(xs.length, 'child', 'children')}${xs.length ? `, ${n(xs.length - d, 'son', 'sons')} and ${n(d, 'daughter', 'daughters')} (${list(xs)})` : ''}`;
+  }
+  if (what === 'wives' || what === 'husbands') {
+    const xs = kin('partners');
+    return `${who}: ${n(xs.length, what === 'wives' ? 'wife' : 'husband', what)}${xs.length ? ` (${list(xs)})` : ''}`;
+  }
+  const xs = kin('siblings').filter((k) => k.female === (what === 'sisters'));
+  return `${who}: ${n(xs.length, what.slice(0, -1), what)}${xs.length ? ` (${list(xs)})` : ''}`;
+}
+
+/** Where the people list says someone was born or died, or null. */
+function placeOf(p: any, died: boolean): string | null {
+  try {
+    return JSON.parse(p[died ? 'deathPlace' : 'birthPlace'] || 'null')?.name ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Quotes ──────────────────────────────────────────────────────────────────
@@ -266,10 +415,12 @@ function useTools(engine: NeedleEngine, system: string, toolsJson: string): void
  *   every value in it was said ("find every verse about the wind")
  * - a cut-off word ("orgiveness") is the whole word that was said
  * - a color, look or new window nobody said is dropped
+ * - "where was Jesus born" is the map at the place the people list has
+ * - a person is the name the people list has, matched by sound if need be
  * - references come from the words, not from Needle, which split "1
  *   thessalonians 4:16" in two and dropped the 5 from "2 Corinthians 5"
  */
-function settle(text: string, tools: ToolSpec[], answer: NeedleAnswer | undefined): Omit<VoicePiece, 'text' | 'confidence' | 'single' | 'notYet'> {
+function settle(text: string, tools: ToolSpec[], answer: NeedleAnswer | undefined): Omit<VoicePiece, 'text' | 'confidence' | 'single'> {
   const words = text.toLowerCase();
   const said = (v: unknown) => typeof v !== 'string' || (v.trim() !== '' && words.includes(v.toLowerCase().trim()));
   const refs = findRefs(text);
@@ -299,6 +450,20 @@ function settle(text: string, tools: ToolSpec[], answer: NeedleAnswer | undefine
       c.args[k] = text.slice(s, e);
     }
   }
+  // "Where was Jesus born": the people list knows, so the map opens there
+  // (Needle tends to put the person in as the place). With no place on
+  // record, the bio is the best answer.
+  const where = PLACE_OF_RE.exec(text);
+  if (where && tools.some((t) => t.name === 'map')) {
+    const found = resolvePerson(where[1] || where[3]);
+    if (found?.people.length) {
+      const place = placeOf(found.people[0], /die|buried/i.test(where[2] || where[4]));
+      calls = place
+        ? [...calls.filter((c) => c.name !== 'map'), { name: 'map', args: { place } }]
+        : [{ name: 'biography', args: { person: found.name } }];
+      promoted = true;
+    }
+  }
   for (const c of calls) {
     if (c.name === 'highlight') {
       for (const k of ['color', 'look']) {
@@ -307,9 +472,13 @@ function settle(text: string, tools: ToolSpec[], answer: NeedleAnswer | undefine
     }
     if (c.args.new_window === true && !/\bnew window\b/i.test(text)) c.args.new_window = false;
   }
-  // "Matthew Henry on Romans 8": the commentary opens there.
+  // "Matthew Henry on Romans 8": the commentary opens there, and so do the
+  // connections. A year Needle left out of a map is taken from the words.
+  const year = /\b(\d{1,4})\s*(BC|AD|BCE|CE)\b/i.exec(text);
   for (const c of calls) {
     if (refs.length && c.name === 'commentary' && !c.args.at) c.args.at = refs[0].text;
+    if (refs.length && c.name === 'connections' && !c.args.reference) c.args.reference = refs[0].text;
+    if (c.name === 'map' && !c.args.year && year) c.args.year = `${year[1]} ${year[2].toUpperCase()}`;
   }
   // Every value in the picks was said (the commentator's name, the search
   // words), so a low score from Needle needn't stop a turn with one action.
@@ -325,6 +494,15 @@ function settle(text: string, tools: ToolSpec[], answer: NeedleAnswer | undefine
       : [{ name: 'passage', args: { reference: needle } }];
     calls = [...rest.slice(0, at), ...passages, ...rest.slice(at)];
   }
+  // A name as the people list has it, so the app finds them however Whistle spelled it.
+  for (const c of calls) {
+    if (typeof c.args.person !== 'string' || !c.args.person.trim()) continue;
+    const found = resolvePerson(c.args.person);
+    if (found) {
+      c.person = found.name;
+      c.personIds = found.people.map((p) => String(p.id));
+    }
+  }
   const bad = refs.find((r) => !r.valid);
   return { calls, promoted, grounded, refProblem: bad ? (bad.suggest ? `Did you mean ${bad.suggest}?` : `There's no ${bad.text}.`) : null };
 }
@@ -332,7 +510,6 @@ function settle(text: string, tools: ToolSpec[], answer: NeedleAnswer | undefine
 /** One piece of what was said through Needle, with the actions its trigger words picked. */
 function runPiece(engine: NeedleEngine, text: string, system: string): VoicePiece {
   const { tools } = toolsFor(text);
-  if (!tools.length) return { text, calls: [], confidence: null, single: false, promoted: false, grounded: false, refProblem: null, notYet: true };
   const toolsJson = JSON.stringify(tools);
   useTools(engine, system, toolsJson);
   engine.reset();
@@ -345,15 +522,24 @@ function runPiece(engine: NeedleEngine, text: string, system: string): VoicePiec
     useTools(engine, system, toolsJson);
     answer = engine.complete(text);
   }
-  return { text, confidence: answer?.confidence ?? null, single: tools.length === 1, notYet: false, ...settle(text, tools, answer) };
+  return { text, confidence: answer?.confidence ?? null, single: tools.length === 1, ...settle(text, tools, answer) };
+}
+
+/** "How many sons does Jacob have": the count, from the people list, for the most-mentioned one of that name. */
+function countAnswer(text: string, calls: VoiceCall[]): string | null {
+  const asks = COUNT_RE.exec(text);
+  if (!asks) return null;
+  const who = calls.map((c) => c.args.person).find((p) => typeof p === 'string' && p.trim()) || personNamed(text);
+  const found = who ? resolvePerson(who) : null;
+  return found?.people.length ? familyCount(found.people[0], asks[1].toLowerCase()) : null;
 }
 
 function choose(engine: NeedleEngine, heard: string, system: string): VoiceChoice {
   const text = tidy(heard);
   const noop = noopReply(text);
-  if (noop != null) return { tidied: text, noop, pieces: [], quote: null };
+  if (noop != null) return { tidied: text, noop, pieces: [], quote: null, answer: null };
   const pieces = splitCommands(text).map((p) => runPiece(engine, p, system));
-  return { tidied: text, noop: null, pieces, quote: findQuote(text) };
+  return { tidied: text, noop: null, pieces, quote: findQuote(text), answer: countAnswer(text, pieces.flatMap((p) => p.calls)) };
 }
 
 function ready(): NeedleEngine {
@@ -382,6 +568,12 @@ self.onmessage = async (e: MessageEvent<{ id: number; action: string; payload?: 
       case 'choose':
         // Text in: Needle only.
         result = choose(ready(), payload.text, payload.system);
+        break;
+
+      case 'data':
+        // A pack came in or went: the verses and people again.
+        if (eng) await loadAppData();
+        result = null;
         break;
 
       default:
