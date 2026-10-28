@@ -770,6 +770,8 @@ Steer the app by talking, and turn what you say into notes. It all runs **on you
 - **Turn it on** in Settings → Voice Control → Show the mic button. It's off until you do, and it's set per device.
 - **Push to talk.** Hold the button, say what you want, and let go: it happens. The mic is open only while you hold it. Slide off before letting go to cancel.
 - **Drag it by its grip** anywhere on the screen. It remembers its spot on each device, and follows Bar size.
+- **Make it your own** in Settings → Voice Control: Small, Normal or Large, and the drag dots on the left, right, top or bottom. Both show while the button is on, and are set per device.
+- **Hold the drag dots still for 2 seconds** to be offered Hide. It comes back from Settings → Voice Control.
 - **The first press** says what the mic is for before the browser asks for it. A blocked mic gets the steps to allow it again, and with no mic plugged in the button says so.
 - What was heard and what was done show beside the button for a few seconds.
 - **In the search box too.** Once Voice Control is downloaded, the open search box has a mic at its end. Anything that isn't a command is searched for.
@@ -795,7 +797,7 @@ Steer the app by talking, and turn what you say into notes. It all runs **on you
 
 ### 27.3 Downloads
 
-- **Voice Control**, about 53 MB, once: Whistle hears and Needle chooses. From Settings → Voice Control, the mic button's own card, or Install everything.
+- **Voice Control**, about 53 MB, once: Whistle hears and Needle chooses. From Settings → Voice Control, the mic button's own card, or Install everything. Settings lists only what's still to download, so once both are in, nothing shows there.
 - **The Transcribe add-on**, about 10 MB: punctuation and a voice detector. Offered the first time you tap Transcribe.
 - New versions show in Storage & updates like any pack.
 

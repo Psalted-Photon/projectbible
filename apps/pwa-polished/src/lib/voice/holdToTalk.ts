@@ -30,7 +30,7 @@ import {
 import { VOICE_DOWNLOADS_EVENT, voiceInstalledHere, type VoiceDownloadId } from './voicePack';
 import { hearCommand, voiceGesture, type VoiceOutcome } from './voiceControl';
 
-// ── The floating button's switch ────────────────────────────────────────────
+// ── The floating button's switch, size and drag dots ────────────────────────
 
 /** The floating mic button is on, on this device. */
 export const micButtonOn = writable(getSettings().micButton === true);
@@ -38,6 +38,38 @@ export const micButtonOn = writable(getSettings().micButton === true);
 export function setMicButtonOn(on: boolean): void {
   micButtonOn.set(on);
   updateSettings({ micButton: on });
+}
+
+export type MicButtonSize = 'small' | 'normal' | 'large';
+export type MicButtonGrip = 'left' | 'right' | 'top' | 'bottom';
+
+export const MIC_BUTTON_SIZES: { value: MicButtonSize; label: string }[] = [
+  { value: 'small', label: 'Small' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'large', label: 'Large' },
+];
+
+export const MIC_BUTTON_GRIPS: { value: MicButtonGrip; label: string }[] = [
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+  { value: 'top', label: 'Top' },
+  { value: 'bottom', label: 'Bottom' },
+];
+
+/** How big the floating mic button is, on this device. */
+export const micButtonSize = writable<MicButtonSize>(getSettings().micButtonSize ?? 'normal');
+
+export function setMicButtonSize(size: MicButtonSize): void {
+  micButtonSize.set(size);
+  updateSettings({ micButtonSize: size });
+}
+
+/** Which side of the floating mic button its drag dots are on, on this device. */
+export const micButtonGrip = writable<MicButtonGrip>(getSettings().micButtonGrip ?? 'left');
+
+export function setMicButtonGrip(grip: MicButtonGrip): void {
+  micButtonGrip.set(grip);
+  updateSettings({ micButtonGrip: grip });
 }
 
 // ── What a press needs ──────────────────────────────────────────────────────

@@ -264,6 +264,11 @@ export interface UserSettings {
   micButton?: boolean; // default false
   // Where the mic button was left. Per-device, unset puts it bottom-right.
   micButtonPos?: { x: number; y: number };
+  // How big the mic button is drawn, on top of Bar size. Per-device like the
+  // switch. See lib/voice/holdToTalk.ts.
+  micButtonSize?: 'small' | 'normal' | 'large'; // default 'normal'
+  // Which side of the mic button its drag dots are on. Per-device.
+  micButtonGrip?: 'left' | 'right' | 'top' | 'bottom'; // default 'left'
   // How Notes records: 'speech' (about 15 MB an hour) or 'music' (about 58 MB
   // an hour, without the speech clean-up that flattens singing). Per-device,
   // the way the mic is. See lib/recorder/recorder.ts.

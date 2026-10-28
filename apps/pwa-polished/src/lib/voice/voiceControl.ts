@@ -1,5 +1,5 @@
 /**
- * Voice Control: a spoken or typed command in, the app's actions out.
+ * Voice Control: a spoken command in, the app's actions out.
  *
  * Whistle and Needle run in their own worker (voiceWorker.ts), loaded from the
  * files voicePack.ts downloaded, on the first command of the session. The
@@ -236,11 +236,4 @@ export async function hearCommand(pcm: Float32Array, opts: { orSearch?: boolean 
   const { heard, choice } = await call<{ heard: string; choice: VoiceChoice | null }>('command', { pcm, system: systemFacts() }, undefined, [pcm.buffer as ArrayBuffer]);
   const plan = decide(heard, choice);
   return carryOut(heard, opts.orSearch ? orSearch(heard, plan) : plan, choice?.answer);
-}
-
-/** A typed command, the same way, without Whistle. */
-export async function typedCommand(text: string): Promise<VoiceOutcome> {
-  await loadVoiceControl();
-  const choice = await call<VoiceChoice>('choose', { text, system: systemFacts() });
-  return carryOut(text, decide(text, choice), choice.answer);
 }

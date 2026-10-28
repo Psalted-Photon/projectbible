@@ -46,7 +46,18 @@
   import PacksCheckup from "../PacksCheckup.svelte";
   import VoiceControlDownloads from "../VoiceControlDownloads.svelte";
   import VoiceCommandTry from "../VoiceCommandTry.svelte";
-  import { micButtonOn, setMicButtonOn } from "../../lib/voice/holdToTalk";
+  import {
+    micButtonOn,
+    setMicButtonOn,
+    micButtonSize,
+    setMicButtonSize,
+    micButtonGrip,
+    setMicButtonGrip,
+    MIC_BUTTON_SIZES,
+    MIC_BUTTON_GRIPS,
+    type MicButtonSize,
+    type MicButtonGrip,
+  } from "../../lib/voice/holdToTalk";
   import InstallBar from "../InstallBar.svelte";
   import { checkupDot } from "../../lib/packCheckup";
   import { DOT_SIZES, DOT_COLORS, applyNotifyDot, type DotSize, type DotColor } from "../../lib/notifyDot";
@@ -1489,11 +1500,43 @@
         />
         <span class="label-text">Show the mic button</span>
       </label>
+      <!-- Only what's still to download: once both are in, nothing shows. -->
+      <VoiceControlDownloads hideInstalled />
     </div>
 
-    <div class="setting-group">
-      <VoiceControlDownloads />
-    </div>
+    {#if $micButtonOn}
+      <div class="setting-group">
+        <label>
+          <span class="label-text">Mic button size</span>
+          <select
+            value={$micButtonSize}
+            on:change={(e) => setMicButtonSize(e.currentTarget.value as MicButtonSize)}
+          >
+            {#each MIC_BUTTON_SIZES as opt}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+        </label>
+      </div>
+
+      <div class="setting-group">
+        <label>
+          <span class="label-text">Drag dots</span>
+          <select
+            value={$micButtonGrip}
+            on:change={(e) => setMicButtonGrip(e.currentTarget.value as MicButtonGrip)}
+          >
+            {#each MIC_BUTTON_GRIPS as opt}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+        </label>
+        <p class="section-description dev-note">
+          Which side of the mic button you drag it by. Hold the dots still for 2 seconds to hide
+          the button. On this device only.
+        </p>
+      </div>
+    {/if}
 
     <div class="setting-group">
       <span class="label-text">Try a command</span>

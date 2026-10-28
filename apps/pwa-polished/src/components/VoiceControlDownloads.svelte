@@ -4,6 +4,9 @@
    * the progress while it downloads, then Downloaded with a Delete. An update
    * on the release shows as Update.
    *
+   * Settings passes `hideInstalled`: there a download that's in, and up to
+   * date, is no row at all, so an empty list means everything is downloaded.
+   *
    * Looks like GetPacksCard, but these are model files kept by
    * lib/voice/voicePack.ts, not catalog packs, so nothing needs a restart.
    */
@@ -27,10 +30,19 @@
 
   /** Which of the two to list. The mic button's card lists Voice Control alone. */
   export let ids: VoiceDownloadId[] = VOICE_DOWNLOADS.map((d) => d.id);
-
-  $: shown = VOICE_DOWNLOADS.filter((d) => ids.includes(d.id));
+  /** Leave out what's downloaded and up to date, and the Delete with it. */
+  export let hideInstalled = false;
 
   let states: Partial<Record<string, VoiceDownloadState>> = {};
+
+  // Hidden until looked at too, so a downloaded row doesn't flash up first.
+  $: shown = VOICE_DOWNLOADS.filter(
+    (d) =>
+      ids.includes(d.id) &&
+      (!hideInstalled ||
+        $voiceInstallingId === d.id ||
+        (states[d.id] && (!states[d.id]!.installed || states[d.id]!.update))),
+  );
 
   async function check() {
     const results = await Promise.all(VOICE_DOWNLOADS.map((d) => voiceDownloadState(d.id).catch(() => null)));
@@ -53,6 +65,7 @@
   }
 </script>
 
+{#if shown.length}
 <ul class="vc-list">
   {#each shown as d (d.id)}
     {@const s = states[d.id]}
@@ -84,16 +97,18 @@
         {:else}
           <span class="vc-done"><CheckCircle size={18} weight="fill" /> Downloaded</span>
         {/if}
-        <button
-          type="button"
-          class="vc-delete"
-          disabled={$installBusy}
-          title={`Delete ${d.name}`}
-          aria-label={`Delete ${d.name}`}
-          on:click={() => remove(d)}
-        >
-          <Trash size={16} weight="bold" />
-        </button>
+        {#if !hideInstalled}
+          <button
+            type="button"
+            class="vc-delete"
+            disabled={$installBusy}
+            title={`Delete ${d.name}`}
+            aria-label={`Delete ${d.name}`}
+            on:click={() => remove(d)}
+          >
+            <Trash size={16} weight="bold" />
+          </button>
+        {/if}
       {:else if s?.available}
         <button
           type="button"
@@ -109,6 +124,7 @@
     </li>
   {/each}
 </ul>
+{/if}
 
 <style>
   .vc-list {

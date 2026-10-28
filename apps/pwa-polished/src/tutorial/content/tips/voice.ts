@@ -25,7 +25,9 @@ export const VOICE_TIPS: Tip[] = [
     target: '.fmic .grip',
     corner: 'top-left',
     title: 'Move the mic',
-    body: 'Drag it by these dots to wherever your thumb likes it. It stays there on this device.',
+    body:
+      'Drag it by these dots to wherever your thumb likes it. It stays there on this device. Hold them still ' +
+      'for 2 seconds to hide the button.',
   },
   {
     id: 'voice-search-mic',
@@ -44,8 +46,8 @@ export const VOICE_TIPS: Tip[] = [
     exact: true,
     title: 'Voice Control',
     body:
-      'Turn on the floating mic button, download Voice Control, try a command by typing it, and choose how ' +
-      'recordings in Notes sound: Speech, or Music for singing.',
+      'Turn on the floating mic button and choose its size and which side its drag dots are on, download ' +
+      'Voice Control, try a command, and choose how recordings in Notes sound: Speech, or Music for singing.',
   },
   {
     id: 'voice-record',

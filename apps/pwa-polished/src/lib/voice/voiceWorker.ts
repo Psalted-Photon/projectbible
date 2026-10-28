@@ -565,11 +565,6 @@ self.onmessage = async (e: MessageEvent<{ id: number; action: string; payload?: 
         break;
       }
 
-      case 'choose':
-        // Text in: Needle only.
-        result = choose(ready(), payload.text, payload.system);
-        break;
-
       case 'data':
         // A pack came in or went: the verses and people again.
         if (eng) await loadAppData();

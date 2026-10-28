@@ -9,17 +9,24 @@
    * that pill's spot, so the two don't land on each other. With no mic
    * plugged in it says so, and comes alive when one is.
    *
+   * Its size and which side the grip is on are set in Settings → Voice
+   * Control. Holding the grip still for 2 seconds offers to hide it.
+   *
    * Dark by design and carries `themed`, so it turns with the reader's theme
    * the way the Read Aloud pill does.
    */
   import { onDestroy } from 'svelte';
-  import { DotsSixVertical, Microphone, MicrophoneSlash } from 'phosphor-svelte';
+  import { DotsSix, DotsSixVertical, Microphone, MicrophoneSlash } from 'phosphor-svelte';
   import { portal } from '../lib/portal';
   import { floatDrag } from '../lib/floatDrag';
   import { getMicButtonPos, setMicButtonPos } from '../adapters/settings';
+  import { showNotice } from '../stores/noticeStore';
   import BrandSpinner from './BrandSpinner.svelte';
   import {
     micButtonOn,
+    setMicButtonOn,
+    micButtonSize,
+    micButtonGrip,
     voiceReady,
     talk,
     pressToTalk,
@@ -31,6 +38,10 @@
 
   /** How far above the bottom edge it starts, clear of the Read Aloud pill. */
   const START_ABOVE = 120;
+  /** Holding the grip this long without moving offers to hide the button. */
+  const HOLD_TO_HIDE_MS = 2000;
+  /** Each size, on top of Bar size. */
+  const SCALE = { small: 0.8, normal: 1, large: 1.3 };
 
   let el: HTMLDivElement | null = null;
   let button: HTMLButtonElement;
@@ -44,7 +55,36 @@
   $: if (visible && el) void drag.place(el);
   $: if (!visible) drag.teardown();
 
-  onDestroy(() => drag.teardown());
+  $: upright = $micButtonGrip === 'top' || $micButtonGrip === 'bottom';
+
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearHold() {
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = null;
+  }
+
+  /** Down on the grip: a drag, or held still long enough, the offer to hide. */
+  function pressGrip(e: PointerEvent) {
+    drag.start(e);
+    clearHold();
+    if (!$drag.dragging) return; // a control's press, not the grip's
+    holdTimer = setTimeout(() => {
+      holdTimer = null;
+      navigator.vibrate?.(15);
+      showNotice('Hide the mic button? Turn it back on in Settings → Voice Control.', 'info', {
+        action: { label: 'Hide', run: () => setMicButtonOn(false) },
+      });
+    }, HOLD_TO_HIDE_MS);
+  }
+
+  // Moved or let go before the 2 seconds: it was a drag or a touch.
+  $: if (holdTimer && (!$drag.dragging || $drag.moved)) clearHold();
+
+  onDestroy(() => {
+    clearHold();
+    drag.teardown();
+  });
 
   $: mine = $talk.source === 'float';
   $: held = mine && ($talk.phase === 'starting' || $talk.phase === 'listening');
@@ -76,14 +116,17 @@
   <div
     bind:this={el}
     use:portal
-    class="fmic themed no-edge-gesture"
+    class="fmic themed no-edge-gesture grip-{$micButtonGrip}"
     class:dragging={$drag.dragging}
-    style="left: {$drag.left}px; top: {$drag.top}px; visibility: {$drag.ready ? 'visible' : 'hidden'};"
+    style="left: {$drag.left}px; top: {$drag.top}px; visibility: {$drag.ready ? 'visible' : 'hidden'}; --mic-scale: {SCALE[$micButtonSize] ?? 1};"
     role="region"
     aria-label="Voice Control"
-    on:pointerdown={drag.start}
+    on:pointerdown={pressGrip}
+    on:contextmenu|preventDefault
   >
-    <span class="grip" aria-hidden="true"><DotsSixVertical size="1em" weight="bold" /></span>
+    <span class="grip" aria-hidden="true">
+      {#if upright}<DotsSix size="1em" weight="bold" />{:else}<DotsSixVertical size="1em" weight="bold" />{/if}
+    </span>
     {#if noMic}
       <span class="nomic"><MicrophoneSlash size="1.1em" weight="bold" /> No microphone found</span>
     {:else}
@@ -116,7 +159,7 @@
 
 <style>
   .fmic {
-    --s: var(--bar-scale, 1);
+    --s: calc(var(--bar-scale, 1) * var(--mic-scale, 1));
     position: fixed;
     /* Level with the Read Aloud pills: over popovers, under notices. */
     z-index: 10055;
@@ -141,6 +184,22 @@
     cursor: grabbing;
   }
 
+  /* The grip's side is a touch tighter, as the dots sit in their own padding. */
+  .fmic.grip-right {
+    flex-direction: row-reverse;
+    padding: calc(3px * var(--s)) calc(2px * var(--s)) calc(3px * var(--s)) calc(3px * var(--s));
+  }
+
+  .fmic.grip-top {
+    flex-direction: column;
+    padding: calc(2px * var(--s)) calc(3px * var(--s)) calc(3px * var(--s));
+  }
+
+  .fmic.grip-bottom {
+    flex-direction: column-reverse;
+    padding: calc(3px * var(--s)) calc(3px * var(--s)) calc(2px * var(--s));
+  }
+
   /* Wide enough for a thumb: the button takes the rest of the pill. */
   .grip {
     display: flex;
@@ -148,6 +207,11 @@
     padding: calc(10px * var(--s)) calc(5px * var(--s));
     font-size: 0.85em;
     opacity: 0.4;
+  }
+
+  .grip-top .grip,
+  .grip-bottom .grip {
+    padding: calc(5px * var(--s)) calc(10px * var(--s));
   }
 
   .mic {

@@ -1698,7 +1698,7 @@ Rules first, Needle second, because Needle's confidence doesn't separate right p
 
 ### 27.3 Hold to talk
 
-`holdToTalk.ts` is the one hold for every mic (sources `float`, `search`, `settings`), one take at a time. A press checks cached `voiceReady` so it never waits, in order: download, no mic, blocked, first ask; each opens its `VoiceCard`. The first ask's Continue calls `getUserMedia` from a tap, never mid-hold. `VoiceTake` (`mic.ts`) opens the mic on the press and closes it on the release; 30 s at most. Settings `micButton` and `micButtonPos` are per device.
+`holdToTalk.ts` is the one hold for every mic (sources `float`, `search`, `settings`), one take at a time. A press checks cached `voiceReady` so it never waits, in order: download, no mic, blocked, first ask; each opens its `VoiceCard`. The first ask's Continue calls `getUserMedia` from a tap, never mid-hold. `VoiceTake` (`mic.ts`) opens the mic on the press and closes it on the release; 30 s at most. Settings `micButton`, `micButtonPos`, `micButtonSize` (a scale on top of `--bar-scale`) and `micButtonGrip` (the grip's side, as the pill's flex direction) are per device. Holding the grip 2 s without passing the drag slop shows a notice with Hide.
 
 ### 27.4 Recording
 

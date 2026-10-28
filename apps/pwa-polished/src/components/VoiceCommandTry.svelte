@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
    * Try a voice command, in Settings → Voice Control: hold to talk (release to
-   * run, slide off to cancel), or type what you'd say. Either way the app
-   * really does it, and the lines below say what was heard and what was done.
+   * run, slide off to cancel). The app really does it, and the lines below say
+   * what was heard and what was done.
    *
    * The hold is the mic button's own (lib/voice/holdToTalk.ts), so it asks
    * for the mic the same way; this row shows the result in place of the
@@ -11,44 +11,23 @@
   import { onDestroy } from 'svelte';
   import { Microphone } from 'phosphor-svelte';
   import BrandSpinner from './BrandSpinner.svelte';
-  import { typedCommand, voiceGesture, voiceLoadStage, type VoiceOutcome } from '../lib/voice/voiceControl';
+  import { voiceLoadStage, type VoiceOutcome } from '../lib/voice/voiceControl';
   import { talk, voiceReady, pressToTalk, moveTalk, releaseTalk, cancelTalk } from '../lib/voice/holdToTalk';
 
-  let typed = '';
-  /** A typed command is running. */
-  let typing = false;
-  let typedStatus = '';
   let outcome: VoiceOutcome | null = null;
 
   $: mine = $talk.source === 'settings';
   $: holding = mine && ($talk.phase === 'starting' || $talk.phase === 'listening');
   $: ready = mine && $talk.phase === 'listening';
   $: off = holding && $talk.off;
-  $: busy = typing || (mine && $talk.phase === 'working');
-  // A spoken command's result shows here, like a typed one's.
+  $: busy = mine && $talk.phase === 'working';
+  // The result shows here, in place of the floating line.
   $: if (mine && $talk.phase === 'shown' && $talk.outcome) outcome = $talk.outcome;
-  $: status = typedStatus || (mine && $talk.phase !== 'idle' && $talk.phase !== 'working' ? $talk.status : '');
+  $: status = mine && $talk.phase !== 'idle' && $talk.phase !== 'working' ? $talk.status : '';
 
   onDestroy(() => {
     if (holding) cancelTalk();
   });
-
-  async function submit() {
-    const text = typed.trim();
-    if (!text || busy) return;
-    voiceGesture();
-    typing = true;
-    typedStatus = 'Working…';
-    try {
-      outcome = await typedCommand(text);
-      typedStatus = '';
-    } catch (error) {
-      outcome = null;
-      typedStatus = error instanceof Error ? error.message : String(error);
-    } finally {
-      typing = false;
-    }
-  }
 </script>
 
 {#if $voiceReady.installed === false}
@@ -72,23 +51,12 @@
         <Microphone size={18} weight="bold" />
         <span>{holding ? (ready ? 'Listening' : 'Wait…') : 'Hold to talk'}</span>
       </button>
-      <form class="vt-typed" on:submit|preventDefault={submit}>
-        <input
-          type="text"
-          bind:value={typed}
-          placeholder="Or type a command"
-          enterkeyhint="go"
-          disabled={busy}
-          aria-label="Type a command"
-        />
-        <button type="submit" disabled={busy || !typed.trim()}>Run</button>
-      </form>
     </div>
 
     {#if $voiceLoadStage || busy || status}
       <p class="vt-status">
         {#if $voiceLoadStage || busy}<BrandSpinner size={16} />{/if}
-        {$voiceLoadStage ?? (busy && !typing ? 'Working…' : status)}
+        {$voiceLoadStage ?? (busy ? 'Working…' : status)}
       </p>
     {/if}
 
@@ -151,43 +119,6 @@
   }
 
   .vt-hold:disabled {
-    opacity: 0.45;
-    cursor: default;
-  }
-
-  .vt-typed {
-    display: flex;
-    flex: 1;
-    min-width: 200px;
-    gap: 6px;
-  }
-
-  .vt-typed input {
-    flex: 1;
-    min-width: 0;
-    min-height: 40px;
-    padding: 0 10px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    color: inherit;
-    font: inherit;
-    font-size: 0.88rem;
-  }
-
-  .vt-typed button {
-    min-height: 40px;
-    padding: 0 14px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    background: transparent;
-    color: inherit;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .vt-typed button:disabled {
     opacity: 0.45;
     cursor: default;
   }
