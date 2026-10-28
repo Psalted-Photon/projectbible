@@ -382,6 +382,41 @@ export function tidy(text: string): string {
     });
 }
 
+/** Books whose names are everyday words, capitalized in a transcript only when the words around them say so. */
+const EVERYDAY_BOOKS = new Set(['mark', 'job', 'acts', 'numbers', 'judges', 'kings', 'chronicles', 'lamentations', 'revelation', 'proverbs']);
+
+/** Books no one is named after and no everyday word matches, so a chapter said alone after one is a reference. */
+const CHAPTER_ALONE = new Set(['genesis', 'exodus', 'leviticus', 'deuteronomy', 'psalms', 'ecclesiastes', 'romans',
+  'corinthians', 'galatians', 'ephesians', 'philippians', 'colossians', 'thessalonians', 'hebrews', 'lamentations']);
+
+/**
+ * The references in a transcript, put the way the notes editor links them:
+ * "Romans, six, verse four" becomes "Romans 6:4" and "first Corinthians
+ * thirteen" "1 Corinthians 13". Only the references; none of the command
+ * rules in tidy(). A chapter said alone in words after a person's name or an
+ * everyday word ("Daniel one day", "mark two things") stays as it was said,
+ * unless "chapter" was said.
+ */
+export function tidyRefs(text: string): string {
+  let t = text
+    .replace(/\b(verses?|chapters?)\s+(?:no\.?|number)\s*/gi, '$1 ')
+    .replace(SPOKEN_REF_RE, (m, ord: string | undefined, name: string, tail: string) => {
+      const num = ord ? ORDINALS[ord.toLowerCase()] || ord : undefined;
+      const nums = tail.replace(/(?:[\s,.:-]+(?:and|to|through|thru|verses?|chapter|colon))+$/i, '');
+      const ref = readRefTail(num, name, nums);
+      if (!ref) return m;
+      if (!ref.includes(':') && !num && !/chapter|\d/i.test(nums) && !CHAPTER_ALONE.has(baseName(name))) return m;
+      return `${num ? num + ' ' : ''}${name} ${ref}${tail.slice(nums.length)}`;
+    })
+    .replace(PSALM_HUNDREDS_RE, (_m, lead: string, h: string, rest: string) => `${lead}${100 * wordsToNumber(h) + wordsToNumber(rest)}`);
+  t = t.replace(/\b(first|1st|second|2nd|third|3rd)[\s,]+(?=(samuel|kings|chronicles|corinthians|thessalonians|timothy|peter|john)\s+\d)/gi, (_m, o: string) => ORDINALS[o.toLowerCase()] + ' ');
+  return t;
+}
+
+/** The 66 books as they're written, for capitals in transcripts, with which ones are everyday words too. */
+export const BOOK_TITLES = BOOKS.map((b) => b.replace(/^\d /, '')).filter((b, i, all) => all.indexOf(b) === i);
+export const isEverydayBook = (name: string) => EVERYDAY_BOOKS.has(name.toLowerCase());
+
 /**
  * People's names that are everyday words too ("so", "on", "lot", "mark") or
  * titles ("king", "lord"), found by how often the KJV, WEB, BSB and NET write

@@ -22,6 +22,11 @@ export interface TranscriptBlock {
   text: string;
   /** Carries on the last block written. */
   joins?: boolean;
+  /**
+   * An item's number, as said ("the second point"). A list that starts
+   * after a paragraph starts at it, so the numbers carry on.
+   */
+  n?: number;
 }
 
 const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
@@ -58,6 +63,7 @@ export function appendBlocksToHtml(
       let list = body.lastElementChild as HTMLElement | null;
       if (!list || list.tagName !== 'OL' || !last || last.kind !== 'li') {
         list = doc.createElement('ol');
+        if (b.n && b.n > 1) list.setAttribute('start', String(b.n));
         body.append(list);
       }
       const li = doc.createElement('li');

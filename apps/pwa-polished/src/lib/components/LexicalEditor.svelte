@@ -9,7 +9,7 @@
     $expandRef as expandRefNode,
     $collapseRef as collapseRefNode,
   } from '../lexical/bibleRefTransforms';
-  import { CaretUp, Palette } from 'phosphor-svelte';
+  import { CaretUp, Palette, ListNumbers } from 'phosphor-svelte';
   import EditorThemePanel from './EditorThemePanel.svelte';
   import { editorThemeVars } from '../editorTheme';
   import { isTextEntry } from '../isTextEntry';
@@ -142,8 +142,13 @@
   let lexGetSelection: any = null;
   let lexIsRangeSelection: any = null;
   let lexGetNodeByKey: any = null;
-  /** Lexical itself, once loaded, for appendBlocks. */
+  /** Lexical itself and its list and heading parts, once loaded, for appendBlocks and the toolbar. */
   let lex: typeof import('lexical') | null = null;
+  let lexList: typeof import('@lexical/list') | null = null;
+  let lexRich: typeof import('@lexical/rich-text') | null = null;
+  let lexSelection: typeof import('@lexical/selection') | null = null;
+  /** What the caret's block is, for the heading and list buttons. */
+  let activeBlock: 'p' | 'h' | 'ol' = 'p';
 
   /**
    * A transcript's next piece, added at the end without touching the caret
@@ -153,8 +158,10 @@
    * ready.
    */
   export function appendBlocks(blocks: TranscriptBlock[], tail: TranscriptTail | null): TranscriptTail | null | undefined {
-    if (!editor || !lex) return undefined;
+    if (!editor || !lex || !lexList || !lexRich) return undefined;
     const L = lex;
+    const List = lexList;
+    const Rich = lexRich;
     const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
     let last = tail;
     editor.update(() => {
@@ -163,12 +170,26 @@
       for (const b of blocks) {
         if (!b.text.trim()) continue;
         const end = root.getLastChild();
-        if (b.joins && last && last.kind === b.kind && L.$isParagraphNode(end) && squash(end.getTextContent()) === squash(last.text)) {
-          end.append(L.$createTextNode(' ' + b.text));
+        // The block this one would carry on: the last paragraph, or the last item of a closing list.
+        const prev =
+          b.kind === 'p' && L.$isParagraphNode(end) ? end
+          : b.kind === 'li' && List.$isListNode(end) ? end.getLastChild()
+          : null;
+        if (b.joins && last && last.kind === b.kind && L.$isElementNode(prev) && squash(prev.getTextContent()) === squash(last.text)) {
+          prev.append(L.$createTextNode(' ' + b.text));
           last = { kind: b.kind, text: squash(last.text + ' ' + b.text) };
           continue;
         }
-        root.append(L.$createParagraphNode().append(L.$createTextNode(b.text)));
+        const text = L.$createTextNode(b.text);
+        if (b.kind === 'h') {
+          root.append(Rich.$createHeadingNode('h2').append(text));
+        } else if (b.kind === 'li') {
+          const item = List.$createListItemNode().append(text);
+          if (List.$isListNode(end) && end.getListType() === 'number' && last?.kind === 'li') end.append(item);
+          else root.append(List.$createListNode('number', b.n && b.n > 1 ? b.n : 1).append(item));
+        } else {
+          root.append(L.$createParagraphNode().append(text));
+        }
         last = { kind: b.kind, text: squash(b.text) };
       }
     });
@@ -255,13 +276,18 @@
         richTextModule,
         historyModule,
         selectionModule,
+        listModule,
       ] = await Promise.all([
         import('lexical'),
         import('@lexical/html'),
         import('@lexical/rich-text'),
         import('@lexical/history'),
         import('@lexical/selection'),
+        import('@lexical/list'),
       ]);
+      lexList = listModule;
+      lexRich = richTextModule;
+      lexSelection = selectionModule;
 
       const {
         createEditor,
@@ -289,9 +315,13 @@
         namespace: 'JournalEditor',
         // BibleRefNode makes a typed reference a real thing the editor knows
         // about, so it survives editing and round-trips through save/reload.
-        nodes: [BibleRefNode],
+        // Headings and numbered lists come from the toolbar and from
+        // transcripts' spoken cues (lib/voice/transcriptFormat.ts).
+        nodes: [BibleRefNode, richTextModule.HeadingNode, listModule.ListNode, listModule.ListItemNode],
         theme: {
           paragraph: 'editor-paragraph',
+          heading: { h1: 'editor-heading', h2: 'editor-heading', h3: 'editor-heading' },
+          list: { ol: 'editor-ol', ul: 'editor-ul', listitem: 'editor-li' },
           text: {
             bold: 'editor-text-bold',
             italic: 'editor-text-italic',
@@ -310,6 +340,7 @@
       editor.setRootElement(editorInput);
 
       cleanupFns.push(registerRichText(editor));
+      cleanupFns.push(listModule.registerList(editor));
       cleanupFns.push(registerHistory(editor, createEmptyHistoryState(), 300));
       cleanupFns.push(registerBibleRefTransforms(editor));
 
@@ -391,6 +422,7 @@
                 const element = anchor.getKey() === 'root' ? anchor : anchor.getTopLevelElementOrThrow();
                 const fmt = (element as any).getFormatType?.();
                 activeAlign = fmt || 'left';
+                activeBlock = richTextModule.$isHeadingNode(element) ? 'h' : listModule.$isListNode(element) ? 'ol' : 'p';
               } catch {}
 
               // Font size
@@ -450,6 +482,28 @@
 
   function undo() { editor?.dispatchCommand(editor.__lexCmd.UNDO_COMMAND, undefined); editor?.focus(); }
   function redo() { editor?.dispatchCommand(editor.__lexCmd.REDO_COMMAND, undefined); editor?.focus(); }
+
+  /** The caret's block as a heading, or back to a paragraph. */
+  function toggleHeading() {
+    if (!editor || !lex || !lexRich || !lexSelection) return;
+    const L = lex;
+    const Rich = lexRich;
+    const Sel = lexSelection;
+    const toParagraph = activeBlock === 'h';
+    editor.update(() => {
+      const sel = L.$getSelection();
+      if (!L.$isRangeSelection(sel)) return;
+      Sel.$setBlocksType(sel, () => (toParagraph ? L.$createParagraphNode() : Rich.$createHeadingNode('h2')));
+    });
+    editor.focus();
+  }
+
+  /** The caret's blocks as a numbered list, or out of one. */
+  function toggleNumbered() {
+    if (!editor || !lexList) return;
+    editor.dispatchCommand(activeBlock === 'ol' ? lexList.REMOVE_LIST_COMMAND : lexList.INSERT_ORDERED_LIST_COMMAND, undefined);
+    editor.focus();
+  }
 
   function alignBlock(type: string) {
     if (!editor) return;
@@ -562,6 +616,26 @@
           <rect x="3" y="10" width="11" height="2" rx="1" fill="currentColor"/>
         </svg>
       </button>
+
+      <span class="sep"></span>
+
+      <!-- Heading and numbered list -->
+      <button
+        on:mousedown|preventDefault
+        on:click={toggleHeading}
+        title="Heading"
+        aria-label="Heading"
+        type="button"
+        class:active={activeBlock === 'h'}
+      ><strong>H</strong></button>
+      <button
+        on:mousedown|preventDefault
+        on:click={toggleNumbered}
+        title="Numbered list"
+        aria-label="Numbered list"
+        type="button"
+        class:active={activeBlock === 'ol'}
+      ><ListNumbers size={14} weight="bold" /></button>
 
       <span class="sep"></span>
 
@@ -845,6 +919,25 @@
   }
   :global(.editor-paragraph:last-child) {
     margin-bottom: 0;
+  }
+
+  /* Headings and numbered lists, from the toolbar or a transcript's spoken cues. */
+  :global(.editor-heading) {
+    margin: 14px 0 6px;
+    font-size: 1.3em;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  :global(.editor-heading:first-child) {
+    margin-top: 0;
+  }
+  :global(.editor-ol),
+  :global(.editor-ul) {
+    margin: 0 0 8px 0;
+    padding-left: 1.6em;
+  }
+  :global(.editor-li) {
+    margin: 0 0 4px 0;
   }
 
   /* Inline text */

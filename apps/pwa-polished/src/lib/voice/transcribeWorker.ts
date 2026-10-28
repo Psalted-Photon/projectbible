@@ -3,7 +3,8 @@
  *
  * The voice detector finds the speech and cuts it into pieces of 20–30
  * seconds at pauses, so no word is split. Each piece goes through Whistle,
- * then the punctuation add-on, and is sent to the page as soon as it's done
+ * then the punctuation add-on, then the note's formatting
+ * (transcriptFormat.ts), and is sent to the page as soon as it's done
  * (transcribe.ts adds it to the note). The recording is read a little at a
  * time (audioStream.ts), so an hour of it never sits in memory whole.
  *
@@ -26,6 +27,7 @@ import { Punctuator, SileroVad, planChunks, VAD_FRAME } from './transcribeModels
 import { streamPcm, slicePcm, NeedsPageDecode, type PcmPart } from './audioStream';
 import { BOOK_KEYWORDS } from './rules';
 import type { TranscriptBlock } from './transcriptSink';
+import { formatPiece, freshFormat } from './transcriptFormat';
 
 /** One piece of the recording, done. */
 export interface TranscriptPiece {
@@ -162,6 +164,8 @@ async function transcribe(
   let startFrame = scored;
   let doneSec = fromSec;
   let lastPost = 0;
+  // Headings and numbered items waiting for their words carry over between pieces.
+  const format = freshFormat();
 
   const score = async () => {
     const upTo = Math.floor(win.end / VAD_FRAME);
@@ -188,7 +192,7 @@ async function transcribe(
         start: piece.start / RATE,
         end: piece.end / RATE,
         gapBefore: piece.gapBefore,
-        blocks: text ? [{ kind: 'p', text, joins: piece.gapBefore < PARA_SEC }] : [],
+        blocks: text ? formatPiece(text, piece.gapBefore < PARA_SEC, format) : [],
         doneSec,
       };
       self.postMessage({ id, piece: out });
