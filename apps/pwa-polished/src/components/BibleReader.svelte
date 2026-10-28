@@ -103,6 +103,7 @@
   } from "../lib/otQuotesIndex";
   import { OT_CARD_GAP, OT_CARD_MAX_HEIGHT } from "../lib/otCardMetrics";
   import type { NoteKind } from "../lib/verseRendering";
+  import { netBracketNote } from "../lib/textBrackets";
   import { userProfileStore } from "../stores/userProfileStore";
   import { profileModalStore } from "../stores/profileModalStore";
   import { showNotice } from "../stores/noticeStore";
@@ -522,7 +523,7 @@
         ...c,
         verses: c.verses.map((v) => ({
           ...v,
-          html: renderVerseHtml(v.text, rlMap.get(v.verse)),
+          html: renderVerseHtml(v.text, rlMap.get(v.verse), currentTranslation),
         })),
       };
     });
@@ -3083,7 +3084,7 @@
         return {
           verse: v.verse,
           text: cleanText,
-          html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
+          html: renderVerseHtml(cleanText, rlMap.get(v.verse), translation),
           heading: finalHeading,
           headingLevel: finalHeading ? (hlEntry?.level ?? 1) : null,
           paraStart,
@@ -3937,7 +3938,7 @@
           return {
             verse: v.verse,
             text: cleanText,
-            html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
+            html: renderVerseHtml(cleanText, rlMap.get(v.verse), currentTranslation),
             interlinearHtml: nextMorph ? buildInterlinearHtml(nextMorph.get(v.verse)) : undefined,
             englishHtml: nextEnglish?.get(v.verse),
             heading: finalHeading,
@@ -4066,7 +4067,7 @@
           return {
             verse: v.verse,
             text: cleanText,
-            html: renderVerseHtml(cleanText, rlMap.get(v.verse)),
+            html: renderVerseHtml(cleanText, rlMap.get(v.verse), currentTranslation),
             interlinearHtml: prevMorph ? buildInterlinearHtml(prevMorph.get(v.verse)) : undefined,
             englishHtml: prevEnglish?.get(v.verse),
             heading: finalHeading,
@@ -4133,6 +4134,7 @@
     return !!(
       target.closest(".inline-note") ||
       target.closest(".plural-marker") ||
+      target.closest(".text-bracket") ||
       target.closest(".footnote-card") ||
       target.closest(".navigation-bar") ||
       target.closest("button") ||
@@ -4704,6 +4706,7 @@
     if (
       target.closest(".inline-note") ||
       target.closest(".plural-marker") ||
+      target.closest(".text-bracket") ||
       target.closest(".toast") ||
       target.closest(".navigation-bar") ||
       target.closest("button")
@@ -6811,6 +6814,51 @@
         return;
       }
 
+      // NET's brackets open it too, saying what that pair marks. The partner is
+      // found on the page, so a pair spanning two verses (John 9:38-39) reads
+      // as one; what it encloses tells a supplied number or a note of the
+      // translators' own from words they doubt.
+      const bracketEl = target.closest(".text-bracket") as HTMLElement | null;
+      if (bracketEl && readerElement) {
+        e.preventDefault();
+        const mark = bracketEl.textContent || "[";
+        const opens = mark.startsWith("[");
+        const all = Array.from(readerElement.querySelectorAll<HTMLElement>(".text-bracket"));
+        const at = all.indexOf(bracketEl);
+        const partner = opens
+          ? all.slice(at + 1).find((el) => el.textContent?.startsWith("]"))
+          : all.slice(0, at).reverse().find((el) => el.textContent?.startsWith("["));
+        let enclosed: string | null = null;
+        if (partner) {
+          const range = document.createRange();
+          range.setStartAfter(opens ? bracketEl : partner);
+          range.setEndBefore(opens ? partner : bracketEl);
+          enclosed = range.toString();
+        }
+        const { label, body } = netBracketNote(mark, enclosed);
+        const section = bracketEl.closest("[data-book][data-chapter]") as HTMLElement | null;
+        const verseEl = bracketEl.closest(".verse[data-verse]") as HTMLElement | null;
+        const box = bracketEl.getBoundingClientRect();
+        const book = section?.dataset.book || currentBook;
+        const chapter = Number(section?.dataset.chapter) || currentChapter;
+        const verse = Number(verseEl?.dataset.verse) || null;
+        footnoteHit = {
+          x: box.left + box.width / 2,
+          y: box.top,
+          body,
+          noteRef: verse ? `${chapter}:${verse}` : "",
+          kind: "footnote",
+          kindLabel: label,
+          index: 1,
+          book,
+          chapter,
+          verse,
+          el: bracketEl,
+        };
+        closeFootnoteRef();
+        return;
+      }
+
       const noteEl = target.closest(".inline-note") as HTMLElement | null;
       if (!noteEl) return;
 
@@ -6845,7 +6893,7 @@
     const handleFootnoteOutside = (e: PointerEvent) => {
       if (!footnoteHit) return;
       const t = e.target as HTMLElement | null;
-      if (t?.closest?.(".footnote-card") || t?.closest?.(".inline-note") || t?.closest?.(".plural-marker")) return;
+      if (t?.closest?.(".footnote-card") || t?.closest?.(".inline-note") || t?.closest?.(".plural-marker") || t?.closest?.(".text-bracket")) return;
       closeFootnote();
     };
     document.addEventListener("pointerdown", handleFootnoteOutside, true);
@@ -7390,7 +7438,7 @@
                 {#each chapterData.verses.slice(seg.start, seg.end) as { verse, text, html, interlinearHtml, englishHtml, heading, headingLevel, paraStart, poetryLevel, stanzaBreak }, segIdx (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}-${verse}`)}
                 {@const verseIdx = seg.start + segIdx}
                 {@const hCtxsForVerse = chHarmCtxs.filter((c) => c.passage.endChapter === chapterData.chapter && (c.passage.endVerse !== null ? verse === c.passage.endVerse : verseIdx === chapterData.verses.length - 1))}
-                {@const verseShown = (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text))}
+                {@const verseShown = (isInterlinearActive && interlinearHtml) ? interlinearHtml : (html || renderVerseHtml(text, undefined, currentTranslation))}
                 {#if heading && showSectionHeadings && !(seg.run && segIdx === 0)}
                   <div class="section-heading section-heading--s{headingLevel || 1}">{heading}</div>
                 {/if}
@@ -8558,6 +8606,19 @@
     font-size: 0.65em;
     margin-left: 1px;
     cursor: pointer;
+  }
+
+  /* NET's brackets open the footnote card too. They keep the text's own look --
+     nothing the app adds to verse text may read as the reader's own marking --
+     and the overlay only widens a one-glyph target for a finger. */
+  :global(.text-bracket) {
+    position: relative;
+    cursor: pointer;
+  }
+  :global(.text-bracket::after) {
+    content: "";
+    position: absolute;
+    inset: -0.3em -0.35em;
   }
 
   /* Increase font size for mobile devices */

@@ -110,8 +110,21 @@ function isNoteStart(source: string, idx: number): boolean {
   return prev === ' ' || prev === '\n' || prev === '\t';
 }
 
-function renderTextWithInlineNotes(text: string): { html: string; noteCount: number } {
+/**
+ * NET's brackets mean something -- words its translators doubt, a number they
+ * supplied, a note of their own -- so the reader wraps them for a tap to
+ * explain. The bracket itself stays in the text, which keeps highlight, glow
+ * and red-letter offsets where they were. Other packs' brackets are left
+ * alone: the LXX's are explained by its own notes.
+ */
+function wrapTextBrackets(html: string): string {
+  return html.replace(/\[\[|\]\]|[[\]]/g, (b) => `<span class="text-bracket">${b}</span>`);
+}
+
+function renderTextWithInlineNotes(text: string, brackets = false): { html: string; noteCount: number } {
   const source = text ?? '';
+  // Only verse text goes through here -- a note's own brackets stay plain.
+  const verseText = (t: string) => (brackets ? wrapTextBrackets(escapeHtml(t)) : escapeHtml(t));
   let out = '';
   let i = 0;
   let noteIndex = 0;
@@ -119,12 +132,12 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
   while (i < source.length) {
     const plusPos = source.indexOf('+', i);
     if (plusPos === -1) {
-      out += escapeHtml(source.slice(i));
+      out += verseText(source.slice(i));
       break;
     }
 
     if (!isNoteStart(source, plusPos)) {
-      out += escapeHtml(source.slice(i, plusPos + 1));
+      out += verseText(source.slice(i, plusPos + 1));
       i = plusPos + 1;
       continue;
     }
@@ -138,13 +151,13 @@ function renderTextWithInlineNotes(text: string): { html: string; noteCount: num
       // Unterminated: this pack predates the sentinel, so there is no honest way
       // to know where the note stops. Show it verbatim rather than guess — a
       // guess here used to eat the rest of the verse.
-      out += escapeHtml(source.slice(i, plusPos + 1));
+      out += verseText(source.slice(i, plusPos + 1));
       i = plusPos + 1;
       continue;
     }
 
     // Emit text before note
-    out += escapeHtml(source.slice(i, plusPos));
+    out += verseText(source.slice(i, plusPos));
     const kind = noteKindFor(source[noteEnd]);
 
     // Structural markers never belong in a note's data attribute — leaving one
@@ -341,7 +354,7 @@ function nestSentinels(html: string): string {
   return out;
 }
 
-export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]): string {
+export function renderVerseHtml(text: string, spans?: { s: number; e: number }[], translationId?: string): string {
   const cleaned = stripHtmlTags(text);
 
   // ⌃ (plural "you") becomes markup at the very end. Swap it for a marker now,
@@ -381,7 +394,7 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
     }
   }
 
-  const { html } = renderTextWithInlineNotes(processed);
+  const { html } = renderTextWithInlineNotes(processed, translationId === 'net');
 
   return nestSentinels(html)
     // Poetic lines. A leading marker opens the verse rather than breaking it,
