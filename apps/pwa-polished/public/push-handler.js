@@ -95,10 +95,32 @@ async function recordWindowKind(clientId, isApp) {
   }
 }
 
+/*
+ * The old address. Chrome keeps each address's service worker, so a phone that
+ * turned reminders on at hexapla.app still gets them through this file running
+ * there. A tap opens the same link at irisbible.com, which Android hands to the
+ * installed app, rather than a Chrome tab on the old address. Kept in step with
+ * lib/move/address.ts, which this plain-JS file cannot import.
+ */
+const OLD_HOST = 'hexapla.app';
+const NEW_ORIGIN = 'https://irisbible.com';
+
+function onOldAddress() {
+  const host = self.location.hostname;
+  return host === OLD_HOST || host.endsWith('.' + OLD_HOST);
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const target = (event.notification.data && event.notification.data.url) || '/?alarm=1';
+
+  if (onOldAddress()) {
+    const link = new URL(target, self.location.origin);
+    event.waitUntil(self.clients.openWindow(NEW_ORIGIN + link.pathname + link.search + link.hash));
+    return;
+  }
+
   // Tell the running app what was tapped: a devotional reminder opens its
   // reading, an alarm shows the start screen.
   const isDevotional = new URL(target, self.location.origin).searchParams.has('devo');

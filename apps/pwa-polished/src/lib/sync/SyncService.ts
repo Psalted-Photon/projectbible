@@ -19,7 +19,9 @@ import { realtimeService } from './RealtimeService';
 import { pullSettings } from './settingsSync';
 import { sharedNotebookStore } from '../../adapters/SharedNotebookStore';
 import { pullAlarmIfUnset } from '../alarm/alarmSync';
-import { resyncReminderTimezone } from '../devotionals/reminderSync';
+import { refreshPushSubscription } from '../alarm/pushSubscription';
+import { remindersOn, resyncReminderTimezone } from '../devotionals/reminderSync';
+import { getWakeAlarmSettings } from '../../adapters/settings';
 import type { SyncState, SyncTable } from './types';
 
 interface SyncStore {
@@ -400,6 +402,9 @@ class SyncService {
           await pullAlarmIfUnset();
           // Keep devotional reminders on local time after travel or a timezone change.
           await resyncReminderTimezone();
+          // Keep this device signed up for them at this address. Not awaited:
+          // without a service worker (dev) it waits out a 10 s timeout.
+          if (getWakeAlarmSettings().enabled || remindersOn()) void refreshPushSubscription();
         } else {
           console.debug('[SyncService] Skipping pull — synced recently');
         }

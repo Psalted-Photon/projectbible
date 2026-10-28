@@ -32,6 +32,12 @@ function effective(settings: DevotionalSettings) {
   };
 }
 
+/** Whether a morning or evening reminder is on for this device. */
+export function remindersOn(settings: DevotionalSettings = getDevotionalSettings()): boolean {
+  const e = effective(settings);
+  return e.morning_enabled || e.evening_enabled;
+}
+
 export async function pushReminders(settings: DevotionalSettings = getDevotionalSettings()): Promise<ReminderPushResult> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return { ok: false, reason: 'offline', message: 'No internet — saved on this device, but the reminder is not set up yet.' };

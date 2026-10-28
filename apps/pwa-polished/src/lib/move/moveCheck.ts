@@ -94,8 +94,12 @@ export async function checkMove(): Promise<void> {
   }
   if (!onOldAddress()) return;
 
-  // A tap on an alarm or reminder notification needs the app, not a detour.
-  if (params.has('alarm') || params.has('devo')) return;
+  // A tap on an alarm or reminder notification opens at the new address. Only
+  // a worker that has not updated yet still sends one here; offline, it stays.
+  if (params.has('alarm') || params.has('devo')) {
+    if (navigator.onLine) window.location.replace(newAddressFor());
+    return;
+  }
   if (snoozed()) return;
 
   // Forwarding needs the new site to be reachable; offline, stay and show the screen.

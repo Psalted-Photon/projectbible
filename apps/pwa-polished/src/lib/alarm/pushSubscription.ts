@@ -13,6 +13,7 @@
 
 import { supabase } from '../supabase/client';
 import { isInstalledApp, isIOS } from '../device';
+import { onOldAddress } from '../move/address';
 
 const VAPID_PUBLIC_KEY: string = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '';
 
@@ -175,6 +176,9 @@ export async function ensurePushSubscription(): Promise<PushSetupResult> {
         p256dh: json.keys?.p256dh ?? arrayBufferToBase64Url(subscription.getKey('p256dh')),
         auth: json.keys?.auth ?? arrayBufferToBase64Url(subscription.getKey('auth')),
         user_agent: navigator.userAgent.slice(0, 300),
+        // Each address gets its own sign-up, so after a move this tells the
+        // leftover one from the old address apart from this one.
+        origin: window.location.origin,
         expired_at: null,
         updated_at: new Date().toISOString(),
       },
@@ -186,6 +190,23 @@ export async function ensurePushSubscription(): Promise<PushSetupResult> {
   }
 
   return { ok: true, endpoint: subscription.endpoint };
+}
+
+/**
+ * On a signed-in start, with the alarm or a reminder on: sign this device up
+ * again without asking anything. Only where notifications are already allowed,
+ * so it never prompts.
+ *
+ * This is what moves a phone over after the address change. A phone that
+ * turned reminders on at hexapla.app is signed up there, not here, and until
+ * this runs its reminders keep arriving through the old address. Skipped on
+ * the old address, so a retired sign-up there is never brought back.
+ */
+export async function refreshPushSubscription(): Promise<void> {
+  if (onOldAddress()) return;
+  if (!pushSupport().supported || Notification.permission !== 'granted') return;
+  const result = await ensurePushSubscription();
+  if (!result.ok) console.warn('[Push] could not refresh this device:', result.message);
 }
 
 /**
