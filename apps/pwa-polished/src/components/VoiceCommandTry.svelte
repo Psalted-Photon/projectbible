@@ -1,157 +1,73 @@
 <script lang="ts">
   /**
-   * Try a voice command, here in Dev Options until the floating mic button
-   * comes: hold to talk (release to run, slide off to cancel), or type what
-   * you'd say. Either way the app really does it, and the lines below say
-   * what was heard and what was done.
+   * Try a voice command, in Settings → Voice Control: hold to talk (release to
+   * run, slide off to cancel), or type what you'd say. Either way the app
+   * really does it, and the lines below say what was heard and what was done.
+   *
+   * The hold is the mic button's own (lib/voice/holdToTalk.ts), so it asks
+   * for the mic the same way; this row shows the result in place of the
+   * floating line.
    */
-  import { onMount } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { Microphone } from 'phosphor-svelte';
   import BrandSpinner from './BrandSpinner.svelte';
-  import { VOICE_DOWNLOADS_EVENT, voiceDownloadState } from '../lib/voice/voicePack';
-  import { VoiceTake, micTrouble } from '../lib/voice/mic';
-  import {
-    hearCommand,
-    typedCommand,
-    voiceGesture,
-    voiceLoadStage,
-    type VoiceOutcome,
-  } from '../lib/voice/voiceControl';
+  import { typedCommand, voiceGesture, voiceLoadStage, type VoiceOutcome } from '../lib/voice/voiceControl';
+  import { talk, voiceReady, pressToTalk, moveTalk, releaseTalk, cancelTalk } from '../lib/voice/holdToTalk';
 
-  let installed: boolean | null = null;
   let typed = '';
-  let busy = false;
-  let holding = false;
-  let off = false;
-  /** The mic is open and hearing; until then, speaking would be lost. */
-  let ready = false;
-  let level = 0;
-  let status = '';
+  /** A typed command is running. */
+  let typing = false;
+  let typedStatus = '';
   let outcome: VoiceOutcome | null = null;
-  let take: VoiceTake | null = null;
-  let button: HTMLButtonElement;
 
-  async function check() {
-    installed = (await voiceDownloadState('voice-control').catch(() => null))?.installed ?? false;
-  }
+  $: mine = $talk.source === 'settings';
+  $: holding = mine && ($talk.phase === 'starting' || $talk.phase === 'listening');
+  $: ready = mine && $talk.phase === 'listening';
+  $: off = holding && $talk.off;
+  $: busy = typing || (mine && $talk.phase === 'working');
+  // A spoken command's result shows here, like a typed one's.
+  $: if (mine && $talk.phase === 'shown' && $talk.outcome) outcome = $talk.outcome;
+  $: status = typedStatus || (mine && $talk.phase !== 'idle' && $talk.phase !== 'working' ? $talk.status : '');
 
-  onMount(() => {
-    void check();
-    const again = () => void check();
-    window.addEventListener(VOICE_DOWNLOADS_EVENT, again);
-    return () => {
-      window.removeEventListener(VOICE_DOWNLOADS_EVENT, again);
-      take?.cancel();
-    };
+  onDestroy(() => {
+    if (holding) cancelTalk();
   });
 
-  async function run(go: () => Promise<VoiceOutcome>) {
-    busy = true;
-    status = 'Working…';
-    try {
-      outcome = await go();
-      status = '';
-    } catch (error) {
-      outcome = null;
-      status = error instanceof Error ? error.message : String(error);
-    } finally {
-      busy = false;
-    }
-  }
-
-  function submit() {
+  async function submit() {
     const text = typed.trim();
     if (!text || busy) return;
     voiceGesture();
-    void run(() => typedCommand(text));
-  }
-
-  async function press(e: PointerEvent) {
-    if (busy || holding || e.button > 0) return;
-    e.preventDefault();
+    typing = true;
+    typedStatus = 'Working…';
     try {
-      button.setPointerCapture(e.pointerId);
-    } catch {
-      // Fine without it.
-    }
-    voiceGesture();
-    holding = true;
-    off = false;
-    ready = false;
-    status = 'Starting the mic…';
-    const t = new VoiceTake();
-    take = t;
-    try {
-      await t.start({ onLevel: (l) => (level = l), onFull: () => void release() });
-      if (take !== t) return;
-      ready = true;
-      if (!off) status = 'Listening… slide off to cancel';
+      outcome = await typedCommand(text);
+      typedStatus = '';
     } catch (error) {
-      if (take && take !== t) return;
-      holding = false;
-      take = null;
-      status = micTrouble(error);
+      outcome = null;
+      typedStatus = error instanceof Error ? error.message : String(error);
+    } finally {
+      typing = false;
     }
-  }
-
-  function move(e: PointerEvent) {
-    if (!holding) return;
-    const r = button.getBoundingClientRect();
-    const m = 28;
-    const out = e.clientX < r.left - m || e.clientX > r.right + m || e.clientY < r.top - m || e.clientY > r.bottom + m;
-    if (out !== off) {
-      off = out;
-      status = off ? 'Let go to cancel' : ready ? 'Listening… slide off to cancel' : 'Starting the mic…';
-    }
-  }
-
-  async function release() {
-    if (!holding || !take) return;
-    const t = take;
-    take = null;
-    holding = false;
-    level = 0;
-    if (off) {
-      t.cancel();
-      status = 'Cancelled.';
-      return;
-    }
-    const pcm = await t.finish();
-    if (!pcm) {
-      status = 'Too short. Hold the button the whole time you speak.';
-      return;
-    }
-    await run(() => hearCommand(pcm));
-  }
-
-  function cancel() {
-    if (!holding) return;
-    take?.cancel();
-    take = null;
-    holding = false;
-    level = 0;
-    status = 'Cancelled.';
   }
 </script>
 
-{#if installed === false}
+{#if $voiceReady.installed === false}
   <p class="vt-note">Download Voice Control above to try a command.</p>
-{:else if installed}
+{:else if $voiceReady.installed}
   <div class="vt">
     <div class="vt-row">
       <button
         type="button"
         class="vt-hold"
-        class:live={holding && ready && !off}
-        class:cancel={holding && off}
+        class:live={ready && !off}
+        class:cancel={off}
         disabled={busy}
-        bind:this={button}
-        on:pointerdown={press}
-        on:pointermove={move}
-        on:pointerup={release}
-        on:pointercancel={cancel}
+        on:pointerdown={(e) => pressToTalk(e, 'settings')}
+        on:pointermove={moveTalk}
+        on:pointerup={releaseTalk}
+        on:pointercancel={cancelTalk}
         on:contextmenu|preventDefault
-        style={`--level: ${level}`}
+        style={`--level: ${ready ? $talk.level : 0}`}
       >
         <Microphone size={18} weight="bold" />
         <span>{holding ? (ready ? 'Listening' : 'Wait…') : 'Hold to talk'}</span>
@@ -172,7 +88,7 @@
     {#if $voiceLoadStage || busy || status}
       <p class="vt-status">
         {#if $voiceLoadStage || busy}<BrandSpinner size={16} />{/if}
-        {$voiceLoadStage ?? status}
+        {$voiceLoadStage ?? (busy && !typing ? 'Working…' : status)}
       </p>
     {/if}
 
@@ -196,8 +112,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    padding-top: 8px;
   }
 
   .vt-row {

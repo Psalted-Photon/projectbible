@@ -24,7 +24,7 @@ import { normalizeBookName } from '../../lib/bibleData';
 import { isBibleReadingActive } from '../../lib/tts/readingEngine';
 import { bibleFloating } from '../../lib/tts/playerDock';
 import { packInstallFinished } from '../../adapters/db-manager';
-import { installAll, packsStillToInstall, voicesStillToInstall } from '../../lib/packInstaller';
+import { installAll, packsStillToInstall, voicesStillToInstall, voiceDownloadsStillToGet } from '../../lib/packInstaller';
 
 /** Is this pack installed? Asked once per tour run. */
 async function hasPack(ctx: StepContext, id: string): Promise<boolean> {
@@ -40,8 +40,8 @@ function knownPack(ctx: StepContext, id: string): boolean {
 
 async function missingInstalls(ctx: StepContext): Promise<number> {
   if (ctx.tour.missing === undefined) {
-    const [packs, voices] = await Promise.all([packsStillToInstall(), voicesStillToInstall()]);
-    ctx.tour.missing = packs.length + voices.length;
+    const [packs, voices, voiceControl] = await Promise.all([packsStillToInstall(), voicesStillToInstall(), voiceDownloadsStillToGet()]);
+    ctx.tour.missing = packs.length + voices.length + voiceControl.length;
   }
   return ctx.tour.missing;
 }

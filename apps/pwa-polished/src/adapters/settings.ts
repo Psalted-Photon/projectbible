@@ -259,6 +259,11 @@ export interface UserSettings {
   // Where that pill was left. Kept apart from ttsPlayerPos so the two players
   // each remember their own spot. Per-device, unset puts it bottom-right.
   bibleTtsPlayerPos?: { x: number; y: number };
+  // Voice Control's floating mic button is showing. Per-device: a phone has a
+  // mic, a desktop may not. See lib/voice/holdToTalk.ts.
+  micButton?: boolean; // default false
+  // Where the mic button was left. Per-device, unset puts it bottom-right.
+  micButtonPos?: { x: number; y: number };
 
   // Clock / timezone
   // IANA timezone name (e.g. 'America/Chicago'). Defaults to browser-detected
@@ -475,6 +480,16 @@ export function getBibleTtsPlayerPos(): { x: number; y: number } | null {
 /** Remember where the floating Bible player was dragged to. */
 export function setBibleTtsPlayerPos(pos: { x: number; y: number }): void {
   updateSettings({ bibleTtsPlayerPos: pos });
+}
+
+/** Where the Voice Control mic button sits, or null for its default spot. */
+export function getMicButtonPos(): { x: number; y: number } | null {
+  return getSettings().micButtonPos ?? null;
+}
+
+/** Remember where the mic button was dragged to. */
+export function setMicButtonPos(pos: { x: number; y: number }): void {
+  updateSettings({ micButtonPos: pos });
 }
 
 /** Is the shoulder clock showing? Defaults to on. */

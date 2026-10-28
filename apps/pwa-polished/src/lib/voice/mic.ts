@@ -51,14 +51,54 @@ async function to16k(pcm: Float32Array, from: number): Promise<Float32Array> {
   return (await off.startRendering()).getChannelData(0);
 }
 
+/** The browser said no to the mic: blocked, or turned down. */
+export const isBlocked = (err: unknown) => ['NotAllowedError', 'SecurityError'].includes((err as { name?: string })?.name ?? '');
+/** There is no mic to open. */
+export const isNoMic = (err: unknown) => ['NotFoundError', 'OverconstrainedError'].includes((err as { name?: string })?.name ?? '');
+
 /** What to tell someone whose mic didn't start. */
 export function micTrouble(err: unknown): string {
-  const name = (err as { name?: string })?.name;
-  if (name === 'NotAllowedError' || name === 'SecurityError') {
+  if (isBlocked(err)) {
     return 'The microphone is blocked. Tap the icon to the left of the address, then Microphone, Allow, and try again.';
   }
-  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No microphone found.';
+  if (isNoMic(err)) return 'No microphone found.';
   return `The microphone could not start: ${err instanceof Error ? err.message : String(err)}`;
+}
+
+export type MicPermission = 'granted' | 'denied' | 'prompt' | 'unknown';
+
+/**
+ * Whether the browser will hand over the mic, without asking for it. Calls
+ * `onChange` when that changes (allowed or blocked from the site settings).
+ * 'unknown' where the browser won't say.
+ */
+export async function watchMicPermission(onChange?: (p: MicPermission) => void): Promise<MicPermission> {
+  try {
+    const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+    if (onChange) status.onchange = () => onChange(status.state as MicPermission);
+    return status.state as MicPermission;
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Is a mic plugged in? Browsers list one before it is allowed, without its
+ * name. Null where the browser can't list them.
+ */
+export async function hasMic(): Promise<boolean | null> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.some((d) => d.kind === 'audioinput');
+  } catch {
+    return null;
+  }
+}
+
+/** Ask for the mic and let it go again, so the browser's question comes from a tap rather than mid-hold. */
+export async function askForMic(): Promise<void> {
+  const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+  s.getTracks().forEach((t) => t.stop());
 }
 
 /**

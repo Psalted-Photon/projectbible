@@ -2,7 +2,7 @@
   /**
    * The packs check-up button in Settings → Storage & updates: one tap that
    * finds every pack this device hasn't got, every newer version of one it
-   * has, and every Read Aloud voice it can run, and gets them all. Each feature
+   * has, every Read Aloud voice it can run and Voice Control, and gets them all. Each feature
    * still offers its own pack where it's needed; this looks under every rug at
    * once, for someone who never saw the tutorial's Install everything.
    *
@@ -16,6 +16,7 @@
     CheckCircle,
     ArrowClockwise,
     SpeakerHigh,
+    Microphone,
   } from 'phosphor-svelte';
   import {
     installAll,
@@ -59,19 +60,25 @@
   }
 
   $: running = $installAllState.running;
-  $: waiting = $checkup.missing.length + $checkup.updates.length + $checkup.voices.length;
+  $: voiceControlMissing = $checkup.voiceControl.filter((d) => !d.update);
+  $: voiceControlUpdates = $checkup.voiceControl.filter((d) => d.update);
+  $: waiting =
+    $checkup.missing.length + $checkup.updates.length + $checkup.voices.length + $checkup.voiceControl.length;
   $: totalBytes =
     [...$checkup.missing, ...$checkup.updates].reduce((sum, p) => sum + packBytes(p), 0) +
-    voiceMB * MB;
+    voiceMB * MB +
+    $checkup.voiceControl.reduce((sum, d) => sum + d.bytes, 0);
   $: if (!waiting || running) open = false;
 
   function plural(n: number, one: string, many: string): string {
     return `${n} ${n === 1 ? one : many}`;
   }
 
+  $: packCount = $checkup.missing.length + voiceControlMissing.length;
+  $: updateCount = $checkup.updates.length + voiceControlUpdates.length;
   $: summary = [
-    $checkup.missing.length && plural($checkup.missing.length, 'pack', 'packs'),
-    $checkup.updates.length && plural($checkup.updates.length, 'update', 'updates'),
+    packCount && plural(packCount, 'pack', 'packs'),
+    updateCount && plural(updateCount, 'update', 'updates'),
     $checkup.voices.length && plural($checkup.voices.length, 'voice', 'voices'),
   ]
     .filter(Boolean)
@@ -158,6 +165,14 @@
           <span class="size">{voiceMB ? formatBytes(voiceMB * MB) : ''}</span>
         </li>
       {/if}
+      {#each $checkup.voiceControl as d (d.id)}
+        <li>
+          <span class="voice-icon"><Microphone size={16} weight="bold" /></span>
+          <span class="name">{d.name}</span>
+          <span class="tag">{d.update ? 'New version' : 'Not installed'}</span>
+          <span class="size">{formatBytes(d.bytes)}</span>
+        </li>
+      {/each}
     </ul>
     <p class="note">Downloads one at a time. You can keep reading while it works.</p>
     <div class="actions">

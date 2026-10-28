@@ -522,6 +522,19 @@ export async function voicesStillToInstall(): Promise<TtsVoiceInfo[]> {
 }
 
 /**
+ * Voice Control's downloads still to get (lib/voice/voicePack.ts). Loaded on
+ * first use, as that module reads this one's progress line and lock.
+ */
+export async function voiceDownloadsStillToGet() {
+  try {
+    return await (await import('./voice/voicePack')).voiceDownloadsWaiting();
+  } catch (error) {
+    console.warn('[InstallAll] Could not check Voice Control:', error);
+    return [];
+  }
+}
+
+/**
  * Download voices one after another, counting on from `step` of `total` in
  * installMessage. A voice that fails is noted and the run moves on, except
  * running out of storage, which stops it.
@@ -573,7 +586,8 @@ export async function installAllVoices(): Promise<{ failed: string[]; outOfSpace
 
 /**
  * Bring the device fully up to date: every newer version of an installed pack
- * first, then every pack still missing, then every voice, one after another.
+ * first, then every pack still missing, then every voice, then Voice Control,
+ * one after another.
  * The one button in Settings → Storage & updates, Install all in Manage Packs
  * and the tutorial's Install everything all run this.
  *
@@ -605,7 +619,8 @@ export async function installAll(
     const updates = await updatesStillToApply();
     const packs = await packsStillToInstall();
     const voices = await voicesStillToInstall();
-    const total = updates.length + packs.length + voices.length;
+    const voiceControl = await voiceDownloadsStillToGet();
+    const total = updates.length + packs.length + voices.length + voiceControl.length;
     let step = 0;
 
     // Where the browser can, every pack file goes to one download that keeps
@@ -666,6 +681,25 @@ export async function installAll(
       );
       failed.push(...result.failed);
       outOfSpace = result.outOfSpace;
+      step += voices.length;
+    }
+
+    if (!outOfSpace && voiceControl.length) {
+      const { fetchVoiceDownload, VoiceOutOfSpace } = await import('./voice/voicePack');
+      for (const d of voiceControl) {
+        step++;
+        installAllState.update((s) => ({ ...s, step, total, current: d.name }));
+        try {
+          await fetchVoiceDownload(d.id, reportTo(`${step} of ${total} · `));
+        } catch (error) {
+          console.error(`[InstallAll] ${d.name} failed:`, error);
+          failed.push(d.name);
+          if (error instanceof VoiceOutOfSpace || isQuotaError(error)) {
+            outOfSpace = true;
+            break;
+          }
+        }
+      }
     }
   } catch (error) {
     // Cancel on the download's notification: the run stops where it is.
@@ -964,10 +998,11 @@ export async function resumePackRun(): Promise<void> {
  * once per voice.
  */
 export async function estimateRemaining(): Promise<{ count: number; bytes: number }> {
-  const [updates, packs, voices, sizes] = await Promise.all([
+  const [updates, packs, voices, voiceControl, sizes] = await Promise.all([
     updatesStillToApply(),
     packsStillToInstall(),
     voicesStillToInstall(),
+    voiceDownloadsStillToGet(),
     loadPackSizes(),
   ]);
   const MB = 1024 * 1024;
@@ -976,7 +1011,8 @@ export async function estimateRemaining(): Promise<{ count: number; bytes: numbe
     0,
   );
   bytes += (await estimateVoicesMB(voices)) * MB;
-  return { count: updates.length + packs.length + voices.length, bytes };
+  bytes += voiceControl.reduce((sum, d) => sum + d.bytes, 0);
+  return { count: updates.length + packs.length + voices.length + voiceControl.length, bytes };
 }
 
 /**

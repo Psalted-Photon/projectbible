@@ -21,8 +21,14 @@
     installVoiceDownload,
     removeVoiceDownload,
     type VoiceDownload,
+    type VoiceDownloadId,
     type VoiceDownloadState,
   } from '../lib/voice/voicePack';
+
+  /** Which of the two to list. The mic button's card lists Voice Control alone. */
+  export let ids: VoiceDownloadId[] = VOICE_DOWNLOADS.map((d) => d.id);
+
+  $: shown = VOICE_DOWNLOADS.filter((d) => ids.includes(d.id));
 
   let states: Partial<Record<string, VoiceDownloadState>> = {};
 
@@ -48,7 +54,7 @@
 </script>
 
 <ul class="vc-list">
-  {#each VOICE_DOWNLOADS as d (d.id)}
+  {#each shown as d (d.id)}
     {@const s = states[d.id]}
     <li class="vc-row">
       <span class="vc-text">

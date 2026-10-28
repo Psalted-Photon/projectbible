@@ -46,6 +46,7 @@
   import PacksCheckup from "../PacksCheckup.svelte";
   import VoiceControlDownloads from "../VoiceControlDownloads.svelte";
   import VoiceCommandTry from "../VoiceCommandTry.svelte";
+  import { micButtonOn, setMicButtonOn } from "../../lib/voice/holdToTalk";
   import InstallBar from "../InstallBar.svelte";
   import { checkupDot } from "../../lib/packCheckup";
   import { DOT_SIZES, DOT_COLORS, applyNotifyDot, type DotSize, type DotColor } from "../../lib/notifyDot";
@@ -362,6 +363,7 @@
     reader: false,
     interlinear: false,
     readAloud: false,
+    voiceControl: false,
     general: false,
     privacy: false,
     storage: false,
@@ -463,6 +465,7 @@
     `${TIMEZONE_OPTIONS.find((o) => o.value === timezone)?.label.replace(/ \(.*\)$/, "") ?? timezone}` +
     `${navBarClock ? "" : " · No clock"}` +
     ` · Rotation ${allowRotation ? "on" : "off"}`;
+  $: voiceSummary = `Mic button ${$micButtonOn ? "on" : "off"}`;
   $: storageSummary = `Space · Updates${autoCheckUpdates ? "" : " (manual)"}`;
   $: devSummary = `Packs · Cache · eruda ${$showEruda ? "shown" : "hidden"}`;
 
@@ -1466,6 +1469,36 @@
 
   </SettingsSection>
 
+  <!-- The mic button's switch is kept per device by lib/voice/holdToTalk.ts,
+       outside the settings payload. -->
+  <SettingsSection title="Voice Control" summary={voiceSummary} bind:open={openSections.voiceControl}>
+    <span slot="icon"><Microphone size={16} weight="bold" /></span>
+
+    <div class="setting-group">
+      <p class="section-description il-hint">
+        Hold the mic button and say what you want: “go to Romans 6”, “open Matthew Henry”,
+        “highlight verse 16 in yellow”. Let go and it happens. It all runs on this device, offline.
+      </p>
+      <label class="checkbox-label">
+        <input
+          type="checkbox"
+          checked={$micButtonOn}
+          on:change={(e) => setMicButtonOn(e.currentTarget.checked)}
+        />
+        <span class="label-text">Show the mic button</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <VoiceControlDownloads />
+    </div>
+
+    <div class="setting-group">
+      <span class="label-text">Try a command</span>
+      <VoiceCommandTry />
+    </div>
+  </SettingsSection>
+
   <SettingsSection title="General" summary={generalSummary} bind:open={openSections.general}>
     <span slot="icon"><Globe size={16} weight="bold" /></span>
 
@@ -1622,17 +1655,6 @@
           <span class="text">Manage Packs</span>
           <span class="arrow"><ArrowRight size="1em" weight="bold" /></span>
         </button>
-      </div>
-
-      <!-- Voice Control's model files and a place to try commands, here until
-           the mic button arrives and they move to their own Settings section. -->
-      <div class="sub-block divided">
-        <h3>Voice Control</h3>
-        <p class="section-description">
-          The voice models, kept on this device. Try a command below; the mic button comes later.
-        </p>
-        <VoiceControlDownloads />
-        <VoiceCommandTry />
       </div>
 
       <div class="sub-block divided">

@@ -65,6 +65,11 @@ const HF = 'https://huggingface.co/';
 const NEEDLE = HF + 'Cactus-Compute/needle3/resolve/d6c7d6a2e9655505e0f8e23339356dd1705900eb/';
 const PUNCT = HF + 'brady-pplx/sherpa-onnx-online-punct-en-2024-08-06/resolve/29a49a07620ef067e6fa40580da620c11db07b83/';
 const LAB_CACHE = 'voice-control-lab-v1';
+/** Each download's files, so what is here can be judged with no manifest (offline). */
+const FILES_OF: Record<VoiceDownloadId, string[]> = {
+  'voice-control': ['voice-needle.js', 'voice-needle.wasm', 'voice-whistle.cact', 'voice-needle3.cact'],
+  'voice-transcribe': ['voice-punct.int8.onnx', 'voice-punct.vocab', 'voice-vad.onnx'],
+};
 const LAB_URLS: Record<string, string> = {
   'voice-needle.js': NEEDLE + 'wasm/needle.js',
   'voice-needle.wasm': NEEDLE + 'wasm/needle.wasm',
@@ -154,6 +159,13 @@ async function sha256(bytes: ArrayBuffer): Promise<string> {
   return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Every file of it is on this device, whatever version. Needs no manifest, so it answers offline. */
+export async function voiceInstalledHere(id: VoiceDownloadId): Promise<boolean> {
+  const record = await readRecord();
+  const here = await Promise.all(FILES_OF[id].map(async (name) => !!record[name] && !!(await voiceFile(name))));
+  return here.every(Boolean);
+}
+
 /** Is each file here, and is it the version the release has? */
 export async function voiceDownloadState(id: VoiceDownloadId): Promise<VoiceDownloadState> {
   let files: VoiceFile[] = [];
@@ -161,6 +173,7 @@ export async function voiceDownloadState(id: VoiceDownloadId): Promise<VoiceDown
     files = await filesFor(id);
   } catch {
     // No manifest (offline): judge by what is here.
+    return { available: false, installed: await voiceInstalledHere(id), update: false, bytes: 0 };
   }
   const record = await readRecord();
   const here = await Promise.all(files.map(async (f) => !!record[f.file] && !!(await voiceFile(f.file))));
@@ -210,6 +223,50 @@ async function download(f: VoiceFile, onBytes: (n: number) => void): Promise<Arr
   return bytes;
 }
 
+/** Where a download has got to: a line and, while bytes arrive, a percent. */
+export type VoiceReport = (message: string, percent?: number | null) => void;
+
+/** Thrown when the device hasn't room, so Install everything can stop there. */
+export class VoiceOutOfSpace extends Error {}
+
+/**
+ * Fetch whatever of one download is missing or changed, and keep it. Doesn't
+ * take the install lock: the caller holds it (installVoiceDownload, or
+ * Install everything). Throws when it can't finish.
+ */
+export async function fetchVoiceDownload(id: VoiceDownloadId, report: VoiceReport): Promise<void> {
+  const what = VOICE_DOWNLOADS.find((d) => d.id === id)!;
+  voiceInstallingId.set(id);
+  try {
+    const files = await filesFor(id);
+    if (!files.length) throw new Error(`${what.name} isn't on the download server yet`);
+    const record = await readRecord();
+    const todo: VoiceFile[] = [];
+    for (const f of files) if (record[f.file] !== f.sha256 || !(await voiceFile(f.file))) todo.push(f);
+    const total = todo.reduce((a, f) => a + f.size, 0);
+    const percent = (n: number) => (total ? Math.min(100, Math.floor((n / total) * 100)) : null);
+
+    const estimate = await navigator.storage?.estimate?.().catch(() => null);
+    if (estimate?.quota && estimate.usage != null && estimate.quota - estimate.usage < total * 1.1) {
+      throw new VoiceOutOfSpace(`Not enough space on this device: ${what.name} needs ${formatBytes(total)}`);
+    }
+
+    let before = 0;
+    for (const f of todo) {
+      report(`Downloading ${what.name}`, percent(before));
+      const bytes = (await fromLabCache(f)) ?? (await download(f, (n) => report(`Downloading ${what.name}`, percent(before + n))));
+      report(`Saving ${what.name}`, percent(before));
+      await writeFile(f.file, new Blob([bytes]));
+      record[f.file] = f.sha256;
+      await saveRecord(record);
+      before += f.size;
+    }
+  } finally {
+    voiceInstallingId.set(null);
+    window.dispatchEvent(new Event(VOICE_DOWNLOADS_EVENT));
+  }
+}
+
 /**
  * Download one of the two, or update it: only files that are missing or
  * changed are fetched. Takes the install lock; returns false when something
@@ -222,33 +279,11 @@ export async function installVoiceDownload(id: VoiceDownloadId): Promise<boolean
   }
   const what = VOICE_DOWNLOADS.find((d) => d.id === id)!;
   installBusy.set(true);
-  voiceInstallingId.set(id);
   try {
-    const files = await filesFor(id);
-    if (!files.length) throw new Error(`${what.name} isn't on the download server yet`);
-    const record = await readRecord();
-    const todo: VoiceFile[] = [];
-    for (const f of files) if (record[f.file] !== f.sha256 || !(await voiceFile(f.file))) todo.push(f);
-    const total = todo.reduce((a, f) => a + f.size, 0);
-
-    const estimate = await navigator.storage?.estimate?.().catch(() => null);
-    if (estimate?.quota && estimate.usage != null && estimate.quota - estimate.usage < total * 1.1) {
-      throw new Error(`Not enough space on this device: ${what.name} needs ${formatBytes(total)}`);
-    }
-
-    let before = 0;
-    for (const f of todo) {
-      installMessage.set(`Downloading ${what.name}`);
-      const bytes = (await fromLabCache(f)) ?? (await download(f, (n) => {
-        installPercent.set(total ? Math.min(100, Math.floor(((before + n) / total) * 100)) : null);
-      }));
-      installMessage.set(`Saving ${what.name}`);
-      await writeFile(f.file, new Blob([bytes]));
-      record[f.file] = f.sha256;
-      await saveRecord(record);
-      before += f.size;
-      installPercent.set(total ? Math.min(100, Math.floor((before / total) * 100)) : null);
-    }
+    await fetchVoiceDownload(id, (message, percent = null) => {
+      installMessage.set(message);
+      installPercent.set(percent);
+    });
     showNotice(`${what.name} is downloaded.`);
     return true;
   } catch (error) {
@@ -257,24 +292,43 @@ export async function installVoiceDownload(id: VoiceDownloadId): Promise<boolean
   } finally {
     installMessage.set('');
     installPercent.set(null);
-    voiceInstallingId.set(null);
     installBusy.set(false);
-    window.dispatchEvent(new Event(VOICE_DOWNLOADS_EVENT));
   }
+}
+
+/** One download Install everything would get: missing, or a newer version of one that's here. */
+export interface VoiceWaiting {
+  id: VoiceDownloadId;
+  name: string;
+  bytes: number;
+  update: boolean;
+  /** Says which version is waiting, for the check-up's Not now. */
+  key: string;
+}
+
+/**
+ * What Install everything still has to get: Voice Control when it isn't here
+ * or the release has a newer one, and the Transcribe add-on only to update it,
+ * as recording notes downloads it on first use. Nothing when the release
+ * can't be read.
+ */
+export async function voiceDownloadsWaiting(): Promise<VoiceWaiting[]> {
+  const out: VoiceWaiting[] = [];
+  for (const d of VOICE_DOWNLOADS) {
+    const s = await voiceDownloadState(d.id).catch(() => null);
+    if (!s?.available || (s.installed && !s.update) || (!s.installed && d.id !== 'voice-control')) continue;
+    const files = await filesFor(d.id).catch(() => []);
+    const key = files.map((f) => f.sha256.slice(0, 8)).join('');
+    out.push({ id: d.id, name: d.name, bytes: s.bytes, update: s.installed, key });
+  }
+  return out;
 }
 
 /** Delete one of the two from this device. */
 export async function removeVoiceDownload(id: VoiceDownloadId): Promise<void> {
   const record = await readRecord();
-  let names = Object.keys(record).filter((name) => name !== RECORD);
-  try {
-    const files = await filesFor(id);
-    names = files.map((f) => f.file);
-  } catch {
-    // Offline: the file names say which download they belong to.
-    const transcribe = /^voice-(punct|vad)/;
-    names = names.filter((n) => (id === 'voice-transcribe') === transcribe.test(n));
-  }
+  // Offline, the list this app knows stands in for the release's.
+  const names = await filesFor(id).then((files) => files.map((f) => f.file), () => FILES_OF[id]);
   const dir = await folder();
   for (const name of names) {
     await dir.removeEntry(name).catch(() => {});

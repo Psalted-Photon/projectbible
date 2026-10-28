@@ -1,7 +1,7 @@
 /**
  * The packs check-up: everything this device is still missing for the full
  * app, in one place -- packs never installed, newer versions of installed ones,
- * and Read Aloud voices. It feeds the button in Settings → Storage & updates
+ * Read Aloud voices and Voice Control. It feeds the button in Settings → Storage & updates
  * and the dot that leads there from the gear.
  *
  * Counted a few seconds after launch, so it never competes with the reader
@@ -22,9 +22,11 @@ import {
   PACK_CATALOG,
   packsStillToInstall,
   voicesStillToInstall,
+  voiceDownloadsStillToGet,
   type CatalogPack,
 } from './packInstaller';
 import { unignoredUpdates, packCheckReached, watchPackUpdates } from './packUpdates';
+import { VOICE_DOWNLOADS_EVENT, type VoiceWaiting } from './voice/voicePack';
 
 export interface Checkup {
   /** Catalog packs never installed, in Install all order. */
@@ -33,16 +35,19 @@ export interface Checkup {
   updates: CatalogPack[];
   /** Read Aloud voices this device can run and doesn't have, natural ones first. */
   voices: TtsVoiceInfo[];
+  /** Voice Control, when it isn't here or has a newer version. */
+  voiceControl: VoiceWaiting[];
   /** One key per waiting item, a version's key carrying its hash. */
   keys: string[];
   /** Counted at least once this session. */
   counted: boolean;
 }
 
-/** Missing packs and voices, as last counted. Updates come live from packUpdates. */
-const counts = writable<{ missing: CatalogPack[]; voices: TtsVoiceInfo[]; counted: boolean }>({
+/** Missing packs, voices and Voice Control, as last counted. Pack updates come live from packUpdates. */
+const counts = writable<{ missing: CatalogPack[]; voices: TtsVoiceInfo[]; voiceControl: VoiceWaiting[]; counted: boolean }>({
   missing: [],
   voices: [],
+  voiceControl: [],
   counted: false,
 });
 
@@ -52,10 +57,12 @@ export const checkup = derived([counts, unignoredUpdates], ([$counts, $updates])
     missing: $counts.missing,
     updates,
     voices: $counts.voices,
+    voiceControl: $counts.voiceControl,
     keys: [
       ...$counts.missing.map((p) => `pack:${p.id}`),
       ...updates.map((p) => `update:${p.id}:${$updates[p.id]}`),
       ...$counts.voices.map((v) => `voice:${v.id}`),
+      ...$counts.voiceControl.map((d) => (d.update ? `update:${d.id}:${d.key}` : `pack:${d.id}`)),
     ],
     counted: $counts.counted,
   };
@@ -110,8 +117,12 @@ export function refreshCheckup(): Promise<void> {
     try {
       do {
         countAgain = false;
-        const [missing, voices] = await Promise.all([packsStillToInstall(), voicesStillToInstall()]);
-        counts.set({ missing, voices, counted: true });
+        const [missing, voices, voiceControl] = await Promise.all([
+          packsStillToInstall(),
+          voicesStillToInstall(),
+          voiceDownloadsStillToGet(),
+        ]);
+        counts.set({ missing, voices, voiceControl, counted: true });
       } while (countAgain);
     } catch (error) {
       console.warn('[Checkup] Could not count what is missing:', error);
@@ -132,6 +143,7 @@ export function startCheckup(): void {
   started = true;
   window.addEventListener('packsUpdated', () => void refreshCheckup());
   window.addEventListener('voicesUpdated', () => void refreshCheckup());
+  window.addEventListener(VOICE_DOWNLOADS_EVENT, () => void refreshCheckup());
   setTimeout(() => {
     watchPackUpdates();
     void refreshCheckup();

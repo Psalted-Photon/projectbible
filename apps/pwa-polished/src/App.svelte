@@ -16,6 +16,7 @@
   import AppConfirm from "./components/AppConfirm.svelte";
   import FloatingTtsPlayer from "./components/FloatingTtsPlayer.svelte";
   import FloatingBiblePlayer from "./components/FloatingBiblePlayer.svelte";
+  import VoiceLayer from "./components/VoiceLayer.svelte";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
@@ -485,6 +486,10 @@
     <!-- Read Aloud for scripture once its player is pulled out of the navbar.
          Draws nothing while it is docked there. -->
     <FloatingBiblePlayer />
+
+    <!-- Voice Control: the mic button while it's switched on, and what a held
+         mic shows. Loads no models until the first command. -->
+    <VoiceLayer />
 
     <!-- Wake alarm start screen — shown when opened from an alarm notification -->
     <WakeAlarmStart />
