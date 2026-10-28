@@ -368,6 +368,7 @@ function resolvePerson(heard) {
 }
 
 const COUNT_RE = /\bhow many (sons|daughters|children|kids|wives|husbands|brothers|sisters)\b/i;
+const PLACE_OF_RE = /\bwhere (?:was|is|were) (.+?) (born|from|raised|buried)\b|\bwhere did (.+?) (die|come from|grow up|get buried)\b/i;
 
 /** "How many sons…" answered from the people list, never from Needle. */
 function familyCount(p, what) {
@@ -544,6 +545,41 @@ function settle(text, picked, answer) {
       calls = [{ name: 'passage', args: { reference: refs[0].text } }];
       promoted = true;
       notes.push('Needle had nothing, but a reference on its own is a passage');
+    }
+  }
+  // A cut-off word ("orgiveness") is the whole word the words have ("forgiveness").
+  const wholeWord = (v) => new RegExp(`(^|[^a-z'])${v.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z'])`, 'i').test(text);
+  for (const c of calls) {
+    for (const [k, v] of Object.entries(c.args)) {
+      if (typeof v !== 'string' || v.trim().length < 4 || wholeWord(v)) continue;
+      const at = words.indexOf(v.toLowerCase().trim());
+      if (at < 0) continue;
+      let s = at;
+      let e = at + v.trim().length;
+      while (s > 0 && /[a-z']/.test(words[s - 1])) s--;
+      while (e < words.length && /[a-z']/.test(words[e])) e++;
+      c.args[k] = text.slice(s, e);
+      notes.push(`"${v}" is the word "${c.args[k]}"`);
+    }
+  }
+  // "Where was Jesus born": the people list knows, so the map opens there
+  // (Needle tends to put the person in as the place). With no place on
+  // record, the bio is the best answer.
+  const where = PLACE_OF_RE.exec(text);
+  if (where && picked.tools.some((t) => t.name === 'map')) {
+    const found = resolvePerson(where[1] || where[3]);
+    const p = found?.people[0] && app.byId.get(found.people[0].id);
+    const died = /die|buried/i.test(where[2] || where[4]);
+    const place = p && (() => { try { return JSON.parse(p[died ? 'deathPlace' : 'birthPlace'] || 'null')?.name; } catch { return null; } })();
+    const who = p && (p.displayTitle || p.name);
+    if (place) {
+      calls = [...calls.filter((c) => c.name !== 'map'), { name: 'map', args: { place } }];
+      promoted = true;
+      notes.push(`${who} ${died ? 'died in' : 'was born in'} ${place} (people list)`);
+    } else if (p) {
+      calls = [{ name: 'biography', args: { person: found.name } }];
+      promoted = true;
+      notes.push(`the people list doesn't say where ${who} ${died ? 'died' : 'was born'}, so the bio`);
     }
   }
   for (const c of calls) {

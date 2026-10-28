@@ -683,6 +683,11 @@ if (!store.get('recAwakeBack', false)) {
   store.set('optRecAwake', true);
   store.set('recAwakeBack', true);
 }
+// The best-known people on the hearing list pulled other words toward names (10/28), so it starts off again, once.
+if (!store.get('peopleListOff', false)) {
+  store.set('optPeople', false);
+  store.set('peopleListOff', true);
+}
 for (const id of ['optNames', 'optPeople', 'optKeep', 'optAll', 'optNamesReal', 'optRecAwake', 'optTxNames', 'optTxAwake']) {
   const el = $(id);
   el.checked = store.get(id, el.checked);

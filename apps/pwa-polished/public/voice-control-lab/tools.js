@@ -188,6 +188,95 @@ const NUMBER_RE = new RegExp(String.raw`(\b(?:verses?|chapters?|${BOOK_ALT})\s+(
 // "Psalm one nineteen" is Psalm 119; no other book has a hundred chapters.
 const PSALM_HUNDREDS_RE = new RegExp(String.raw`\b(psalms?\s+)(${UNIT})\s+(${UNDER_100})\b`, 'gi');
 
+/** One number said in words or digits, starting at toks[i]: [value, next index], or null. */
+function readNumber(toks, i) {
+  const t = toks[i];
+  if (t == null) return null;
+  if (/^\d+$/.test(t)) return [+t, i + 1];
+  const unit = (w) => {
+    const k = SMALL.indexOf(w);
+    return k >= 1 && k <= 9 ? k : -1;
+  };
+  const under100 = (j) => {
+    const tens = TENS.indexOf(toks[j]);
+    if (tens >= 2) return unit(toks[j + 1]) > 0 ? [tens * 10 + unit(toks[j + 1]), j + 2] : [tens * 10, j + 1];
+    const s = SMALL.indexOf(toks[j]);
+    return s >= 1 ? [s, j + 1] : null;
+  };
+  const u = unit(t);
+  if (u > 0 && toks[i + 1] === 'hundred') {
+    const j = toks[i + 2] === 'and' ? i + 3 : i + 2;
+    const r = under100(j);
+    return r ? [u * 100 + r[0], r[1]] : [u * 100, i + 2];
+  }
+  // "one o five" is 105.
+  if (u > 0 && (toks[i + 1] === 'o' || toks[i + 1] === 'oh')) return unit(toks[i + 2]) > 0 ? [u * 100 + unit(toks[i + 2]), i + 3] : null;
+  return under100(i);
+}
+
+/** Every number in a run of words, or null if something in it isn't a number. */
+function numbersIn(toks) {
+  const out = [];
+  for (let i = 0; i < toks.length; ) {
+    const r = readNumber(toks, i);
+    if (!r) return null;
+    out.push(r[0]);
+    i = r[1];
+  }
+  return out;
+}
+
+/** A part that has to be one number: "nineteen", or "one nineteen" said for 119. */
+const oneNumber = (ns) => (ns.length === 1 ? [ns[0]] : ns.length === 2 && ns[0] <= 9 && ns[1] >= 10 && ns[1] <= 99 ? [ns[0] * 100 + ns[1]] : []);
+
+/**
+ * The numbers after a book name, read as its reference. Whistle writes them
+ * however they came ("Psalms, one, nineteen, verse, one, o, five"), and the
+ * book's real chapter and verse counts decide what they meant: "John three
+ * sixteen" is 3:16, "Psalm one nineteen" is 119. Null when nothing fits.
+ */
+function readRefTail(num, name, tail) {
+  const toks = tail.toLowerCase().split(/[\s,.:-]+/).filter(Boolean);
+  const part = { ch: [], vs: [], end: [] };
+  let cur = 'ch';
+  for (const tk of toks) {
+    if (tk === 'chapter') {
+      if (cur !== 'ch' || part.ch.length) return null;
+    } else if (tk === 'verse' || tk === 'verses' || tk === 'colon') {
+      if (cur !== 'ch' || !part.ch.length) return null;
+      cur = 'vs';
+    } else if (['and', 'to', 'through', 'thru'].includes(tk)) {
+      if (!part[cur].length) return null;
+      cur = 'end';
+    } else {
+      part[cur].push(tk);
+    }
+  }
+  const ch = numbersIn(part.ch);
+  const vs = numbersIn(part.vs);
+  const end = numbersIn(part.end);
+  if (!ch?.length || !vs || !end) return null;
+  const tries = [];
+  if (part.vs.length) {
+    for (const c of oneNumber(ch)) for (const v of oneNumber(vs)) tries.push([c, v]);
+  } else {
+    const [a, b, c, d] = ch;
+    const hundreds = (x, y) => (x <= 9 && y >= 10 && y <= 99 ? x * 100 + y : -1);
+    if (ch.length === 1) tries.push([a, null]);
+    if (ch.length === 2) tries.push([a, b], [hundreds(a, b), null]);
+    if (ch.length === 3) tries.push([hundreds(a, b), c], [a, hundreds(b, c)]);
+    if (ch.length === 4) tries.push([hundreds(a, b), hundreds(c, d)]);
+  }
+  const counts = countsFor(num, name);
+  const fits = ([c, v]) => counts.some((k) => c >= 1 && c <= k.length && (v == null || (v >= 1 && v <= k[c - 1])));
+  const hit = tries.find(fits);
+  if (!hit) return null;
+  const last = oneNumber(end)[0];
+  return `${hit[0]}${hit[1] != null ? ':' + hit[1] : ''}${last != null && hit[1] != null && last > hit[1] ? '-' + last : ''}`;
+}
+
+const SPOKEN_REF_RE = new RegExp(String.raw`\b(?:([123]|first|second|third|1st|2nd|3rd)[\s,]+)?(${BOOK_ALT})((?:[\s,.:-]+(?:\d+|${[...SMALL, ...TENS.slice(2), 'hundred', 'oh', 'o', 'verses?', 'chapter', 'colon', 'and', 'to', 'through', 'thru'].join('|')})\b)+)`, 'gi');
+
 // "One thousand B.C.", "fifteen hundred BC": a year said in words, before its era.
 const YEAR_RE = new RegExp(String.raw`\b((?:${UNIT}\s+thousand(?:\s+(?:and\s+)?(?:${UNIT}\s+hundred(?:\s+and)?(?:\s+${UNDER_100})?|${UNDER_100}))?)|(?:${UNIT}|${UNDER_100})\s+hundred(?:\s+and)?(?:\s+${UNDER_100})?)\s+(BC|AD|BCE|CE)\b`, 'gi');
 
@@ -226,6 +315,14 @@ export function tidy(text) {
     .replace(/\bb\.\s?c\.?(?=\s|$)/gi, 'BC')
     .replace(/\ba\.\s?d\.?(?=\s|$)/gi, 'AD')
     .replace(YEAR_RE, (m, num, era) => `${wordsToNumber(num)} ${era.toUpperCase()}`)
+    // Numbers after a book name are its reference, however Whistle wrote them.
+    .replace(SPOKEN_REF_RE, (m, ord, name, tail) => {
+      const num = ord ? ORDINALS[ord.toLowerCase()] || ord : undefined;
+      // A trailing "and" or "verse" with no number after it belongs to what comes next.
+      const nums = tail.replace(/(?:[\s,.:-]+(?:and|to|through|thru|verses?|chapter|colon))+$/i, '');
+      const ref = readRefTail(num, name, nums);
+      return ref ? `${num ? num + ' ' : ''}${name} ${ref}${tail.slice(nums.length)}` : m;
+    })
     .replace(PSALM_HUNDREDS_RE, (m, lead, h, rest) => `${lead}${100 * wordsToNumber(h) + wordsToNumber(rest)}`);
   // Twice, so "verses three and four" gets both.
   for (let i = 0; i < 2; i++) t = t.replace(NUMBER_RE, (m, lead, num) => `${lead}${wordsToNumber(num)}`);
@@ -246,7 +343,7 @@ export function tidy(text) {
     .replace(/\b(dotted|dashes)\b/gi, 'dashed')
     .replace(/\bunderlin(ed|ing)\b/gi, 'underline')
     .replace(new RegExp(String.raw`\b(${COLORS.join('|')})\s+(text|words|font|lettering|writing)\b`, 'gi'), '$1 letters')
-    .replace(/\b(first|1st|second|2nd|third|3rd)\s+(?=(samuel|kings|chronicles|corinthians|thessalonians|timothy|peter|john)\b)/gi, (m, o) => ORDINALS[o.toLowerCase()] + ' ')
+    .replace(/\b(first|1st|second|2nd|third|3rd)[\s,]+(?=(samuel|kings|chronicles|corinthians|thessalonians|timothy|peter|john)\b)/gi, (m, o) => ORDINALS[o.toLowerCase()] + ' ')
     // "2 Corinthians, chapter 5" is 2 Corinthians 5.
     .replace(new RegExp(String.raw`\b((?:[123]\s+)?(?:${BOOK_ALT}))\s*,?\s+chapter\s+(\d+)`, 'gi'), '$1 $2')
     .replace(/\b(?:chapter\s+)?(\d+)[,\s]+verses?\s+(\d+)/gi, '$1:$2')
