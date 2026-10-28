@@ -705,7 +705,9 @@ function systemFacts() {
   return `date: ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${DAYS[d.getDay()]} ${p(d.getHours())}:${p(d.getMinutes())}; locale: ${navigator.language}; device: ${device}`;
 }
 
+// A call as Needle gave it, or as the worker settled it ({ name, args }).
 const argsOf = (c) => {
+  if (c.args && typeof c.args === 'object') return c.args;
   if (typeof c.arguments === 'string') {
     try { return JSON.parse(c.arguments); } catch { return { text: c.arguments }; }
   }
@@ -734,10 +736,11 @@ function wouldDo(name, a) {
   switch (name) {
     case 'passage': return [`Go to ${a.reference}`];
     case 'commentary': {
-      if (!a.author) return [`Open the commentary last used${a.new_window ? ' in a new window' : ''}`];
+      const where = `${a.at ? ` at ${a.at}` : ''}${a.new_window ? ' in a new window' : ''}`;
+      if (!a.author) return [`Open the commentary last used${where}`];
       const hit = findCommentary(a.author);
       return hit
-        ? [`Open ${hit}${a.new_window ? ' in a new window' : ''}`]
+        ? [`Open ${hit}${where}`]
         : [`Reply: "${a.author} isn't in the app."`, 'warn'];
     }
     case 'word_study': return [`Word study on ${soundsLike(a.word)}`];
@@ -782,16 +785,25 @@ function engineCheck(answer) {
     .join(' · ');
 }
 
-function verdictOf(answer) {
-  const calls = answer?.function_calls || [];
-  const c = answer?.confidence;
-  if (!calls.length) return ['no', `Nothing fits → "Didn't catch that"`];
-  if (c == null) return ['act', 'No confidence score'];
-  const act = Number($('actAt').value);
-  const ask = Number($('askAt').value);
-  const pct = `Confidence ${c.toFixed(2)}`;
-  if (c >= act) return ['act', `${pct} · go ahead`];
-  if (c >= ask) return ['ask', `${pct} · ask "Did you mean…?"`];
+// Needle's score says little when it had only one action to choose from (the
+// 10/27 lab: right picks at 0.26-0.66), so one shown action goes ahead from here.
+const SINGLE_FLOOR = 0.2;
+
+/**
+ * Whether the app goes ahead with one piece. When the trigger words left one
+ * action and Needle picked it, it goes ahead; otherwise its confidence decides,
+ * against the two numbers set under Commands.
+ */
+function pieceVerdict(p) {
+  const c = p.answer?.confidence;
+  const pct = c != null ? `Confidence ${c.toFixed(2)}` : 'No confidence score';
+  if (!p.calls.length) return ['no', c != null ? `${pct} · "Didn't catch that"` : `Nothing fits → "Didn't catch that"`];
+  if (p.refProblem) return ['ask', p.refProblem];
+  if (p.promoted) return ['act', 'Held back by the engine, but every word of it was said · go ahead'];
+  if (p.single && (c == null || c >= SINGLE_FLOOR)) return ['act', `${pct} · go ahead (the only action shown)`];
+  if (c == null) return ['act', pct];
+  if (c >= Number($('actAt').value)) return ['act', `${pct} · go ahead`];
+  if (c >= Number($('askAt').value)) return ['ask', `${pct} · ask "Did you mean…?"`];
   return ['no', `${pct} · "Didn't catch that"`];
 }
 
@@ -799,14 +811,21 @@ const QUESTION_RE = /^\s*(who|whom|whose|what|what's|whats|when|where|why|how|wh
 const CANT_ANSWER = "I can steer the wheel, but can't answer questions.";
 
 /**
- * What the app would end up doing. Needle's pick, unless the words quote a
- * verse (most of what was said, or Needle had nothing better than a search),
- * or it's a "how many sons…" the people list answers. When nothing fits, a
+ * What the app would end up doing. Needle's picks, put right by the worker,
+ * unless the words quote a verse (most of what was said, or Needle had nothing
+ * better than a search), or it's a "how many sons…" the people list answers.
+ * Several commands go ahead only when every one does. When nothing fits, a
  * question gets the steering-wheel reply instead of "Didn't catch that".
  */
 function decide(r, said) {
-  const calls = r.answer?.function_calls || [];
-  const [cls, text] = verdictOf(r.answer);
+  if (r.noop != null) return { kind: 'no', cls: 'no', text: r.noop ? `Nothing to do · reply "${r.noop}"` : 'Nothing to do' };
+  const pieces = r.pieces || [];
+  const calls = r.calls || [];
+  const verdicts = pieces.map(pieceVerdict);
+  const cls = verdicts.length && verdicts.every(([v]) => v === 'act') ? 'act'
+    : verdicts.some(([v]) => v === 'act' || v === 'ask') ? 'ask' : 'no';
+  const words = { act: 'go ahead', ask: 'ask', no: 'nothing' };
+  const text = verdicts.length === 1 ? verdicts[0][1] : `${verdicts.length} commands: ${verdicts.map(([v]) => words[v]).join(', ')}`;
   const q = r.quote?.ref ? r.quote : null;
   if (q) {
     const strong = q.whole || (q.run >= 4 && q.run / q.of >= 0.75);
@@ -835,7 +854,18 @@ function quoteText(q) {
   if (!q || q.none) return '';
   if (q.common) return `${q.run} words in a row match ${q.common} verses, so it's a saying, not one verse`;
   const also = q.also?.length ? `, also ${q.also.join(', ')}` : '';
-  return `${q.ref} (${q.tids.join(', ').toUpperCase()}): ${q.whole ? 'the whole verse' : `${q.run} of ${q.of} words in a row`}${also}`;
+  return `${q.ref} (${q.tids.join(', ').toUpperCase()}): ${q.whole ? 'the whole verse' : `${q.run} of ${q.of} words in order`}${also}`;
+}
+
+/** One piece's Needle side, for the card and the summary: what it was shown, what it picked, what it held back. */
+function pieceRow(p) {
+  return {
+    text: p.text, sent: p.toolNames || [], groups: p.groups || [], tools: p.toolCount,
+    needle: (p.answer?.function_calls || []).map(callText), confidence: p.answer?.confidence ?? null,
+    held: (p.answer?.suppressed_calls || []).map((c) => callText(c) + (c.reason ? ` (${c.reason})` : '')),
+    check: engineCheck(p.answer), notes: p.notes || [], verdict: pieceVerdict(p)[1],
+    error: p.answer && (p.answer.success === false || p.answer.error) ? p.answer.error || 'Needle reported a failure' : null,
+  };
 }
 
 function playPcm(pcm) {
@@ -852,19 +882,31 @@ function playPcm(pcm) {
 function renderCommand(card, { r, typed, pcm, meta, total }, { record = true } = {}) {
   const said = typed ?? r.transcript?.text ?? '';
   const answer = r.answer;
-  const calls = answer?.function_calls || [];
+  const calls = r.calls || [];
+  const pieces = (r.pieces || []).map(pieceRow);
+  const one = pieces.length === 1 ? pieces[0] : null;
   const row = {
-    said, typed: typed != null, tidied: r.tidied && r.tidied !== said ? r.tidied : null, calls: [], confidence: answer?.confidence ?? null, whistleMs: r.whistleMs, needleMs: r.needleMs,
-    speechSec: pcm ? pcm.length / 16000 : null, tools: r.toolCount, sent: r.toolNames || [],
-    held: (answer?.suppressed_calls || []).map((c) => callText(c) + (c.reason ? ` (${c.reason})` : '')), check: engineCheck(answer),
-    people: [], quote: quoteText(r.quote), count: r.count || null, decision: null, kind: null,
+    said, typed: typed != null, tidied: r.tidied && r.tidied !== said ? r.tidied : null, calls: [], confidence: one?.confidence ?? null, whistleMs: r.whistleMs, needleMs: r.needleMs,
+    speechSec: pcm ? pcm.length / 16000 : null, tools: r.toolCount, sent: one?.sent || [], needle: one?.needle || [],
+    held: one?.held || [], check: one?.check || '', notes: pieces.flatMap((p) => p.notes), pieces: pieces.length > 1 ? pieces : null,
+    people: [], quote: quoteText(r.quote), count: r.count || null, decision: null, kind: null, noop: r.noop ?? null,
   };
   let html = said.trim()
     ? `<div class="said">“${esc(said)}”${typed != null ? ' <span class="times">(typed)</span>' : ''}</div>`
     : `<div class="said"><i>Heard nothing.</i> The app would say "Didn't catch that".</div>`;
   if (row.tidied) html += `<div class="times">Written for Needle as: “${esc(row.tidied)}”</div>`;
-  if (answer) {
-    if (answer.success === false || answer.error) html += `<div class="err">${esc(answer.error || 'Needle reported a failure')}</div>`;
+  if (r.pieces || r.noop != null) {
+    for (const p of pieces.filter((x) => x.error)) html += `<div class="err">${esc(p.error)}</div>`;
+    if (row.pieces) {
+      html += `<div class="times">Split into ${pieces.length} commands, each with its own actions:</div><ol class="calls">`;
+      for (const p of pieces) {
+        html += `<li>“${esc(p.text)}” <span class="args">· shown ${esc(p.sent.join(', ') || 'nothing')} · Needle: ${esc(p.needle.join('; ') || 'nothing')}${p.confidence != null ? ` · ${p.confidence.toFixed(2)}` : ''}</span>`;
+        html += `<div class="times">${esc(p.verdict)}${p.held.length ? ` · held back: ${esc(p.held.join('; '))}` : ''}</div></li>`;
+      }
+      html += '</ol>';
+    } else if (one && one.needle.join() !== calls.map(callText).join()) {
+      html += `<div class="times">Needle picked: ${esc(one.needle.join('; ') || 'nothing')}</div>`;
+    }
     if (calls.length) {
       html += '<ol class="calls">';
       calls.forEach((c, i) => {
@@ -882,6 +924,7 @@ function renderCommand(card, { r, typed, pcm, meta, total }, { record = true } =
       });
       html += '</ol>';
     }
+    for (const n of row.notes) html += `<div class="times">Put right: ${esc(n)}</div>`;
     const d = decide(r, said);
     row.decision = d.text;
     row.kind = d.kind;
@@ -889,25 +932,25 @@ function renderCommand(card, { r, typed, pcm, meta, total }, { record = true } =
     if (row.quote) html += `<div class="times">Verse match: ${esc(row.quote)}${r.quote?.ms != null ? ` (${ms(r.quote.ms)})` : ''}</div>`;
     for (const line of row.count || []) html += `<div class="would">Answer: ${esc(line)}</div>`;
     if (r.appData === false) html += `<div class="times">No app data on this device, so no verse matching or people list.</div>`;
-    if (row.held.length) html += `<div class="times">Held back by the engine: ${esc(row.held.join('; '))}</div>`;
-    if (row.check) html += `<div class="times">Engine check: ${esc(row.check)}</div>`;
-    if (answer.reasoning) html += `<div class="times">Why: ${esc(answer.reasoning)}</div>`;
+    if (one?.held.length) html += `<div class="times">Held back by the engine: ${esc(one.held.join('; '))}</div>`;
+    if (one?.check) html += `<div class="times">Engine check: ${esc(one.check)}</div>`;
+    if (answer?.reasoning) html += `<div class="times">Why: ${esc(answer.reasoning)}</div>`;
   }
   const t = [];
   if (pcm) t.push(`speech ${(pcm.length / 16000).toFixed(1)} s`);
   if (meta?.micMs) t.push(`mic start ${ms(meta.micMs)}`);
   if (r.whistleMs != null) t.push(`Whistle ${ms(r.whistleMs)}`);
-  if (r.needleMs != null) t.push(`Needle ${ms(r.needleMs)}`);
-  if (r.initMs) t.push(`tool setup ${ms(r.initMs)}${r.prefix ? ` (${r.prefix} tokens)` : ''}`);
-  if (r.toolCount) {
-    const why = r.groups?.length ? `trigger words: ${r.groups.join(', ')}` : 'no trigger word';
-    html += `<div class="times">Shown to Needle (${esc(why)}): ${esc(row.sent.join(', '))}${r.toolCount > 5 ? ' — over 5, so Needle keeps the 5 it thinks closest' : ''}</div>`;
+  if (r.needleMs != null) t.push(`Needle ${ms(r.needleMs)}${row.pieces ? ` for ${pieces.length} pieces` : ''}`);
+  if (r.initMs) t.push(`tool setup ${ms(r.initMs)}`);
+  if (one) {
+    const why = one.groups.length ? `trigger words: ${one.groups.join(', ')}` : 'no trigger word';
+    html += `<div class="times">Shown to Needle (${esc(why)}): ${esc(one.sent.join(', '))}${one.tools > 5 ? ' — over 5, so Needle keeps the 5 it thinks closest' : ''}</div>`;
   }
   if (answer?.peak_ram_mb) t.push(`peak ${Math.round(answer.peak_ram_mb)} MB`);
   t.push(`total ${ms(total)}`);
   html += `<div class="times">${esc(t.join(' · '))}</div>`;
   html += '<div class="row"></div>';
-  html += `<details><summary>Raw replies</summary><pre>${esc(JSON.stringify({ transcript: r.transcript, answer }, null, 2))}</pre></details>`;
+  html += `<details><summary>Raw replies</summary><pre>${esc(JSON.stringify({ transcript: r.transcript, pieces: (r.pieces || []).map((p) => ({ text: p.text, answer: p.answer })) }, null, 2))}</pre></details>`;
   card.innerHTML = html;
 
   const buttons = card.querySelector('.row');
@@ -1007,7 +1050,7 @@ const flat = (s) => String(s ?? '').toLowerCase().replace(/\b(chapters?|verses?|
  * you mean…?" first, ✗ anything else. A wanted value written "a|b" takes either.
  */
 function grade(want, r, row) {
-  const calls = (r.answer?.function_calls || []).map((c) => ({ name: c.name, args: flat(JSON.stringify(Object.values(argsOf(c)))) }));
+  const calls = (r.calls || []).map((c) => ({ name: c.name, args: flat(JSON.stringify(Object.values(argsOf(c)))) }));
   const has = (args, need) => need.split('|').some((alt) => args.includes(flat(alt)));
   const person = !want.person || (r.people || []).some((p) => p?.people.some((x) => flat(x.title).startsWith(flat(want.person))));
   if (want.quote && row.kind === 'quote' && flat(r.quote?.ref) === flat(want.quote)) return 'yes';
@@ -1618,7 +1661,12 @@ function reportText() {
   // One command's lines, shared by Commands and Test phrases.
   const commandLines = (c, pad) => {
     if (c.tidied) L.push(`${pad}written as: "${c.tidied}"`);
+    for (const p of c.pieces || []) {
+      L.push(`${pad}piece "${p.text}": shown ${p.sent.join(', ') || 'nothing'} · Needle ${p.needle.join('; ') || 'nothing'}${p.confidence != null ? ` · ${p.confidence.toFixed(2)}` : ''} · ${p.verdict}${p.held.length ? ` · held back ${p.held.join('; ')}` : ''}`);
+    }
+    if (!c.pieces && c.needle && c.needle.join() !== c.calls.join()) L.push(`${pad}Needle picked: ${c.needle.join('; ') || 'nothing'}`);
     L.push(`${pad}→ ${c.calls.length ? c.calls.join('; ') : 'nothing'}${c.confidence != null ? ` · confidence ${c.confidence.toFixed(2)}` : ''}`);
+    for (const n of c.notes || []) L.push(`${pad}put right: ${n}`);
     for (const p of c.people || []) L.push(`${pad}people list: ${p}`);
     if (c.quote) L.push(`${pad}verse match: ${c.quote}`);
     for (const a of c.count || []) L.push(`${pad}answer: ${a}`);

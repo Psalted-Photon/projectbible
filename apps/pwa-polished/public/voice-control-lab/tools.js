@@ -141,9 +141,7 @@ function editDistance(a, b) {
 
 /**
  * A book of the Bible is named, with or without a chapter, or close enough to
- * one ("habukkuk") that Whistle probably misspelled it. A name that is also a
- * person or a word ("who was James", "mark") still counts: the other group's
- * action goes too, and Needle chooses between them.
+ * one ("habukkuk") that Whistle probably misspelled it.
  */
 const passageSaid = {
   test(t) {
@@ -154,6 +152,15 @@ const passageSaid = {
     });
   },
 };
+
+/**
+ * A book with a chapter, or after "go to", "open", "the book of" and the like,
+ * is surely the book. A bare name ("who was James", "the exodus", "Ruth's
+ * family") is weak: it counts only when nothing else was asked for.
+ */
+function passageIsSure(t) {
+  return new RegExp(String.raw`\b(?:${BOOK_ALT})\s+\d|\b(?:go to|open|turn to|take me to|jump to|read|book of)\s+(?:the\s+)?(?:[123]\s+)?(?:${BOOK_ALT})\b(?!'s)`, 'i').test(t);
+}
 
 const BOOK_ALIASES = { psalm: 'psalms', 'song of songs': 'song of solomon', revelations: 'revelation' };
 
@@ -202,20 +209,27 @@ function wordsToNumber(words) {
  * "blue text" "blue letters". A run of digits is split only when exactly one
  * chapter:verse exists in that book. Number words after "verse", "chapter" or a
  * book become digits, and the mishearings the lab caught are put right: "I
- * like verse 5" and "mark verse 5" are highlights, and "Destellonians" or "the
- * Salonians" is Thessalonians.
+ * like verse 5", "hilight", "mark verse 5" and "mark John 3:16" are
+ * highlights, "Versix" and "verse No. 6" are verse 6, "H43-0" is H430, and
+ * "Destellonians" or "the Salonians" is Thessalonians.
  */
 export function tidy(text) {
-  let t = text.replace(PSALM_HUNDREDS_RE, (m, lead, h, rest) => `${lead}${100 * wordsToNumber(h) + wordsToNumber(rest)}`);
+  let t = text
+    .replace(new RegExp(String.raw`\bver(?:se?)?(${SMALL.slice(1).join('|')}|twenty|thirty|forty|fifty)\b`, 'gi'), 'verse $1')
+    .replace(/\b(verses?|chapters?)\s+(?:no\.?|number)\s*/gi, '$1 ')
+    .replace(PSALM_HUNDREDS_RE, (m, lead, h, rest) => `${lead}${100 * wordsToNumber(h) + wordsToNumber(rest)}`);
   // Twice, so "verses three and four" gets both.
   for (let i = 0; i < 2; i++) t = t.replace(NUMBER_RE, (m, lead, num) => `${lead}${wordsToNumber(num)}`);
+  if (/strong/i.test(t)) t = t.replace(/\b([gh])\s?(\d{1,4})[\s-](\d{1,3})\b/gi, (m, l, a, b) => `${l.toUpperCase()}${a}${b}`);
   return t
-    .replace(/\b(?:hi|high)[\s-]light/gi, 'highlight')
+    .replace(/\b(?:hi|high)[\s-]?light/gi, 'highlight')
     // So "James" here isn't the book or the person.
     .replace(/\bking james(?: version| bible)?\b/gi, 'KJV')
+    .replace(/\b(close|shut)\s+(?:everything|it all|all of them|every window|all (?:the )?windows)\b/gi, '$1 all')
     .replace(new RegExp(String.raw`\bi like\s+(?=(?:all\s+(?:of\s+)?)?(?:the\s+)?(?:verses?\b|chapter\b|\d|(?:${BOOK_ALT})\b))`, 'gi'), 'highlight ')
-    // "Mark 5" is the book; "mark verse 5" is a highlight.
+    // "Mark 5" is the book; "mark verse 5" and "mark John 3:16" are highlights.
     .replace(/\bmark\s+(?=(?:all\s+(?:of\s+)?)?(?:the\s+)?verses?\b)/gi, 'highlight ')
+    .replace(new RegExp(String.raw`(^|[,.]\s*)mark\s+(?=(?:[123]\s+)?(?:${BOOK_ALT})\s+\d)`, 'gi'), '$1highlight ')
     .replace(/\bthe\s+s[ae]l+oni[ae]ns\b/gi, 'thessalonians')
     .replace(/\b(?!babylonians\b)[a-z]*l+onians\b/gi, 'thessalonians')
     .replace(/\b(squiggl(y|es|ed)|wavy|wiggly)( (under)?lines?)?\b/gi, 'squiggle')
@@ -224,6 +238,8 @@ export function tidy(text) {
     .replace(/\bunderlin(ed|ing)\b/gi, 'underline')
     .replace(new RegExp(String.raw`\b(${COLORS.join('|')})\s+(text|words|font|lettering|writing)\b`, 'gi'), '$1 letters')
     .replace(/\b(first|1st|second|2nd|third|3rd)\s+(?=(samuel|kings|chronicles|corinthians|thessalonians|timothy|peter|john)\b)/gi, (m, o) => ORDINALS[o.toLowerCase()] + ' ')
+    // "2 Corinthians, chapter 5" is 2 Corinthians 5.
+    .replace(new RegExp(String.raw`\b((?:[123]\s+)?(?:${BOOK_ALT}))\s*,?\s+chapter\s+(\d+)`, 'gi'), '$1 $2')
     .replace(/\b(?:chapter\s+)?(\d+)[,\s]+verses?\s+(\d+)/gi, '$1:$2')
     .replace(REF_RE, (m, num, name, a, b) => {
       const counts = countsFor(num, name);
@@ -274,7 +290,9 @@ export function personNamed(t) {
 }
 
 const FAMILY_RE = /\b(tree|family|genealog\w*|ancestors?|descend\w*|sons?|daughters?|child(ren)?|kids?|father|mother|parents?|wife|wives|husbands?|brothers?|sisters?|grand(son|daughter|father|mother|child|children)s?|begat|born to|related|relatives?|cousins?|uncles?|aunts?|nephews?|nieces?|offspring|firstborn|married|marry)\b/;
-const BIO_RE = /\b(bio|biography|who (is|was|were)|who's|person|people|tell me about|life of|story of)\b/;
+// "Tell me about" asks for the bio even next to a family word; "who was" gives way to one.
+const STRONG_BIO_RE = /\b(bio|biography|tell me about|life of|story of)\b/;
+const WEAK_BIO_RE = /\b(who (is|was|were|are)|who's|person|people)\b/;
 
 const str = (description) => ({ type: 'string', description });
 
@@ -315,7 +333,7 @@ export const CORE = [
   },
   {
     key: 'word',
-    triggers: /\b(word stud(y|ies)|study the word|greek|hebrew|strong'?s|lexicon|original|mean(s|ing)?|definition|define|[gh] ?\d+)\b/,
+    triggers: /\b(word stud(y|ies)|study the word|greek|hebrew|original|mean(s|ing)?|definition|define)\b/,
     tools: [
       {
         name: 'word_study',
@@ -326,6 +344,12 @@ export const CORE = [
           required: ['word'],
         },
       },
+    ],
+  },
+  {
+    key: 'strongs',
+    triggers: /\b(strong'?s|lexicon|[gh] ?\d+)\b/,
+    tools: [
       {
         name: 'strongs',
         description: "The Strong's dictionary, at a number or a Greek or Hebrew word if one is said.",
@@ -338,7 +362,8 @@ export const CORE = [
   },
   {
     key: 'highlight',
-    triggers: new RegExp(String.raw`\b(highlight\w*|mark|colou?r|${[...COLORS, ...LOOKS].join('|')})\b`),
+    // "Mark" as a verb: not "Mark 4", "Mark chapter 4", "open Mark" or "the book of Mark".
+    triggers: new RegExp(String.raw`\b(highlight\w*|(?<!(?:open|to|of|read)\s)mark(?!\s+(?:\d|chapter))|colou?r|${[...COLORS, ...LOOKS].join('|')})\b`),
     tools: [
       {
         name: 'highlight',
@@ -376,9 +401,9 @@ export const CORE = [
   },
   {
     key: 'windows',
-    // Only the windows no other action owns, and closing. "In a new window"
-    // belongs to the commentary's new_window.
-    triggers: /\b((?<!new )windows?|panels?|panes?|close|shut|hide|bible|harmon(y|ies)|art|notes|journal)\b/,
+    // Only the windows no other action owns. "In a new window" belongs to the
+    // commentary's new_window.
+    triggers: /\b((?<!new )windows?|panels?|panes?|bible|harmon(y|ies)|art|notes|journal)\b/,
     tools: [
       {
         name: 'window',
@@ -389,6 +414,12 @@ export const CORE = [
           required: ['window'],
         },
       },
+    ],
+  },
+  {
+    key: 'closing',
+    triggers: /\b(close|shut|hide)\b/,
+    tools: [
       {
         name: 'close_window',
         description: 'Closing a window, or all of them.',
@@ -401,7 +432,7 @@ export const CORE = [
   },
   {
     key: 'reading',
-    triggers: /\b(read\w*|aloud|listen|play|stop|pause|resume|quiet)\b/,
+    triggers: /\b(read\w*|aloud|listen|play|resume)\b/,
     tools: [
       {
         name: 'read_aloud',
@@ -411,6 +442,12 @@ export const CORE = [
           properties: { from_verse: { type: 'integer', description: 'The verse to start from.' } },
         },
       },
+    ],
+  },
+  {
+    key: 'stopping',
+    triggers: /\b(stop|pause|quiet|enough|silence|shh+)\b/,
+    tools: [
       {
         name: 'stop_reading',
         description: 'Stopping or pausing reading aloud.',
@@ -505,7 +542,7 @@ export const GROUPS = [
   },
   {
     key: 'people',
-    triggers: { test: (t) => BIO_RE.test(t) || !!personNamed(t) },
+    triggers: { test: (t) => STRONG_BIO_RE.test(t) || WEAK_BIO_RE.test(t) || !!personNamed(t) },
     tools: [
       {
         name: 'biography',
@@ -561,14 +598,95 @@ export const GROUPS = [
   },
 ];
 
-/** The tools to send for what was said, and the groups whose trigger words picked them. */
+/**
+ * The tools to send for what was said, and the groups whose trigger words
+ * picked them. When two groups fire, the words usually say which one is meant,
+ * so most turns end with one action:
+ * - a bare book name counts only when nothing else was asked for
+ * - a reference in a highlight, commentary or connections request belongs to it
+ * - stop words beat reading, and closing beats opening
+ * - with a person named, family words mean the tree and bio words the bio
+ */
 export function toolsFor(text, everything = false) {
   const all = [...CORE, ...GROUPS];
   if (everything) return { tools: all.flatMap((g) => g.tools), groups: ['everything'] };
   const t = text.toLowerCase();
-  const hit = all.filter((g) => g.triggers.test(t));
+  const keys = new Set(all.filter((g) => g.triggers.test(t)).map((g) => g.key));
+  if (keys.has('passage') && keys.size > 1 && !passageIsSure(t)) keys.delete('passage');
+  if (keys.has('passage') && ['highlight', 'commentary', 'connections'].some((k) => keys.has(k))) keys.delete('passage');
+  if (keys.has('stopping')) keys.delete('reading');
+  if (keys.has('closing')) keys.delete('windows');
+  if (keys.has('tree') && keys.has('people')) {
+    const family = FAMILY_RE.test(t);
+    const bio = STRONG_BIO_RE.test(t);
+    if (family && !bio) keys.delete('people');
+    else if (!family && (bio || WEAK_BIO_RE.test(t))) keys.delete('tree');
+  }
+  const hit = all.filter((g) => keys.has(g.key));
   if (hit.length) return { tools: hit.flatMap((g) => g.tools), groups: hit.map((g) => g.key) };
   return { tools: CORE.flatMap((g) => g.tools), groups: [] };
+}
+
+/**
+ * A sentence with several commands, cut at commas and "then" so each gets its
+ * own small set of actions: "go to Romans 6, open the King Comments, word study
+ * rivers" is three turns. A piece that adds nothing new ("…verse 6, green")
+ * stays with the piece before it.
+ */
+export function splitCommands(text) {
+  // A comma inside a number ("1,000 BC") doesn't count.
+  const parts = text.split(/\s*(?:[,;](?!\d)|\band then\b|\bthen\b|\band also\b)\s*/i).map((s) => s.trim()).filter(Boolean);
+  if (parts.length < 2) return [text];
+  const out = [];
+  for (const part of parts) {
+    const groups = new Set(toolsFor(part).groups);
+    const prev = out[out.length - 1];
+    if (prev && (!groups.size || [...groups].every((g) => prev.groups.has(g)))) {
+      prev.text += ' ' + part;
+    } else if (prev && !prev.groups.size) {
+      // Words before the first command ("okay, go to John 3") go with it.
+      prev.text += ' ' + part;
+      prev.groups = groups;
+    } else {
+      out.push({ text: part, groups });
+    }
+  }
+  return out.map((p) => p.text);
+}
+
+const FIND_REF_RE = new RegExp(String.raw`\b(?:([123])\s+)?(${BOOK_ALT})\s+(\d+)(?::(\d+)(?:\s*(?:-|to|through)\s*(\d+))?)?(?![\d:])`, 'gi');
+
+/**
+ * Every reference in the words, the way the app's own reference reader would
+ * take them, checked against the real chapter and verse counts. An impossible
+ * Psalm with a hundred less ("Psalms 19:105") is offered as the one it likely
+ * was (Psalm 119:105).
+ */
+export function findRefs(text) {
+  const out = [];
+  for (const m of text.matchAll(FIND_REF_RE)) {
+    const [, num, name, ch, vs, ve] = m;
+    const counts = countsFor(num, name);
+    if (!counts.length) continue;
+    const base = BOOK_ALIASES[name.toLowerCase().replace(/\s+/g, ' ')] || name.toLowerCase().replace(/\s+/g, ' ');
+    const book = BOOKS.find((b) => b.toLowerCase() === (num ? `${num} ${base}` : base)) || base.replace(/\b\w/g, (c) => c.toUpperCase());
+    const c = +ch;
+    const v = vs ? +vs : null;
+    const at = (cc) => `${book} ${cc}${v != null ? ':' + v : ''}${ve ? '-' + ve : ''}`;
+    const fits = (cc) => counts.some((k) => cc >= 1 && cc <= k.length && (v == null || (v >= 1 && v <= k[cc - 1])));
+    const valid = fits(c);
+    const suggest = !valid && base === 'psalms' && c < 100 && fits(c + 100) ? at(c + 100) : null;
+    out.push({ text: at(c), valid, suggest });
+  }
+  return out;
+}
+
+const NOOP_RE = /^\s*(?:thank(?:s| you)(?: (?:so|very) much)?|never ?mind|cancel|forget it|no(?:pe)? thanks?|ok(?:ay)?|that'?s (?:all|it)|amen)[\s.!]*$/i;
+
+/** Things said to the app that ask for nothing: null if it's a command, else the reply ("" for none). */
+export function noopReply(text) {
+  if (!NOOP_RE.test(text)) return null;
+  return /^\s*thank/i.test(text) ? "You're welcome." : '';
 }
 
 /** The commentaries the app ships, for the "not installed" reply. */

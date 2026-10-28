@@ -10,7 +10,7 @@
 
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort.wasm.min.mjs';
 import { NeedleEngine, Punctuator, SileroVad, planChunks, VAD_FRAME } from './engine.js';
-import { tidy, toolsFor, usePeopleNames, personNamed, isEveryday } from './tools.js';
+import { tidy, toolsFor, usePeopleNames, personNamed, isEveryday, splitCommands, findRefs, noopReply } from './tools.js';
 
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
 // Threads need a cross-origin isolated page, which the app is not.
@@ -341,8 +341,16 @@ function resolvePerson(heard) {
   let how = 'exact';
   let key = q;
   let ids = app.byName.get(q);
+  // A name heard as two words ("Matthew Bosheth") is tried by sound as a whole
+  // before its words are tried one at a time.
+  if (!ids && q.includes(' ')) {
+    key = soundAlike(q);
+    how = 'sounds like';
+    ids = key && app.byName.get(key);
+  }
   if (!ids) {
     key = q.split(' ').find((w) => app.byName.has(w) && !isEveryday(w));
+    how = 'exact';
     ids = key && app.byName.get(key);
   }
   if (!ids) {
@@ -407,51 +415,82 @@ const STOP = new Set(`the and of to a in that he i is it for his was unto shall 
   we our us your up out do did does let an at or if go its one has been can may over say says where show open find tell
   about look verse verses chapter read`.split(/\s+/));
 
-/** The most words in a row that the spoken words and a verse share. */
-function longestRun(words, verse) {
-  const v = verse.trim().split(' ');
+/** A word without its ending, so "loved", "love" and "loveth" match, and "God's" matches "God". */
+const stem = (w) => (w.length > 3 ? w.replace(/(eth|est|ing|ed|es|s|e)$/, '') : w) || w;
+
+/**
+ * The best stretch where the spoken words follow a verse in order: each match
+ * scores 2, each skipped or misheard word costs 1, so the stretch stays tight.
+ * Returns how many words matched and how long the verse stretch was.
+ */
+function alignInOrder(said, verse) {
+  const n = said.length;
+  const m = verse.length;
+  const H = Array.from({ length: n + 1 }, () => new Int16Array(m + 1));
   let best = 0;
-  let prev = new Array(v.length + 1).fill(0);
-  for (let i = 1; i <= words.length; i++) {
-    const cur = new Array(v.length + 1).fill(0);
-    for (let j = 1; j <= v.length; j++) {
-      if (words[i - 1] === v[j - 1]) {
-        cur[j] = prev[j - 1] + 1;
-        if (cur[j] > best) best = cur[j];
-      }
+  let bi = 0;
+  let bj = 0;
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const h = Math.max(0, H[i - 1][j - 1] + (said[i - 1] === verse[j - 1] ? 2 : -1), H[i - 1][j] - 1, H[i][j - 1] - 1);
+      H[i][j] = h;
+      if (h > best) [best, bi, bj] = [h, i, j];
     }
-    prev = cur;
   }
-  return best;
+  // Back through the stretch, counting matches.
+  let i = bi;
+  let j = bj;
+  let matched = 0;
+  let first = bj;
+  while (i > 0 && j > 0 && H[i][j] > 0) {
+    const h = H[i][j];
+    if (said[i - 1] === verse[j - 1] && h === H[i - 1][j - 1] + 2) {
+      matched++;
+      first = j;
+      i--;
+      j--;
+    } else if (h === H[i - 1][j - 1] - 1) {
+      i--;
+      j--;
+    } else if (h === H[i - 1][j] - 1) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  return { score: best, matched, span: bj - first + 1 };
 }
 
 /**
- * Whether what was said is a verse being quoted: four or more words in a row
- * from one verse, or a whole short verse ("Jesus wept"). A phrase that turns
- * up in more than three verses is a saying, not a quote.
+ * Whether what was said is a verse being quoted: four or more words in order
+ * from one verse, at most two verse words skipped, so one misheard word ("For
+ * God's love, the world") still finds it; or a whole short verse ("Jesus
+ * wept"). A phrase that turns up in more than three verses is a saying, not a
+ * quote.
  */
 function findQuote(text) {
   if (!app.verses.length) return null;
   const t = performance.now();
   const words = plain(text).split(' ').filter(Boolean);
   if (words.length < 2) return null;
-  const content = [...new Set(words.filter((w) => w.length >= 3 && !STOP.has(w)))].sort((a, b) => b.length - a.length).slice(0, 4);
+  const said = words.map(stem);
+  const content = [...new Set(words.filter((w) => w.length >= 3 && !STOP.has(w)).map(stem))].sort((a, b) => b.length - a.length).slice(0, 4);
   if (!content.length) return null;
   const need = Math.min(2, content.length);
-  let best = 0;
+  let best = null;
   let found = new Map();
   for (const v of app.verses) {
     let hits = 0;
-    for (const w of content) if (v.words.includes(` ${w} `)) hits++;
+    for (const w of content) if (v.words.includes(` ${w}`)) hits++;
     if (hits < need) continue;
-    const run = longestRun(words, v.words);
-    const whole = run === words.length && v.count === words.length;
-    if (run < 4 && !whole) continue;
-    if (run > best) {
-      best = run;
+    const a = alignInOrder(said, v.words.trim().split(' ').map(stem));
+    const whole = a.matched === words.length && v.count === words.length;
+    if (!whole && (a.matched < 4 || a.span > a.matched + 2)) continue;
+    if (!best || a.score > best.score) {
+      best = a;
       found = new Map();
     }
-    if (run === best) {
+    if (a.score === best.score) {
       if (!found.has(v.ref)) found.set(v.ref, { ref: v.ref, tids: [], whole });
       found.get(v.ref).tids.push(v.tid);
     }
@@ -459,8 +498,8 @@ function findQuote(text) {
   const ms = performance.now() - t;
   if (!best) return { ms, none: true };
   const refs = [...found.values()];
-  if (refs.length > 3) return { ms, common: refs.length, run: best, of: words.length };
-  return { ms, ref: refs[0].ref, tids: refs[0].tids, also: refs.slice(1).map((r) => r.ref), run: best, of: words.length, whole: refs[0].whole };
+  if (refs.length > 3) return { ms, common: refs.length, run: best.matched, of: words.length };
+  return { ms, ref: refs[0].ref, tids: refs[0].tids, also: refs.slice(1).map((r) => r.ref), run: best.matched, of: words.length, whole: refs[0].whole };
 }
 
 const argsOf = (c) => {
@@ -479,8 +518,69 @@ function useTools(system, toolsJson) {
   return { initMs: performance.now() - t, prefix };
 }
 
-function choose(heard, system, everything, maxNewTokens) {
-  const text = tidy(heard);
+/**
+ * Needle's picks for one piece, put right by what the words say:
+ * - a call the engine held back is used when it was the only action shown and
+ *   every value in it was said ("find every verse about the wind")
+ * - a color, look or new window nobody said is dropped
+ * - references come from the words, not from Needle, which split "1
+ *   thessalonians 4:16" in two and dropped the 5 from "2 Corinthians 5"
+ */
+function settle(text, picked, answer) {
+  const notes = [];
+  const words = text.toLowerCase();
+  let calls = (answer?.function_calls || []).map((c) => ({ name: c.name, args: { ...argsOf(c) } }));
+  let promoted = false;
+  if (!calls.length && picked.tools.length === 1) {
+    const held = (answer?.suppressed_calls || []).find((c) => c.name === picked.tools[0].name
+      && Object.values(argsOf(c)).every((v) => typeof v !== 'string' || (v.trim() && words.includes(v.toLowerCase().trim()))));
+    if (held) {
+      calls = [{ name: held.name, args: { ...argsOf(held) } }];
+      promoted = true;
+      notes.push('held back by the engine, but every word of it was said');
+    }
+  }
+  for (const c of calls) {
+    if (c.name === 'highlight') {
+      for (const k of ['color', 'look']) {
+        if (c.args[k] && !new RegExp(`\\b${c.args[k]}\\b`, 'i').test(text)) {
+          notes.push(`dropped ${k} "${c.args[k]}", which wasn't said`);
+          delete c.args[k];
+        }
+      }
+    }
+    if (c.args.new_window === true && !/\bnew window\b/i.test(text)) {
+      notes.push('dropped "new window", which wasn\'t said');
+      c.args.new_window = false;
+    }
+  }
+  const refs = findRefs(text);
+  // "Matthew Henry on Romans 8": the commentary opens there.
+  for (const c of calls) {
+    if (refs.length && c.name === 'commentary' && !c.args.at) c.args.at = refs[0].text;
+    if (refs.length && c.name === 'connections' && !c.args.reference) c.args.reference = refs[0].text;
+  }
+  const at = calls.findIndex((c) => c.name === 'passage');
+  if (at >= 0) {
+    const needle = calls.filter((c) => c.name === 'passage').map((c) => c.args.reference).join(' + ');
+    const rest = calls.filter((c) => c.name !== 'passage');
+    let passages;
+    if (refs.length) {
+      passages = refs.map((r) => ({ name: 'passage', args: { reference: r.valid ? r.text : r.suggest || r.text } }));
+      const ours = refs.map((r) => r.text).join(' + ');
+      if (ours.toLowerCase() !== needle.toLowerCase()) notes.push(`reference read from the words: ${ours} (Needle had ${needle})`);
+    } else {
+      passages = [{ name: 'passage', args: { reference: needle.replace(/ \+ /g, ' ') } }];
+      if (needle.includes(' + ')) notes.push(`Needle's pieces joined: ${passages[0].args.reference}`);
+    }
+    calls = [...rest.slice(0, at), ...passages, ...rest.slice(at)];
+  }
+  const bad = refs.find((r) => !r.valid);
+  return { calls, notes, promoted, refProblem: bad ? (bad.suggest ? `Did you mean ${bad.suggest}?` : `There's no ${bad.text}`) : null };
+}
+
+/** One piece of what was said through Needle, with the actions its trigger words picked. */
+function runPiece(text, system, everything, maxNewTokens) {
   const picked = toolsFor(text, everything);
   const toolsJson = JSON.stringify(picked.tools);
   const tools = useTools(system, toolsJson);
@@ -496,15 +596,29 @@ function choose(heard, system, everything, maxNewTokens) {
     answer = eng.complete(text, maxNewTokens);
   }
   const needleMs = performance.now() - t;
-  // What the app would add from its own data: a verse the words quote, who a
-  // named person is, and family counts.
+  return {
+    text, answer, needleMs, ...tools, toolCount: picked.tools.length, toolNames: picked.tools.map((x) => x.name), groups: picked.groups,
+    single: picked.tools.length === 1, ...settle(text, picked, answer),
+  };
+}
+
+function choose(heard, system, everything, maxNewTokens) {
+  const text = tidy(heard);
+  const appData = app.byId.size > 0 || app.verses.length > 0;
+  const noop = noopReply(text);
+  if (noop != null) return { tidied: text, noop, pieces: [], calls: [], people: [], appData };
+  const pieces = (everything ? [text] : splitCommands(text)).map((p) => runPiece(p, system, everything, maxNewTokens));
+  const calls = pieces.flatMap((p) => p.calls);
+  const sum = (k) => pieces.reduce((a, p) => a + (p[k] || 0), 0);
+  // What the app adds from its own data: a verse the words quote, who a named
+  // person is, and family counts.
   const quote = findQuote(text);
-  const people = (answer?.function_calls || []).map((c) => (argsOf(c).person ? resolvePerson(argsOf(c).person) : null));
+  const people = calls.map((c) => (c.args.person ? resolvePerson(c.args.person) : null));
   let count = null;
   let countWho = null;
   const asks = COUNT_RE.exec(text);
   if (asks) {
-    const who = (answer?.function_calls || []).map((c) => argsOf(c).person).find(Boolean) || personNamed(text);
+    const who = calls.map((c) => c.args.person).find(Boolean) || personNamed(text);
     const found = who && resolvePerson(who);
     if (found?.people.length) {
       count = found.people.slice(0, 3).map((p) => familyCount(app.byId.get(p.id), asks[1].toLowerCase()));
@@ -512,8 +626,9 @@ function choose(heard, system, everything, maxNewTokens) {
     }
   }
   return {
-    answer, needleMs, ...tools, toolCount: picked.tools.length, toolNames: picked.tools.map((x) => x.name), groups: picked.groups, tidied: text,
-    quote, people, count, countWho, appData: app.byId.size > 0 || app.verses.length > 0,
+    tidied: text, pieces, calls, answer: pieces.length === 1 ? pieces[0].answer : null,
+    needleMs: sum('needleMs'), initMs: sum('initMs'), toolCount: sum('toolCount'),
+    quote, people, count, countWho, appData,
   };
 }
 
