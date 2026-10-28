@@ -31,6 +31,7 @@ import {
   type Recording,
   type TranscriptProgress,
 } from '../recorder/recordings';
+import { stopRecording } from '../recorder/recorder';
 import { voiceInstalledHere, type VoiceDownloadId } from './voicePack';
 import { openTranscribeCard } from './holdToTalk';
 import { appendBlocksToHtml, type TranscriptBlock, type TranscriptTail } from './transcriptSink';
@@ -317,4 +318,10 @@ export function noticeSaved(rec: Recording): void {
   showNotice(`Saved “${rec.name}” (${clock(rec.durationSec)}) to Recordings in Notes.`, 'success', {
     action: { label: 'Transcribe', run: () => void transcribeRecording(rec.id) },
   });
+}
+
+/** Every Stop button: the pill, the page's mic and Recordings' Record. */
+export async function stopAndNoticeSaved(): Promise<void> {
+  const rec = await stopRecording();
+  if (rec) noticeSaved(rec);
 }

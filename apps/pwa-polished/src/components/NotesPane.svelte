@@ -11,11 +11,11 @@
    * at every panel width, so a 20%-wide sliver and a 50/50 split both work.
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { ArrowLeft, UsersThree, CloudArrowUp, NotePencil, Microphone } from 'phosphor-svelte';
+  import { ArrowLeft, UsersThree, CloudArrowUp, NotePencil, Microphone, Stop } from 'phosphor-svelte';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import RecordingsList from './RecordingsList.svelte';
   import { recorder, recordingLive, startRecording } from '../lib/recorder/recorder';
-  import { registerPageWriter } from '../lib/voice/transcribe';
+  import { registerPageWriter, stopAndNoticeSaved } from '../lib/voice/transcribe';
   import { OPEN_NOTES_PAGE, NOTES_PAGE_WRITTEN, type NotesPageRef } from '../lib/openNotesPage';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
@@ -1681,11 +1681,21 @@
       {/if}
 
       <!-- Records into this page: once transcribed, the words land here. The
-           recording itself is in Recordings, on this device. -->
-      {#if target?.kind === 'page'}
+           recording itself is in Recordings, on this device. While it records
+           into this page it is the Stop, the same as the pill's. -->
+      {#if target?.kind === 'page' && $recorder.page?.pageId === target.pageId && recordingLive($recorder)}
+        <button
+          class="icon-btn rec-on"
+          title="Stop and save"
+          aria-label="Stop and save"
+          disabled={$recorder.phase === 'stopping'}
+          on:click={stopAndNoticeSaved}
+        >
+          <Stop size={17} weight="fill" />
+        </button>
+      {:else if target?.kind === 'page'}
         <button
           class="icon-btn"
-          class:rec-on={$recorder.page?.pageId === target.pageId && recordingLive($recorder)}
           title="Record into this page"
           aria-label="Record into this page"
           disabled={recordingLive($recorder)}
@@ -2247,9 +2257,8 @@
     opacity: 0.4;
     cursor: default;
   }
-  /* Recording into this page right now. */
+  /* Recording into this page right now: its Stop. */
   .icon-btn.rec-on {
-    opacity: 1;
     color: #ff6b6f;
   }
 

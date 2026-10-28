@@ -10,7 +10,7 @@
    */
   import { onMount, onDestroy } from 'svelte';
   import { Record, FileArrowUp, FileArrowDown, PencilSimple, Trash, CaretRight, TextAlignLeft, Stop, ArrowSquareOut } from 'phosphor-svelte';
-  import { transcribing, transcribeRecording, stopTranscribing } from '../lib/voice/transcribe';
+  import { transcribing, transcribeRecording, stopTranscribing, stopAndNoticeSaved } from '../lib/voice/transcribe';
   import { openNotesPage } from '../lib/openNotesPage';
   import {
     recordings,
@@ -147,9 +147,15 @@
   <div class="head">
     <span class="label">Recordings</span>
     <span class="count">({$recordings.length})</span>
-    <button type="button" class="rec-btn" disabled={live} on:click={() => startRecording()}>
-      <Record size={14} weight="fill" /> Record
-    </button>
+    {#if live}
+      <button type="button" class="rec-btn" disabled={$recorder.phase === 'stopping'} on:click={stopAndNoticeSaved}>
+        <Stop size={14} weight="fill" /> Stop
+      </button>
+    {:else}
+      <button type="button" class="rec-btn" on:click={() => startRecording()}>
+        <Record size={14} weight="fill" /> Record
+      </button>
+    {/if}
     <button type="button" class="icon" title="Add an audio file" aria-label="Add an audio file" disabled={importing} on:click={() => fileInput.click()}>
       <FileArrowUp size={17} weight="bold" />
     </button>

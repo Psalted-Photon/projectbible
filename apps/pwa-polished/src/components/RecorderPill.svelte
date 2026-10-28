@@ -13,9 +13,9 @@
   import { portal } from '../lib/portal';
   import { floatDrag } from '../lib/floatDrag';
   import { getRecorderPos, setRecorderPos } from '../adapters/settings';
-  import { recorder, recordingLive, pauseRecording, resumeRecording, stopRecording, setPocket } from '../lib/recorder/recorder';
+  import { recorder, recordingLive, pauseRecording, resumeRecording, setPocket } from '../lib/recorder/recorder';
   import { clock } from '../lib/recorder/recordings';
-  import { noticeSaved } from '../lib/voice/transcribe';
+  import { stopAndNoticeSaved } from '../lib/voice/transcribe';
 
   let el: HTMLDivElement | null = null;
   const drag = floatDrag({
@@ -33,11 +33,6 @@
   $: paused = $recorder.phase === 'paused';
   $: stopping = $recorder.phase === 'stopping';
   $: starting = $recorder.phase === 'starting';
-
-  async function stop() {
-    const rec = await stopRecording();
-    if (rec) noticeSaved(rec);
-  }
 </script>
 
 {#if visible}
@@ -63,7 +58,8 @@
         <Pause size="1.05em" weight="fill" />
       </button>
     {/if}
-    <button type="button" class="ctl stop" title="Stop and save" aria-label="Stop and save" disabled={stopping || starting} on:click={stop}>
+    <!-- Live while starting too: a mic that never opens can still be given up on. -->
+    <button type="button" class="ctl stop" title="Stop and save" aria-label="Stop and save" disabled={stopping} on:click={stopAndNoticeSaved}>
       <Stop size="1.05em" weight="fill" />
     </button>
     <button

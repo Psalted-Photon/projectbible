@@ -111,6 +111,8 @@ interface Live {
 }
 
 let live: Live | null = null;
+/** Moved on by a Stop pressed while the mic is still opening, so that start gives up. */
+let startTurn = 0;
 /** A gap that closed while the app was off the screen, said when it's back. */
 let untold: RecordingGap | null = null;
 let lastTouch = Date.now();
@@ -220,6 +222,7 @@ export async function startRecording(opts: { page?: Recording['page'] } = {}): P
   }
   const quality: RecordQuality = getSettings().recordQuality === 'music' ? 'music' : 'speech';
   patch({ ...IDLE, phase: 'starting', page: opts.page ?? null });
+  const turn = ++startTurn;
   let stream: MediaStream;
   try {
     // Speech is cleaned up for the words; music is left as it is, since the
@@ -231,8 +234,14 @@ export async function startRecording(opts: { page?: Recording['page'] } = {}): P
           : { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true },
     });
   } catch (err) {
+    // Stopped while the browser was still asking: there's nothing to say.
+    if (turn !== startTurn) return;
     recorder.set(IDLE);
     if (!recordMicFailed(err)) showNotice(micTrouble(err), 'error');
+    return;
+  }
+  if (turn !== startTurn) {
+    stream.getTracks().forEach((t) => t.stop());
     return;
   }
 
@@ -342,7 +351,16 @@ export function resumeRecording(): void {
 /** Stops and keeps the recording. Resolves to it once every piece is saved. */
 export async function stopRecording(): Promise<Recording | null> {
   const l = live;
-  if (!l || get(recorder).phase === 'stopping') return null;
+  const phase = get(recorder).phase;
+  // Still waiting on the mic, maybe a browser question nobody has answered:
+  // give up on it, so Stop is never stuck.
+  if (!l && phase === 'starting') {
+    startTurn++;
+    recorder.set(IDLE);
+    return null;
+  }
+  // The few milliseconds between the mic opening and the recorder starting.
+  if (!l || phase === 'stopping' || phase === 'starting') return null;
   if (l.pauseAt) {
     l.pausedMs += Date.now() - l.pauseAt;
     l.pauseAt = 0;
