@@ -270,3 +270,27 @@
 - Expand a reference to print the verse inline, uneditable
 - Tap a link for go-there, expand, collapse
 - Syncs to your account
+
+## 27. Voice Control
+- Everything on the device, offline, nothing sent anywhere
+- Floating mic button, off by default, per device
+- Push to talk: open only while held, slide off to cancel
+- Drag by its grip; spot kept per device; follows Bar size
+- A word before the browser asks for the mic; steps for a blocked mic; "No microphone found"
+- What was heard and done shown beside the button
+- Mic in the search box: commands, or a search for anything else
+- Passages, commentaries, word study, Strong's, highlights, Repeats, search, windows, Read Aloud, translation
+- Map (with a year), connections, family tree, bio, encyclopedia, topical, timeline
+- "Who was James" with everyone of that name, "how many sons", "where was Jesus born"
+- Several commands at once; quoted verses; "Did you mean …?"
+- Voice Control download (~53 MB) and the Transcribe add-on (~10 MB)
+- Record in Notes, or into a page; saved every couple of seconds
+- Screen kept awake while recording; floating pill with Pause, Stop and the pocket screen
+- Pocket screen: black, hold to stop, comes up by itself on a phone
+- Tells you when the mic went silent
+- Speech or Music recording quality
+- Recordings list: play, rename, save as a file, delete, add a file
+- Transcribe into a page in the background, words appear as it goes, carries on after the app closes
+- Punctuation, capitals, Bible-name capitals, pause paragraphs, verse links
+- Spoken cues: "new paragraph", "heading", "the first point is"
+- Heading and Numbered list buttons in the notes editor

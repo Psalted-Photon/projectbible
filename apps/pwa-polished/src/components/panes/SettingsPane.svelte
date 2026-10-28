@@ -1478,7 +1478,8 @@
     <div class="setting-group">
       <p class="section-description il-hint">
         Hold the mic button and say what you want: “go to Romans 6”, “open Matthew Henry”,
-        “highlight verse 16 in yellow”. Let go and it happens. It all runs on this device, offline.
+        “highlight verse 16 in yellow”. Let go and it happens. Notes can record too, and turn a
+        recording into words on a page. It all runs on this device, offline.
       </p>
       <label class="checkbox-label">
         <input

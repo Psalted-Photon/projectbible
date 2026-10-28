@@ -18,11 +18,14 @@ import { WRITING_TIPS } from './writing';
 import { LIBRARY_TIPS } from './library';
 import { ART_TIPS } from './art';
 import { MODAL_TIPS } from './modals';
+import { VOICE_TIPS } from './voice';
 
 export const ALL_TIPS: Tip[] = [
   ...POPUP_TIPS,
   ...MODAL_TIPS,
   ...SELECTION_TIPS,
+  // The mic button and recording pill float over the panes and the reader.
+  ...VOICE_TIPS,
   ...PANE_TIPS,
   ...WINDOW_TIPS,
   ...COMMENTARY_TIPS,

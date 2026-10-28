@@ -32,7 +32,7 @@ export interface VoiceDownload {
 
 export const VOICE_DOWNLOADS: VoiceDownload[] = [
   { id: 'voice-control', name: 'Voice Control', description: 'Hold-to-talk commands: Whistle hears, Needle chooses' },
-  { id: 'voice-transcribe', name: 'Transcribe add-on', description: 'Punctuation and the voice detector, for recorded notes' },
+  { id: 'voice-transcribe', name: 'Transcribe add-on', description: 'Punctuation and the voice detector, for transcribing recordings in Notes' },
 ];
 
 /** One model file as the manifest lists it. */

@@ -30,6 +30,7 @@ Everything the app does, in plain language. Free, offline-first, and private: yo
 24. [Nave's Topical Bible](#24-naves-topical-bible)
 25. [People](#25-people)
 26. [Notes & Notebooks](#26-notes--notebooks)
+27. [Voice Control](#27-voice-control)
 
 ---
 
@@ -759,3 +760,61 @@ A shared notebook is one a group writes in together — a study group, a class, 
 - **If you're taken out of one**, your copy stays on your device to read. It isn't deleted out from under you, and it's yours to throw away when you want to.
 
 Notes and notebooks sync to your account like everything else. Shared notebooks have plumbing of their own — they belong to a group rather than to you — but they work the same way from where you sit.
+
+## 27. Voice Control
+
+Steer the app by talking, and turn what you say into notes. It all runs **on your device**: nothing you say is sent anywhere, and once it's downloaded it works offline.
+
+### 27.1 The mic button
+
+- **Turn it on** in Settings → Voice Control → Show the mic button. It's off until you do, and it's set per device.
+- **Push to talk.** Hold the button, say what you want, and let go: it happens. The mic is open only while you hold it. Slide off before letting go to cancel.
+- **Drag it by its grip** anywhere on the screen. It remembers its spot on each device, and follows Bar size.
+- **The first press** says what the mic is for before the browser asks for it. A blocked mic gets the steps to allow it again, and with no mic plugged in the button says so.
+- What was heard and what was done show beside the button for a few seconds.
+- **In the search box too.** Once Voice Control is downloaded, the open search box has a mic at its end. Anything that isn't a command is searched for.
+
+### 27.2 What you can say
+
+- **A passage:** "go to Romans 6", "Psalm one nineteen, verse one oh five". "Psalm 19:105" gets "Did you mean Psalm 119:105?"
+- **A commentary**, in a new window if you say so: "open Matthew Henry", "open Spurgeon in a new window".
+- **Word study and Strong's:** "word study grace", "Strong's G26".
+- **Highlights:** "highlight verse 16 in yellow", "underline verses 3 and 4". With no color said, the highlighter opens; a color is never picked for you.
+- **Repeats:** "mark peace everywhere".
+- **Search:** "search for living water".
+- **Windows:** "open the map", "close the timeline", "close everything".
+- **Read Aloud:** "start reading", "start reading from verse 5", "pause".
+- **Translation:** "switch to the KJV".
+- **The map:** "where is Bethlehem", "show Jerusalem on the map in 1000 BC". "Where was Jesus born" opens the map at the place on record.
+- **People:** "who was James" opens the bio, with everyone else of that name to pick from. "Show Jacob's family tree". "How many sons did Jacob have" answers in a notice.
+- **Connections, encyclopedia, topical, timeline:** "show the connections for Romans 8", "look up Bethel in the encyclopedia", "when did the exodus happen".
+- **Several at once:** "go to John 3, then open Spurgeon".
+- **A quoted verse** goes to that verse: "for God so loved the world".
+- When it isn't sure, it asks "Did you mean …?" with a Yes. A pack that isn't installed is offered for download.
+- It steers; it doesn't answer. A question it can't act on gets "I can steer the wheel, but can't answer questions."
+
+### 27.3 Downloads
+
+- **Voice Control**, about 53 MB, once: Whistle hears and Needle chooses. From Settings → Voice Control, the mic button's own card, or Install everything.
+- **The Transcribe add-on**, about 10 MB: punctuation and a voice detector. Offered the first time you tap Transcribe.
+- New versions show in Storage & updates like any pack.
+
+### 27.4 Recording in Notes
+
+- **Record** from Notes → Recordings, or into a page with the mic in the page's header.
+- **Saved as it goes**, every couple of seconds, so closing the app loses only the last couple of seconds.
+- **The screen stays awake** while it records, because a locked phone silences the mic.
+- **A floating pill** shows how long, with Pause, Stop and the pocket screen. It stays when Notes closes, so you can read along while you record.
+- **The pocket screen** is black, so it costs little battery, and taps in a pocket do nothing: hold Stop to finish, or hold Go back. On a phone it comes up by itself after two minutes without a touch.
+- **If the mic goes silent anyway**, you're told when there's sound again: "The screen locked at 2:13. Nothing was recorded until 3:05."
+- **Recording quality** in Settings → Voice Control: Speech (about 15 MB an hour) or Music (about 58 MB an hour, for singing).
+- **The Recordings list** plays, renames, saves as a file and deletes, and adds an audio file from the device. Recordings stay on the device they were made on; save one as a file and add it on another to move it.
+
+### 27.5 Transcribing
+
+- **Tap Transcribe** on a recording, or on the notice after Stop. The words go into the page it was recorded from, or a new page in Quick Notes named after it.
+- **It runs in the background** while you use the app, and the words appear on the page as it goes. An hour takes about 5–7 minutes on a phone, and the screen stays awake while it runs.
+- **Stop it any time** and carry on later. If the app closes, it carries on by itself the next time the app opens.
+- **How it's written up:** periods, commas, question marks and capitals; capitals on the Bible's names (the books, people, places, God, Jesus, the Holy Spirit), with names that are everyday words too (Job, Mark, Eve) only where the words around them say so ("the book of Job", "Mark 5", "Adam and Eve"); a new paragraph after a pause of a few seconds; and verses you name become links ("Romans six verse four" is Romans 6:4).
+- **Say it to shape it:** "new paragraph"; "heading, …" or "new heading" and then the words; "the first point is …", "my second point", "point three:" or "number four," for numbered items.
+- Expect a missed comma or question mark now and then. It's a normal note, so you fix misses by hand. The notes editor has Heading and Numbered list buttons too.
