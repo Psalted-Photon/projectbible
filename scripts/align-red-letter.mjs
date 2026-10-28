@@ -188,9 +188,20 @@ function alignSpan(spanText, webVerseText, targetText) {
         // own speech (Matt 11:17 "and say, 'We played...'"), so we must NOT snap to
         // it and drop his surrounding words — let later whole-span strategies run.
         const isNested = r => tgtQuotes.some(d => d.q === '"' && d.s < r.s && d.e > r.e);
+        // When WEB's span is itself a single-quoted saying, someone else is quoting
+        // him and only the inner quote is his. Comparing against the enclosing
+        // double quote let small shared words ("the", "and") pull the red out over
+        // the other speaker (John 9:11 "The man called Jesus ... told me, 'Go...'").
+        // That speaker's quote may be left open to the verse end, ending where the
+        // inner one does (John 8:52, closed in 8:53).
+        const isQuoted = r => tgtQuotes.some(d => d.q === '"' && d.s < r.s && d.e >= r.e);
+        const innerOnly = /^['‘]/.test(span)
+          && tgtQuotes.some(r => r.q === "'" && isQuoted(r)
+            && wordOverlap(span, targetText.slice(r.s, r.e)) > 0);
         let bt = null, btOv = -1;
         for (const r of tgtQuotes) {
-          if (r.q === "'" && !isNested(r)) continue;
+          if (r.q === "'" && !(innerOnly ? isQuoted(r) : isNested(r))) continue;
+          if (innerOnly && r.q === '"') continue;
           const ov = wordOverlap(span, targetText.slice(r.s, r.e));
           const tighter = bt && Math.abs(ov - btOv) < 1e-9 && (r.e - r.s) < (bt.e - bt.s);
           if (ov > btOv + 1e-9 || tighter) { btOv = ov; bt = r; }
