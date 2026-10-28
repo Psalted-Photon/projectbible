@@ -15,7 +15,7 @@
   import { getRecorderPos, setRecorderPos } from '../adapters/settings';
   import { recorder, recordingLive, pauseRecording, resumeRecording, stopRecording, setPocket } from '../lib/recorder/recorder';
   import { clock } from '../lib/recorder/recordings';
-  import { showNotice } from '../stores/noticeStore';
+  import { noticeSaved } from '../lib/voice/transcribe';
 
   let el: HTMLDivElement | null = null;
   const drag = floatDrag({
@@ -36,7 +36,7 @@
 
   async function stop() {
     const rec = await stopRecording();
-    if (rec) showNotice(`Saved “${rec.name}” (${clock(rec.durationSec)}) to Recordings in Notes.`);
+    if (rec) noticeSaved(rec);
   }
 </script>
 

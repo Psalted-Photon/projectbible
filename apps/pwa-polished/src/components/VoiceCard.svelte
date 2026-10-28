@@ -10,11 +10,19 @@
    */
   import { onMount } from 'svelte';
   import { fade, fly } from '../lib/motion';
-  import { Microphone, MicrophoneSlash, DownloadSimple } from 'phosphor-svelte';
+  import { Microphone, MicrophoneSlash, DownloadSimple, TextAlignLeft } from 'phosphor-svelte';
   import { portal } from '../lib/portal';
   import CloseX from './CloseX.svelte';
   import VoiceControlDownloads from './VoiceControlDownloads.svelte';
-  import { voiceCard, voiceReady, allowMic, micFor } from '../lib/voice/holdToTalk';
+  import {
+    voiceCard,
+    voiceReady,
+    allowMic,
+    micFor,
+    cardDownloads,
+    transcribeDownloadsDone,
+  } from '../lib/voice/holdToTalk';
+  import { VOICE_DOWNLOADS_EVENT, voiceInstalledHere } from '../lib/voice/voicePack';
 
   let asking = false;
 
@@ -36,6 +44,20 @@
       asking = false;
     }
   }
+
+  /** Transcribe's downloads all in: the card closes and the transcript starts. */
+  async function checkTranscribeDownloads() {
+    if ($voiceCard !== 'transcribe') return;
+    const ids = $cardDownloads;
+    const here = await Promise.all(ids.map((id) => voiceInstalledHere(id).catch(() => false)));
+    if ($voiceCard === 'transcribe' && here.every(Boolean)) transcribeDownloadsDone();
+  }
+
+  onMount(() => {
+    const onDownloads = () => void checkTranscribeDownloads();
+    window.addEventListener(VOICE_DOWNLOADS_EVENT, onDownloads);
+    return () => window.removeEventListener(VOICE_DOWNLOADS_EVENT, onDownloads);
+  });
 
   onMount(() => {
     const onKeydown = (e: KeyboardEvent) => {
@@ -64,7 +86,15 @@
     >
       <CloseX class="vcard-close" label="Close" on:click={close} />
 
-      {#if $voiceCard === 'download'}
+      {#if $voiceCard === 'transcribe'}
+        <h3 id="vcard-title"><TextAlignLeft size={20} weight="bold" /> Transcribe</h3>
+        <p>
+          Turning a recording into words needs a one-time download. After that it works offline,
+          and the recording never leaves this device.
+        </p>
+        <VoiceControlDownloads ids={$cardDownloads} />
+        <p class="quiet">Transcribing starts as soon as {$cardDownloads.length > 1 ? 'both are' : 'it’s'} downloaded.</p>
+      {:else if $voiceCard === 'download'}
         <h3 id="vcard-title"><DownloadSimple size={20} weight="bold" /> Voice Control</h3>
         <p>
           Voice Control needs a one-time download. After that it works offline, and

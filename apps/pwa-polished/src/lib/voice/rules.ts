@@ -835,6 +835,9 @@ export function noopReply(text: string): string | null {
   return /^\s*thank/i.test(text) ? "You're welcome." : '';
 }
 
+/** The books alone, for transcribing a recording: the app's own names would only pull other words toward them. */
+export const BOOK_KEYWORDS = [...new Set(BOOKS.map((b) => b.replace(/^\d /, '')))].join('\n');
+
 /** Names Whistle is told to favor: one per line, as people say them. */
 export const APP_KEYWORDS = [
   ...new Set(BOOKS.map((b) => b.replace(/^\d /, ''))),

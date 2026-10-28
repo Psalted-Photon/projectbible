@@ -5,6 +5,8 @@
    * opens when something is missing, and a Notes recording's pill and pocket
    * screen while one runs. Voice Control's models load on the first command,
    * never here.
+   *
+   * A transcript the app closed on carries on a few seconds after launch.
    */
   import { onMount } from 'svelte';
   import FloatingMic from './FloatingMic.svelte';
@@ -13,8 +15,16 @@
   import RecorderPill from './RecorderPill.svelte';
   import PocketScreen from './PocketScreen.svelte';
   import { watchVoiceReady } from '../lib/voice/holdToTalk';
+  import { resumeWaitingTranscript } from '../lib/voice/transcribe';
 
-  onMount(() => watchVoiceReady());
+  /** Long enough for the app to settle and the account to be known. */
+  const RESUME_AFTER_MS = 5000;
+
+  onMount(() => {
+    watchVoiceReady();
+    const t = setTimeout(() => void resumeWaitingTranscript().catch(() => {}), RESUME_AFTER_MS);
+    return () => clearTimeout(t);
+  });
 </script>
 
 <FloatingMic />

@@ -13,6 +13,7 @@
   import EditorThemePanel from './EditorThemePanel.svelte';
   import { editorThemeVars } from '../editorTheme';
   import { isTextEntry } from '../isTextEntry';
+  import type { TranscriptBlock, TranscriptTail } from '../voice/transcriptSink';
   import {
     getEditorTheme, updateEditorTheme, getEditorBarHidden, setEditorBarHidden,
     DEFAULT_EDITOR_THEME, type EditorSurface, type EditorThemeSettings,
@@ -141,6 +142,38 @@
   let lexGetSelection: any = null;
   let lexIsRangeSelection: any = null;
   let lexGetNodeByKey: any = null;
+  /** Lexical itself, once loaded, for appendBlocks. */
+  let lex: typeof import('lexical') | null = null;
+
+  /**
+   * A transcript's next piece, added at the end without touching the caret
+   * (lib/voice/transcriptSink.ts). A block that joins carries on the last one
+   * when that is still the last thing here and reads as `tail` says.
+   * Returns what the last block now reads, or undefined before the editor is
+   * ready.
+   */
+  export function appendBlocks(blocks: TranscriptBlock[], tail: TranscriptTail | null): TranscriptTail | null | undefined {
+    if (!editor || !lex) return undefined;
+    const L = lex;
+    const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
+    let last = tail;
+    editor.update(() => {
+      const root = L.$getRoot();
+      if (!squash(root.getTextContent())) root.clear();
+      for (const b of blocks) {
+        if (!b.text.trim()) continue;
+        const end = root.getLastChild();
+        if (b.joins && last && last.kind === b.kind && L.$isParagraphNode(end) && squash(end.getTextContent()) === squash(last.text)) {
+          end.append(L.$createTextNode(' ' + b.text));
+          last = { kind: b.kind, text: squash(last.text + ' ' + b.text) };
+          continue;
+        }
+        root.append(L.$createParagraphNode().append(L.$createTextNode(b.text)));
+        last = { kind: b.kind, text: squash(b.text) };
+      }
+    });
+    return last;
+  }
 
   /** Print the verse inside a reference and lock the pair. */
   export function expandRef(key: string, verseText: string) {
@@ -244,6 +277,7 @@
         $getNodeByKey,
       } = lexicalModule;
       lexGetNodeByKey = $getNodeByKey;
+      lex = lexicalModule;
       const { $patchStyleText, $getSelectionStyleValueForProperty } = selectionModule;
       const { $generateHtmlFromNodes, $generateNodesFromDOM } = htmlModule;
       lexGetSelection = $getSelection;

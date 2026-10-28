@@ -12,7 +12,7 @@
   import { portal } from '../lib/portal';
   import { recorder, stopRecording, setPocket } from '../lib/recorder/recorder';
   import { clock } from '../lib/recorder/recordings';
-  import { showNotice } from '../stores/noticeStore';
+  import { noticeSaved } from '../lib/voice/transcribe';
 
   const HOLD_MS = 1000;
 
@@ -56,7 +56,7 @@
       return;
     }
     const rec = await stopRecording();
-    if (rec) showNotice(`Saved “${rec.name}” (${clock(rec.durationSec)}) to Recordings in Notes.`);
+    if (rec) noticeSaved(rec);
   }
 
   onDestroy(() => cancelAnimationFrame(frame));

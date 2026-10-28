@@ -27,7 +27,7 @@ import {
   askForMic,
   type MicPermission,
 } from './mic';
-import { VOICE_DOWNLOADS_EVENT, voiceInstalledHere } from './voicePack';
+import { VOICE_DOWNLOADS_EVENT, voiceInstalledHere, type VoiceDownloadId } from './voicePack';
 import { hearCommand, voiceGesture, type VoiceOutcome } from './voiceControl';
 
 // ── The floating button's switch ────────────────────────────────────────────
@@ -86,10 +86,34 @@ function askedBefore(): boolean {
 
 // ── The cards ───────────────────────────────────────────────────────────────
 
-/** What a press found missing: the download, the first ask, a blocked mic, no mic. */
-export type VoiceCardKind = 'download' | 'ask' | 'blocked' | 'nomic';
+/**
+ * What a press found missing: the download, the first ask, a blocked mic, no
+ * mic. Or what Transcribe needs downloaded first.
+ */
+export type VoiceCardKind = 'download' | 'ask' | 'blocked' | 'nomic' | 'transcribe';
 
 export const voiceCard = writable<VoiceCardKind | null>(null);
+
+/** What the Transcribe card lists. */
+export const cardDownloads = writable<VoiceDownloadId[]>([]);
+
+/** The transcript waiting on the Transcribe card's downloads. */
+let afterDownload: (() => void) | null = null;
+
+/** Transcribe needs these downloaded first: the card for them, and `then` once they're in. */
+export function openTranscribeCard(ids: VoiceDownloadId[], then: () => void): void {
+  cardDownloads.set(ids);
+  afterDownload = then;
+  openCard('transcribe', 'record');
+}
+
+/** Everything the Transcribe card listed is downloaded: on with the transcript. */
+export function transcribeDownloadsDone(): void {
+  const then = afterDownload;
+  afterDownload = null;
+  voiceCard.set(null);
+  then?.();
+}
 
 /** What the card is asking the mic for: a hold to talk, or a recording in Notes. */
 export const micFor = writable<'talk' | 'record'>('talk');

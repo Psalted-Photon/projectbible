@@ -15,6 +15,8 @@
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import RecordingsList from './RecordingsList.svelte';
   import { recorder, recordingLive, startRecording } from '../lib/recorder/recorder';
+  import { registerPageWriter } from '../lib/voice/transcribe';
+  import { OPEN_NOTES_PAGE, NOTES_PAGE_WRITTEN, type NotesPageRef } from '../lib/openNotesPage';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
   import type { SearchTreeNode } from '../lib/searchTree';
@@ -654,10 +656,15 @@
     unsubShared = subscribeToSharedNotebookChanges(() => {
       if (!isDirty) void loadShared();
     });
+    window.addEventListener(OPEN_NOTES_PAGE, onOpenNotesPage);
+    window.addEventListener(NOTES_PAGE_WRITTEN, onPageWritten);
   });
 
   onDestroy(() => {
     destroyed = true;
+    window.removeEventListener(OPEN_NOTES_PAGE, onOpenNotesPage);
+    window.removeEventListener(NOTES_PAGE_WRITTEN, onPageWritten);
+    unregisterWriter?.();
     unsubUserData?.();
     unsubNotebooks?.();
     unsubShared?.();
@@ -735,6 +742,8 @@
   }
 
   async function openPage(page: NotebookPage) {
+    // The saved copy, not the list's: a transcript may have written on it since the list was read.
+    page = (await syncedNotebookStore.getPage(page.id)) ?? page;
     editorTitle = page.title ?? '';
     editorText = page.text;
     target = { kind: 'page', pageId: page.id, notebookId: page.notebookId };
@@ -1385,6 +1394,37 @@
     void startRecording({ page: { notebookId: target.notebookId, pageId: target.pageId } });
   }
 
+  // ─── Transcripts ────────────────────────────────────────────────────────────
+  // A recording being transcribed into the page that is open here writes
+  // through this editor, so the words appear as they come and the editor's
+  // own save keeps them (lib/voice/transcribe.ts).
+
+  let pageEditor: RefAwareEditor | null = null;
+  let unregisterWriter: (() => void) | null = null;
+  $: writerPageId = view === 'editor' && target?.kind === 'page' ? target.pageId : null;
+  $: setWriter(writerPageId);
+
+  function setWriter(pageId: string | null) {
+    unregisterWriter?.();
+    unregisterWriter = pageId ? registerPageWriter(pageId, (blocks, tail) => pageEditor?.appendBlocks(blocks, tail)) : null;
+  }
+
+  /** Something else asked for a page: a transcript's Open. */
+  async function onOpenNotesPage(e: Event) {
+    const { pageId } = (e as CustomEvent<NotesPageRef>).detail;
+    if (!isSignedIn) return;
+    if (isDirty) await save();
+    const page = await syncedNotebookStore.getPage(pageId);
+    if (!page || destroyed) return;
+    if (mode !== 'local') setMode('local');
+    await openPage(page);
+  }
+
+  /** A transcript wrote on a page that isn't open: the list shows it. */
+  function onPageWritten() {
+    if (view === 'browse' && !isDirty) void loadAll();
+  }
+
   function handleBlur() {
     if (isDirty) void save();
   }
@@ -1732,6 +1772,7 @@
 
     <div class="editor-body">
       <RefAwareEditor
+        bind:this={pageEditor}
         bind:isDirty
         surface="notes"
         surfaceLabel="Notes"

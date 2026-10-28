@@ -4,9 +4,14 @@
    * rename, save as a file and delete, plus Record and bringing a file in.
    * Saving as a file and bringing it in is how a recording moves between a
    * phone and a computer; recordings don't sync by themselves.
+   *
+   * Transcribe turns one into words on a notebook page (lib/voice/transcribe.ts),
+   * with its progress here while it runs.
    */
   import { onMount, onDestroy } from 'svelte';
-  import { Record, FileArrowUp, FileArrowDown, PencilSimple, Trash, CaretRight } from 'phosphor-svelte';
+  import { Record, FileArrowUp, FileArrowDown, PencilSimple, Trash, CaretRight, TextAlignLeft, Stop, ArrowSquareOut } from 'phosphor-svelte';
+  import { transcribing, transcribeRecording, stopTranscribing } from '../lib/voice/transcribe';
+  import { openNotesPage } from '../lib/openNotesPage';
   import {
     recordings,
     refreshRecordings,
@@ -37,6 +42,12 @@
   });
 
   $: live = recordingLive($recorder);
+  $: txBusy = $transcribing.phase !== 'idle';
+
+  /** How far along this one's transcript is, 0–100, while it runs. */
+  function txPercent(rec: Recording, readSec: number): number {
+    return rec.durationSec ? Math.min(100, Math.round((readSec / rec.durationSec) * 100)) : 0;
+  }
 
   async function toggle(rec: Recording) {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -93,6 +104,7 @@
       danger: true,
     });
     if (!ok) return;
+    if ($transcribing.id === rec.id) stopTranscribing();
     if (openId === rec.id) {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       audioUrl = null;
@@ -180,7 +192,11 @@
               {#if rec.state === 'recording'}
                 Recording now…
               {:else}
-                {clock(rec.durationSec)} · {sizeLabel(rec.bytes)} · {dateLabel(rec.createdAt)}{rec.quality === 'music' ? ' · Music' : ''}{rec.imported ? ' · From a file' : ''}
+                {clock(rec.durationSec)} · {sizeLabel(rec.bytes)} · {dateLabel(rec.createdAt)}{rec.quality === 'music' ? ' · Music' : ''}{rec.imported ? ' · From a file' : ''}{$transcribing.id === rec.id
+                  ? ` · Transcribing ${txPercent(rec, $transcribing.readSec)}%`
+                  : rec.transcript?.state === 'done'
+                    ? ' · Transcribed'
+                    : ''}
               {/if}
             </span>
           </button>
@@ -201,7 +217,40 @@
                 until {clock(gap.to)}.
               </p>
             {/each}
+            {#if $transcribing.id === rec.id}
+              <div class="tx">
+                <span class="tx-line">
+                  {$transcribing.stage ??
+                    ($transcribing.phase === 'stopping'
+                      ? 'Stopping…'
+                      : `Transcribing… ${clock($transcribing.readSec)} of ${clock(rec.durationSec)}`)}
+                </span>
+                <span class="tx-bar"><i style="width: {txPercent(rec, $transcribing.readSec)}%"></i></span>
+              </div>
+            {:else if rec.transcript?.state === 'done'}
+              <p class="tx-line">Transcribed into a page in Notes.</p>
+            {:else if rec.transcript && rec.transcript.doneSec > 0}
+              <p class="tx-line">Transcribed up to {clock(rec.transcript.doneSec)}.</p>
+            {/if}
+            {#if rec.transcript?.state === 'failed' && rec.transcript.error}
+              <p class="note">Transcribing stopped: {rec.transcript.error}</p>
+            {/if}
             <div class="actions">
+              {#if $transcribing.id === rec.id}
+                <button type="button" class="act" disabled={$transcribing.phase === 'stopping'} on:click={stopTranscribing}>
+                  <Stop size={14} weight="fill" /> Stop transcribing
+                </button>
+              {:else if rec.transcript?.state !== 'done'}
+                <button type="button" class="act tx-go" disabled={txBusy} on:click={() => transcribeRecording(rec.id)}>
+                  <TextAlignLeft size={14} weight="bold" />
+                  {rec.transcript && rec.transcript.doneSec > 0 ? 'Carry on transcribing' : 'Transcribe'}
+                </button>
+              {/if}
+              {#if rec.page}
+                <button type="button" class="act" on:click={() => rec.page && openNotesPage(rec.page)}>
+                  <ArrowSquareOut size={14} weight="bold" /> Open the page
+                </button>
+              {/if}
               <button type="button" class="act" on:click={() => startRename(rec)}><PencilSimple size={14} weight="bold" /> Rename</button>
               <button type="button" class="act" on:click={() => saveRecordingFile(rec)}><FileArrowDown size={14} weight="bold" /> Save as a file</button>
               <button type="button" class="act danger" on:click={() => remove(rec)}><Trash size={14} weight="bold" /> Delete</button>
@@ -391,8 +440,51 @@
     cursor: pointer;
   }
 
-  .act:hover {
+  .act:hover:not(:disabled) {
     border-color: #667eea;
+  }
+
+  .act:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .act.tx-go {
+    border-color: rgba(102, 126, 234, 0.6);
+    color: #c7d0ff;
+  }
+
+  .tx {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 4px 0;
+  }
+
+  .tx-line {
+    margin: 4px 0;
+    color: #aaa;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tx .tx-line {
+    margin: 0;
+  }
+
+  .tx-bar {
+    display: block;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+  }
+
+  .tx-bar > i {
+    display: block;
+    height: 100%;
+    background: #667eea;
+    transition: width 0.3s;
   }
 
   .act.danger:hover {

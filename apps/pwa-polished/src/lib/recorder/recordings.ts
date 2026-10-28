@@ -24,15 +24,23 @@ export interface RecordingGap {
   screenOff: boolean;
 }
 
-/** Where transcribing has got to (transcribe.ts). */
+/** The last thing a transcript wrote on its page, so the next piece can carry it on. */
+export interface TranscriptTail {
+  kind: 'p' | 'h' | 'li';
+  text: string;
+}
+
+/**
+ * Where transcribing has got to (lib/voice/transcribe.ts). 'waiting' is one
+ * the app closed on, picked up again by itself; 'paused' was stopped by hand.
+ */
 export interface TranscriptProgress {
-  state: 'running' | 'paused' | 'done' | 'failed';
+  state: 'running' | 'waiting' | 'paused' | 'done' | 'failed';
   /** Seconds of the recording already turned into text. */
   doneSec: number;
   /** Pieces added to the page so far. */
   pieces: number;
-  /** Seconds of the last speech added, for the pause before the next one. */
-  lastEnd: number;
+  tail: TranscriptTail | null;
   error?: string;
 }
 
@@ -121,7 +129,7 @@ export async function refreshRecordings(): Promise<Recording[]> {
       }
       // A transcript running when the app closed waits to be picked up again.
       if (r.transcript?.state === 'running') {
-        r.transcript.state = 'paused';
+        r.transcript.state = 'waiting';
         await putRecording(r, false);
       }
     }

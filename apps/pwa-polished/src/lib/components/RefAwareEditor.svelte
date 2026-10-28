@@ -14,6 +14,7 @@
   import { navigationStore } from '../../stores/navigationStore';
   import { IndexedDBTextStore } from '../../adapters/TextStore';
   import type { EditorSurface } from '../../adapters/settings';
+  import type { TranscriptBlock, TranscriptTail } from '../voice/transcriptSink';
 
   export let value: string = '';
   export let placeholder: string = 'Start writing…';
@@ -51,6 +52,11 @@
   export function setContent(html: string) {
     hit = null;
     editorRef?.setContent(html);
+  }
+
+  /** A transcript's next piece — see LexicalEditor. */
+  export function appendBlocks(blocks: TranscriptBlock[], tail: TranscriptTail | null): TranscriptTail | null | undefined {
+    return editorRef?.appendBlocks(blocks, tail);
   }
 
   function handleRefClick(e: CustomEvent<RefHit>) {
