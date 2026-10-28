@@ -10,7 +10,7 @@
 
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort.wasm.min.mjs';
 import { NeedleEngine, Punctuator, SileroVad, planChunks, VAD_FRAME } from './engine.js';
-import { tidy, toolsFor } from './tools.js';
+import { tidy, toolsFor, usePeopleNames, personNamed, isEveryday } from './tools.js';
 
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
 // Threads need a cross-origin isolated page, which the app is not.
@@ -194,10 +194,281 @@ async function load(post, cacheOnly) {
   await timed('vad', async () => {
     vad = await SileroVad.create(ort, files.vad.bytes);
   });
+  await timed('app', async () => {
+    app = await loadAppData();
+  });
 
   readyAt = performance.now();
-  return { ms, fromCache, bytes: total, heapMB: eng.heapBytes() / 1048576, models: eng.models() };
+  return {
+    ms, fromCache, bytes: total, heapMB: eng.heapBytes() / 1048576, models: eng.models(),
+    app: { people: app.byId.size, verses: app.verses.length, translations: app.translations },
+  };
 }
+
+// ── The app's own data ──────────────────────────────────────────────────────
+// The lab is on the app's site, so it can read the people list and the verse
+// text the app has already installed in its own database. It only reads: on a
+// device where the app has never run there is nothing to read, the database
+// is not created, and the lab carries on without it.
+
+let app = { byId: new Map(), byName: new Map(), keys: [], verses: [], translations: [] };
+const QUOTE_TRANSLATIONS = ['kjv', 'web', 'bsb', 'net'];
+
+function openAppDb() {
+  return new Promise((resolve) => {
+    const req = indexedDB.open('projectbible');
+    // Only fires when the database doesn't exist yet; stop it being made.
+    req.onupgradeneeded = () => req.transaction.abort();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  });
+}
+
+function getAll(db, store, index, key) {
+  return new Promise((resolve) => {
+    if (!db.objectStoreNames.contains(store)) return resolve([]);
+    const s = db.transaction(store, 'readonly').objectStore(store);
+    const req = index ? s.index(index).getAll(key) : s.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => resolve([]);
+  });
+}
+
+/** Lower case, letters and digits only, one space between words. */
+const plain = (s) => String(s ?? '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** A stored verse as plain words: notes, tags and the reader's marks taken out. */
+const verseWords = (text) =>
+  plain(String(text ?? '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\+[^+\x01\x14\x15]*[\x01\x14\x15]/g, ' ')
+    .replace(/[\x10-\x12]/g, ' ')
+    .replace(/[\x00-\x1f]/g, ''));
+
+const parseList = (v) => {
+  if (Array.isArray(v)) return v;
+  try { const x = JSON.parse(v || '[]'); return Array.isArray(x) ? x : []; } catch { return []; }
+};
+
+async function loadAppData() {
+  const out = { byId: new Map(), byName: new Map(), keys: [], verses: [], translations: [] };
+  const db = await openAppDb();
+  if (!db) return out;
+  try {
+    for (const p of await getAll(db, 'people')) out.byId.set(p.id, p);
+    for (const n of await getAll(db, 'person_names')) {
+      if (!out.byName.has(n.nameLower)) out.byName.set(n.nameLower, []);
+      out.byName.get(n.nameLower).push(n.personId);
+    }
+    for (const tid of QUOTE_TRANSLATIONS) {
+      const rows = await getAll(db, 'verses', 'translationId', tid);
+      if (!rows.length) continue;
+      out.translations.push(tid);
+      for (const v of rows) {
+        const words = verseWords(v.text);
+        out.verses.push({ ref: `${v.book} ${v.chapter}:${v.verse}`, tid, words: ` ${words} `, count: words ? words.split(' ').length : 0 });
+      }
+    }
+  } finally {
+    db.close();
+  }
+  const single = [...out.byName.keys()].filter((k) => /^[a-z]+$/.test(k));
+  out.keys = single.map((k) => [k, soundKey(k)]);
+  usePeopleNames(single);
+  return out;
+}
+
+// ── People ──────────────────────────────────────────────────────────────────
+
+/** How a name sounds, roughly: "mephibosheth" and "mefa boshes" both come out "mfps(t)". */
+function soundKey(s) {
+  const k = s.replace(/[^a-z]/g, '')
+    .replace(/ph/g, 'f').replace(/sh/g, 's').replace(/th/g, 't').replace(/ch/g, 'k').replace(/gh/g, 'g')
+    .replace(/c(?=[eiy])/g, 's').replace(/[cq]/g, 'k').replace(/x/g, 'ks')
+    .replace(/d/g, 't').replace(/g/g, 'k').replace(/b/g, 'p').replace(/v/g, 'f').replace(/z/g, 's');
+  if (!k) return '';
+  return (k[0] + k.slice(1).replace(/[aeiouhwy]/g, '')).replace(/(.)\1+/g, '$1');
+}
+
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** The name in the people list that a misheard name sounds most like, or null. */
+function soundAlike(q) {
+  const flat = q.replace(/ /g, '');
+  const key = soundKey(flat);
+  if (key.length < 3) return null;
+  let best = null;
+  for (const [name, k] of app.keys) {
+    const kd = editDistance(key, k);
+    if (kd > (key.length >= 5 ? 2 : 1)) continue;
+    const fd = editDistance(flat, name);
+    if (fd > Math.max(2, Math.round(name.length * 0.45))) continue;
+    if (!best || kd < best.kd || (kd === best.kd && fd < best.fd)) best = { name, kd, fd };
+  }
+  return best && best.name;
+}
+
+const TITLE_WORDS = /\b(the|apostle|prophet|prophetess|king|queen|saint|st|priest|judge|named|called)\b/g;
+const ownNames = (p) => [p.name, String(p.displayTitle || '').replace(/\s*\(.*$/, ''), ...String(p.alsoCalled || '').split(/[,;]/)].map(plain).filter(Boolean);
+
+function describePerson(p) {
+  const kids = parseList(p.children);
+  const father = parseList(p.father)[0];
+  const bits = [];
+  if (father) bits.push(`${p.gender === 'Female' ? 'daughter' : 'son'} of ${father.name}`);
+  if (kids.length) bits.push(`${kids.length} ${kids.length === 1 ? 'child' : 'children'}`);
+  if (p.verseCount) bits.push(`${p.verseCount} verse${p.verseCount === 1 ? '' : 's'}`);
+  return { id: p.id, title: p.displayTitle || p.name, line: bits.join(', ') };
+}
+
+/**
+ * Who a spoken name means: everyone with that name ("Which Jacob?"), or the
+ * name it sounds most like when it isn't in the list as heard.
+ */
+function resolvePerson(heard) {
+  if (!app.byName.size) return null;
+  const q = plain(String(heard).replace(/'s\b/gi, '')).replace(TITLE_WORDS, ' ').replace(/\s+/g, ' ').trim();
+  if (!q) return null;
+  let how = 'exact';
+  let key = q;
+  let ids = app.byName.get(q);
+  if (!ids) {
+    key = q.split(' ').find((w) => app.byName.has(w) && !isEveryday(w));
+    ids = key && app.byName.get(key);
+  }
+  if (!ids) {
+    key = soundAlike(q);
+    how = 'sounds like';
+    ids = key && app.byName.get(key);
+  }
+  if (!ids) return { heard, how: 'none', people: [] };
+  let ps = ids.map((id) => app.byId.get(id)).filter(Boolean);
+  // The index also files "Joseph (son of Jacob)" under jacob; keep the people it's the name of.
+  const own = ps.filter((p) => ownNames(p).includes(key));
+  if (own.length) ps = own;
+  ps.sort((a, b) => (b.verseCount || 0) - (a.verseCount || 0));
+  return { heard, how, name: key, people: ps.slice(0, 6).map(describePerson) };
+}
+
+const COUNT_RE = /\bhow many (sons|daughters|children|kids|wives|husbands|brothers|sisters)\b/i;
+
+/** "How many sons…" answered from the people list, never from Needle. */
+function familyCount(p, what) {
+  const kin = (field) => parseList(p[field]).map((k) => ({ name: k.name, female: app.byId.get(k.slug)?.gender === 'Female' }));
+  const who = p.displayTitle || p.name;
+  const list = (xs) => xs.map((x) => x.name).join(', ');
+  const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  if (what === 'sons' || what === 'daughters') {
+    const xs = kin('children').filter((k) => k.female === (what === 'daughters'));
+    return `${who}: ${n(xs.length, what.slice(0, -1), what)}${xs.length ? ` (${list(xs)})` : ''}`;
+  }
+  if (what === 'children' || what === 'kids') {
+    const xs = kin('children');
+    const d = xs.filter((k) => k.female).length;
+    return `${who}: ${n(xs.length, 'child', 'children')}${xs.length ? `, ${n(xs.length - d, 'son', 'sons')} and ${n(d, 'daughter', 'daughters')} (${list(xs)})` : ''}`;
+  }
+  if (what === 'wives' || what === 'husbands') {
+    const xs = kin('partners');
+    return `${who}: ${n(xs.length, what === 'wives' ? 'wife' : 'husband', what)}${xs.length ? ` (${list(xs)})` : ''}`;
+  }
+  const xs = kin('siblings').filter((k) => k.female === (what === 'sisters'));
+  return `${who}: ${n(xs.length, what.slice(0, -1), what)}${xs.length ? ` (${list(xs)})` : ''}`;
+}
+
+/** The hearing list with the best-known people added, most-mentioned first. */
+function withPeople(keywords, count) {
+  if (!count || !app.byId.size) return keywords;
+  const seen = new Set();
+  const names = [];
+  for (const p of [...app.byId.values()].sort((a, b) => (b.verseCount || 0) - (a.verseCount || 0))) {
+    const name = String(p.name || '').trim();
+    const k = plain(name);
+    if (!k || seen.has(k) || isEveryday(k)) continue;
+    seen.add(k);
+    names.push(name);
+    if (names.length >= count) break;
+  }
+  return [keywords, ...names].filter(Boolean).join('\n');
+}
+
+// ── Quotes ──────────────────────────────────────────────────────────────────
+
+const STOP = new Set(`the and of to a in that he i is it for his was unto shall be they with not all him them but my you me
+  so as their there this which said have from will are thy thou thee ye on by when what who were then into had no her she
+  we our us your up out do did does let an at or if go its one has been can may over say says where show open find tell
+  about look verse verses chapter read`.split(/\s+/));
+
+/** The most words in a row that the spoken words and a verse share. */
+function longestRun(words, verse) {
+  const v = verse.trim().split(' ');
+  let best = 0;
+  let prev = new Array(v.length + 1).fill(0);
+  for (let i = 1; i <= words.length; i++) {
+    const cur = new Array(v.length + 1).fill(0);
+    for (let j = 1; j <= v.length; j++) {
+      if (words[i - 1] === v[j - 1]) {
+        cur[j] = prev[j - 1] + 1;
+        if (cur[j] > best) best = cur[j];
+      }
+    }
+    prev = cur;
+  }
+  return best;
+}
+
+/**
+ * Whether what was said is a verse being quoted: four or more words in a row
+ * from one verse, or a whole short verse ("Jesus wept"). A phrase that turns
+ * up in more than three verses is a saying, not a quote.
+ */
+function findQuote(text) {
+  if (!app.verses.length) return null;
+  const t = performance.now();
+  const words = plain(text).split(' ').filter(Boolean);
+  if (words.length < 2) return null;
+  const content = [...new Set(words.filter((w) => w.length >= 3 && !STOP.has(w)))].sort((a, b) => b.length - a.length).slice(0, 4);
+  if (!content.length) return null;
+  const need = Math.min(2, content.length);
+  let best = 0;
+  let found = new Map();
+  for (const v of app.verses) {
+    let hits = 0;
+    for (const w of content) if (v.words.includes(` ${w} `)) hits++;
+    if (hits < need) continue;
+    const run = longestRun(words, v.words);
+    const whole = run === words.length && v.count === words.length;
+    if (run < 4 && !whole) continue;
+    if (run > best) {
+      best = run;
+      found = new Map();
+    }
+    if (run === best) {
+      if (!found.has(v.ref)) found.set(v.ref, { ref: v.ref, tids: [], whole });
+      found.get(v.ref).tids.push(v.tid);
+    }
+  }
+  const ms = performance.now() - t;
+  if (!best) return { ms, none: true };
+  const refs = [...found.values()];
+  if (refs.length > 3) return { ms, common: refs.length, run: best, of: words.length };
+  return { ms, ref: refs[0].ref, tids: refs[0].tids, also: refs.slice(1).map((r) => r.ref), run: best, of: words.length, whole: refs[0].whole };
+}
+
+const argsOf = (c) => {
+  if (typeof c.arguments === 'string') {
+    try { return JSON.parse(c.arguments); } catch { return {}; }
+  }
+  return c.arguments || {};
+};
 
 /** Sets the tools only when they differ from the last set, and times it. */
 function useTools(system, toolsJson) {
@@ -224,7 +495,26 @@ function choose(heard, system, everything, maxNewTokens) {
     useTools(system, toolsJson);
     answer = eng.complete(text, maxNewTokens);
   }
-  return { answer, needleMs: performance.now() - t, ...tools, toolCount: picked.tools.length, toolNames: picked.tools.map((x) => x.name), groups: picked.groups, tidied: text };
+  const needleMs = performance.now() - t;
+  // What the app would add from its own data: a verse the words quote, who a
+  // named person is, and family counts.
+  const quote = findQuote(text);
+  const people = (answer?.function_calls || []).map((c) => (argsOf(c).person ? resolvePerson(argsOf(c).person) : null));
+  let count = null;
+  let countWho = null;
+  const asks = COUNT_RE.exec(text);
+  if (asks) {
+    const who = (answer?.function_calls || []).map((c) => argsOf(c).person).find(Boolean) || personNamed(text);
+    const found = who && resolvePerson(who);
+    if (found?.people.length) {
+      count = found.people.slice(0, 3).map((p) => familyCount(app.byId.get(p.id), asks[1].toLowerCase()));
+      countWho = found.people[0].title;
+    }
+  }
+  return {
+    answer, needleMs, ...tools, toolCount: picked.tools.length, toolNames: picked.tools.map((x) => x.name), groups: picked.groups, tidied: text,
+    quote, people, count, countWho, appData: app.byId.size > 0 || app.verses.length > 0,
+  };
 }
 
 /**
@@ -290,7 +580,7 @@ self.onmessage = async (e) => {
       case 'command': {
         // Speech in: Whistle, then Needle on what it heard.
         const t = performance.now();
-        const transcript = eng.transcribe(payload.pcm, { language: 'en', keywords: payload.keywords });
+        const transcript = eng.transcribe(payload.pcm, { language: 'en', keywords: withPeople(payload.keywords, payload.people) });
         const whistleMs = performance.now() - t;
         result = { transcript, whistleMs };
         if (transcript.text && transcript.text.trim()) {
@@ -307,7 +597,7 @@ self.onmessage = async (e) => {
       case 'hear': {
         // Whistle on one clip, with and without the names list.
         const t1 = performance.now();
-        const withList = eng.transcribe(payload.pcm, { language: 'en', keywords: payload.keywords });
+        const withList = eng.transcribe(payload.pcm, { language: 'en', keywords: withPeople(payload.keywords, payload.people) });
         const t2 = performance.now();
         const without = eng.transcribe(payload.pcm, { language: 'en', keywords: null });
         result = { withList, without, withMs: t2 - t1, withoutMs: performance.now() - t2 };

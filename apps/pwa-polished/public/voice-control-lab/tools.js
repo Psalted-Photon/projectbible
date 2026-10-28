@@ -168,6 +168,31 @@ function countsFor(num, name) {
 const REF_RE = new RegExp(String.raw`\b(?:([123])\s+)?(${BOOK_NAMES.map((b) => b.replace(/ /g, String.raw`\s+`)).join('|')})\s+(\d+)(?:\s+(\d+))?(?![\d:])`, 'gi');
 const ORDINALS = { first: '1', '1st': '1', second: '2', '2nd': '2', third: '3', '3rd': '3' };
 
+const SMALL = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+  'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const UNIT = String.raw`(?:one|two|three|four|five|six|seven|eight|nine)`;
+const UNDER_100 = String.raw`(?:(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[\s-]+${UNIT})?|${SMALL.slice(1).join('|')})`;
+// "one hundred and nineteen", "one oh five", or plain "sixteen".
+const NUMBER = String.raw`(?:${UNIT}\s+hundred(?:\s+and)?(?:\s+${UNDER_100})?|${UNIT}\s+oh\s+${UNIT}|${UNDER_100})`;
+const BOOK_ALT = BOOK_NAMES.map((b) => b.replace(/ /g, String.raw`\s+`)).join('|');
+// Number words become digits only where a number is expected, so "the one who" stays as it is.
+const NUMBER_RE = new RegExp(String.raw`(\b(?:verses?|chapters?|${BOOK_ALT})\s+(?:\d+\s+)?|\d\s+(?:and|to|through|thru)\s+)(${NUMBER})\b`, 'gi');
+// "Psalm one nineteen" is Psalm 119; no other book has a hundred chapters.
+const PSALM_HUNDREDS_RE = new RegExp(String.raw`\b(psalms?\s+)(${UNIT})\s+(${UNDER_100})\b`, 'gi');
+
+function wordsToNumber(words) {
+  const w = words.toLowerCase().split(/[\s-]+/).filter((x) => x !== 'and');
+  let n = 0;
+  for (let i = 0; i < w.length; i++) {
+    if (w[i] === 'hundred') n *= 100;
+    else if (w[i] === 'oh') n *= 100;
+    else if (TENS.includes(w[i])) n += 10 * TENS.indexOf(w[i]);
+    else n += SMALL.indexOf(w[i]);
+  }
+  return n;
+}
+
 /**
  * What was said, put in the words the actions use before the trigger words or
  * Needle see it. The engine holds back an action whose values aren't in what
@@ -175,10 +200,24 @@ const ORDINALS = { first: '1', '1st': '1', second: '2', '2nd': '2', third: '3', 
  * "john chapter 3 verse 16", "john 3 16" and (when Whistle runs the numbers
  * together) "john 316" become "john 3:16"; "wavy line" becomes "squiggle" and
  * "blue text" "blue letters". A run of digits is split only when exactly one
- * chapter:verse exists in that book.
+ * chapter:verse exists in that book. Number words after "verse", "chapter" or a
+ * book become digits, and the mishearings the lab caught are put right: "I
+ * like verse 5" and "mark verse 5" are highlights, and "Destellonians" or "the
+ * Salonians" is Thessalonians.
  */
 export function tidy(text) {
-  return text
+  let t = text.replace(PSALM_HUNDREDS_RE, (m, lead, h, rest) => `${lead}${100 * wordsToNumber(h) + wordsToNumber(rest)}`);
+  // Twice, so "verses three and four" gets both.
+  for (let i = 0; i < 2; i++) t = t.replace(NUMBER_RE, (m, lead, num) => `${lead}${wordsToNumber(num)}`);
+  return t
+    .replace(/\b(?:hi|high)[\s-]light/gi, 'highlight')
+    // So "James" here isn't the book or the person.
+    .replace(/\bking james(?: version| bible)?\b/gi, 'KJV')
+    .replace(new RegExp(String.raw`\bi like\s+(?=(?:all\s+(?:of\s+)?)?(?:the\s+)?(?:verses?\b|chapter\b|\d|(?:${BOOK_ALT})\b))`, 'gi'), 'highlight ')
+    // "Mark 5" is the book; "mark verse 5" is a highlight.
+    .replace(/\bmark\s+(?=(?:all\s+(?:of\s+)?)?(?:the\s+)?verses?\b)/gi, 'highlight ')
+    .replace(/\bthe\s+s[ae]l+oni[ae]ns\b/gi, 'thessalonians')
+    .replace(/\b(?!babylonians\b)[a-z]*l+onians\b/gi, 'thessalonians')
     .replace(/\b(squiggl(y|es|ed)|wavy|wiggly)( (under)?lines?)?\b/gi, 'squiggle')
     .replace(/\b(boxed|boxes)\b/gi, 'box')
     .replace(/\b(dotted|dashes)\b/gi, 'dashed')
@@ -199,6 +238,43 @@ export function tidy(text) {
       return splits.length === 1 ? ref(...splits[0]) : m;
     });
 }
+
+/**
+ * People's names that are everyday words too ("so", "on", "lot", "mark") or
+ * titles ("king", "lord"), found by how often the KJV, WEB, BSB and NET write
+ * them in small letters, plus a few that are common in speech. These never
+ * bring in the people actions on their own.
+ */
+const EVERYDAY = new Set(`ancient apostle branch comforter concubine counsellor daughter daughters ephah ephod er
+  evangelist father fathers firstborn ghost head hen high holy host hosts ir journey judge king lamb last lawgiver
+  light lot mark master mother on prince prophet put queen ram root saviour sceptre shamed sister so son sons
+  sorcerer spirit spirits star steward sun tanner wife wonderful word almighty amok core dodo emperor god hod lord
+  mash messiah non pinon pul shisha tartan tidal urbane christ dayspring roman exodus`.split(/\s+/));
+
+export const isEveryday = (name) => EVERYDAY.has(name);
+
+/** Every person's name, from the app's own people list (the worker hands it over once it has read it). */
+let PEOPLE_NAMES = new Set();
+export function usePeopleNames(names) {
+  PEOPLE_NAMES = new Set([...names].filter((n) => !EVERYDAY.has(n)));
+}
+
+// A book with a chapter ("james 5"), "the book of Job", and commentators ("Matthew Henry") aren't people here.
+const NOT_PEOPLE_RE = new RegExp(String.raw`\b(?:[123]\s+)?(?:${BOOK_ALT})\s+\d+(?::\d+)?|\bbook\s+of\s+(?:${BOOK_ALT})\b|\b(?:matthew henry|adam clarke|albert barnes|charles spurgeon|john calvin|john wesley|john lightfoot|martin luther|thomas aquinas|a\.? ?t\.? robertson|jamieson|fausset|king comments)\b`, 'gi');
+
+/** A person is named: "jacob", "ruth's". */
+export function personNamed(t) {
+  if (!PEOPLE_NAMES.size) return null;
+  const words = t.replace(NOT_PEOPLE_RE, ' ').toLowerCase().match(/[a-z]+(?:'s)?/g) || [];
+  for (const w of words) {
+    const n = w.replace(/'s$/, '');
+    if (PEOPLE_NAMES.has(n)) return n;
+  }
+  return null;
+}
+
+const FAMILY_RE = /\b(tree|family|genealog\w*|ancestors?|descend\w*|sons?|daughters?|child(ren)?|kids?|father|mother|parents?|wife|wives|husbands?|brothers?|sisters?|grand(son|daughter|father|mother|child|children)s?|begat|born to|related|relatives?|cousins?|uncles?|aunts?|nephews?|nieces?|offspring|firstborn|married|marry)\b/;
+const BIO_RE = /\b(bio|biography|who (is|was|were)|who's|person|people|tell me about|life of|story of)\b/;
 
 const str = (description) => ({ type: 'string', description });
 
@@ -262,7 +338,7 @@ export const CORE = [
   },
   {
     key: 'highlight',
-    triggers: new RegExp(String.raw`\b(highlight\w*|colou?r|${[...COLORS, ...LOOKS].join('|')})\b`),
+    triggers: new RegExp(String.raw`\b(highlight\w*|mark|colou?r|${[...COLORS, ...LOOKS].join('|')})\b`),
     tools: [
       {
         name: 'highlight',
@@ -270,7 +346,7 @@ export const CORE = [
         parameters: {
           type: 'object',
           properties: {
-            verses: str('The verses as spoken, e.g. "16", "16 to 18", "john 3:16".'),
+            verses: str('The verses as spoken, e.g. "16", "16 to 18", "john 3:16", "all of chapter 1".'),
             color: { type: 'string', enum: COLORS, description: 'The color, when one is said.' },
             look: {
               type: 'string',
@@ -383,7 +459,7 @@ export const GROUPS = [
   },
   {
     key: 'map',
-    triggers: /\b(maps?|where (is|was))\b/,
+    triggers: /\b(maps?|where (is|was|were|did)|how far|located|location)\b/,
     tools: [
       {
         name: 'map',
@@ -414,7 +490,8 @@ export const GROUPS = [
   },
   {
     key: 'tree',
-    triggers: /\b(tree|family|genealog\w*|ancestors?|descendants?)\b/,
+    // Family words, or any person's name: "how many sons does Jacob have" asks about family.
+    triggers: { test: (t) => FAMILY_RE.test(t) || !!personNamed(t) },
     tools: [
       {
         name: 'family_tree',
@@ -428,7 +505,7 @@ export const GROUPS = [
   },
   {
     key: 'people',
-    triggers: /\b(bio|biography|who (is|was)|person|people)\b/,
+    triggers: { test: (t) => BIO_RE.test(t) || !!personNamed(t) },
     tools: [
       {
         name: 'biography',
@@ -470,7 +547,7 @@ export const GROUPS = [
   },
   {
     key: 'timeline',
-    triggers: /\b(timeline|when (did|was))\b/,
+    triggers: /\b(timeline|when (did|was|were|is)|what year|how long ago)\b/,
     tools: [
       {
         name: 'timeline',
@@ -656,6 +733,60 @@ export const APP_KEYWORDS = [
   'Connections', 'Encyclopedia', 'Topical', "Strong's", 'Timeline', 'Family Tree',
   'Harmonies', 'King James', 'World English Bible', 'Berean', 'NET Bible', 'Septuagint',
 ].join('\n');
+
+/**
+ * Hard things to say, for the test-phrases panel. `want` is what counts as
+ * right: `do` lists actions with values their words must contain ("a|b" takes
+ * either), `person` who the people list must find, `quote` the verse the words
+ * must match, `count` a family question answered from the people list, `none`
+ * nothing done (a question gets the steering-wheel reply).
+ */
+export const PHRASES = [
+  // Passages
+  { say: 'Go to Second Corinthians chapter five', should: 'go to 2 Corinthians 5', tests: '"second" and "chapter" spoken out', want: { do: [['passage', 'corinthians', '5']] } },
+  { say: 'Take me to the book of Job', should: 'go to Job', tests: 'Job is a book and a person', want: { do: [['passage', 'job']] } },
+  { say: 'Open Mark chapter four', should: 'go to Mark 4', tests: 'Mark is a book, a person and a verb', want: { do: [['passage', 'mark', '4']] } },
+  { say: 'Psalm one nineteen verse one oh five', should: 'go to Psalm 119:105', tests: 'big numbers said the way people say them', want: { do: [['passage', '119:105']] } },
+  { say: 'First Thessalonians four sixteen', should: 'go to 1 Thessalonians 4:16', tests: 'the book Whistle heard as "Destellonians"', want: { do: [['passage', 'thessalonians', '4:16']] } },
+  // Commentaries and word study
+  { say: 'Open Matthew Henry on Romans 8', should: 'Matthew Henry (on Romans 8)', tests: 'a commentator and a passage together', want: { do: [['commentary', 'henry']] } },
+  { say: 'What does Spurgeon say about this', should: 'open Spurgeon', tests: 'a question that is really a command', want: { do: [['commentary', 'spurgeon']] } },
+  { say: 'What does the word grace mean', should: 'word study on grace', tests: 'a question that is really a word study', want: { do: [['word_study|strongs', 'grace']] } },
+  { say: "Strong's H430", should: "Strong's H430", tests: 'a letter and a number', want: { do: [['strongs', '430']] } },
+  { say: 'Word study on prophet', should: 'word study on prophet', tests: 'prophet or profit', want: { do: [['word_study', 'prophet|profit']] } },
+  // Highlights
+  { say: 'Highlight verse sixteen in yellow', should: 'highlight verse 16 yellow', tests: 'the word Whistle heard as "I like"', want: { do: [['highlight', '16', 'yellow']] } },
+  { say: 'Mark verse five in green', should: 'highlight verse 5 green', tests: 'mark as a verb, not the book', want: { do: [['highlight', '5', 'green']] } },
+  { say: 'Highlight verses three to five in pink', should: 'highlight verses 3–5 pink', tests: 'a range in number words', want: { do: [['highlight', '3', '5', 'pink']] } },
+  { say: 'Underline John 3:16 with a wavy line', should: 'squiggle on John 3:16', tests: 'a look in everyday words', want: { do: [['highlight', '316', 'squiggle']] } },
+  { say: 'Highlight all of chapter one', should: 'highlight the whole chapter', tests: 'every verse at once', want: { do: [['highlight', 'all|1']] } },
+  // Search and quotes
+  { say: 'Find every verse about the wind', should: 'search for wind', tests: '"every" without "every time"', want: { do: [['search', 'wind']] } },
+  { say: 'Where does it say the Lord is my shepherd', should: 'go to Psalm 23:1', tests: 'a quote inside a question', want: { quote: 'Psalms 23:1' } },
+  { say: 'For God so loved the world', should: 'go to John 3:16', tests: 'a quote with no command word', want: { quote: 'John 3:16' } },
+  { say: 'Jesus wept', should: 'go to John 11:35', tests: 'a two-word verse and a person', want: { quote: 'John 11:35' } },
+  { say: 'The wages of sin is death', should: 'go to Romans 6:23', tests: 'a quote that skips its first word', want: { quote: 'Romans 6:23' } },
+  // People
+  { say: 'How many sons does Jacob have', should: 'answer from the people list, family tree on Jacob', tests: 'a person named with no command word', want: { count: true, do: [['family_tree', 'jacob']] } },
+  { say: 'Who was Mephibosheth', should: 'bio of Mephibosheth', tests: 'a name Whistle mishears, found by sound', want: { do: [['biography|family_tree']], person: 'Mephibosheth' } },
+  { say: "Show me Ruth's family", should: 'family tree on Ruth', tests: 'a name with an apostrophe s', want: { do: [['family_tree', 'ruth']] } },
+  { say: 'Tell me about the apostle Paul', should: 'bio of Paul', tests: 'a title before the name', want: { do: [['biography', 'paul']], person: 'Paul' } },
+  { say: "Who were David's wives", should: 'family tree on David', tests: 'a family word in a question', want: { do: [['family_tree|biography', 'david']] } },
+  { say: 'Who was James', should: 'bio, asking which James', tests: 'three Jameses and a book', want: { do: [['biography', 'james']] } },
+  // Places and times
+  { say: 'Where is Bethlehem', should: 'map at Bethlehem', tests: 'a place in a question', want: { do: [['map', 'bethlehem']] } },
+  { say: 'Show Jerusalem on the map in 1000 BC', should: 'map at Jerusalem, 1000 BC', tests: 'a place and a year', want: { do: [['map', 'jerusalem', '1000']] } },
+  { say: 'When did the exodus happen', should: 'timeline at the exodus', tests: 'Exodus the event, not the book', want: { do: [['timeline', 'exodus']] } },
+  // The app itself
+  { say: 'Close everything', should: 'close every window', tests: 'no window named', want: { do: [['close_window', 'all']] } },
+  { say: 'Start reading from verse ten', should: 'read aloud from verse 10', tests: 'a number word after "verse"', want: { do: [['read_aloud', '10']] } },
+  { say: 'Switch to the King James', should: 'KJV', tests: 'a translation by its full name', want: { do: [['translation', 'kjv']] } },
+  { say: 'Go to Romans 6, open the King Comments in a new window, word study rivers', should: 'all three, in order', tests: 'three commands at once', want: { do: [['passage', 'romans', '6'], ['commentary', 'king'], ['word_study', 'river']] } },
+  // Nothing to do
+  { say: "What's the weather in Lagos", should: 'nothing (the steering-wheel reply)', tests: 'a question the app has no answer for', want: { none: true } },
+  { say: 'Who made this app', should: 'nothing (the steering-wheel reply)', tests: 'a question about the app', want: { none: true } },
+  { say: 'Thank you', should: 'nothing', tests: 'manners', want: { none: true } },
+];
 
 /** Names that are hard to hear right, for the names test. */
 export const HARD_NAMES = [

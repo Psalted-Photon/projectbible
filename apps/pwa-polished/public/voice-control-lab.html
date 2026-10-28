@@ -163,6 +163,7 @@
   </div>
   <div class="opts" style="margin-top:12px">
     <label><input type="checkbox" id="optNames" checked> Favor the app's names (books, commentary authors, windows)</label>
+    <label><input type="checkbox" id="optPeople"> Also favor the <input type="number" id="peopleN" value="300" min="20" max="3000" step="20"> best-known people's names</label>
     <label><input type="checkbox" id="optKeep" checked> Keep the mic open between presses (catches your first word)</label>
     <label><input type="checkbox" id="optAll"> Send every action at once, not only the groups a trigger word picks (Needle then keeps the 5 it thinks closest)</label>
     <label>Act at <input type="number" id="actAt" value="0.8" min="0" max="1" step="0.05"> · ask "Did you mean…?" at <input type="number" id="askAt" value="0.4" min="0" max="1" step="0.05"></label>
@@ -179,8 +180,31 @@
 </section>
 
 <section class="panel">
-  <h2>3 · Hard names</h2>
+  <h2>3 · Test phrases</h2>
+  <p class="hint">Hard things to say, each with what the app should do. Pick one, hold the button and say it your own way, then the next one comes up. If one misses, "Type it instead" shows whether Whistle heard it wrong or Needle chose wrong. The options under Commands apply here too.</p>
+  <div class="chips" id="phraseChips"></div>
+  <div class="row" style="margin-top:12px">
+    <button class="hold small" id="phraseBtn" disabled aria-label="Hold and say the phrase">
+      <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+    </button>
+    <div style="flex:1;min-width:0">
+      <div class="holdmsg" id="phraseMsg" style="text-align:left">Load the models first.</div>
+      <div class="kv" id="phraseShould"></div>
+      <div class="kv" id="phraseScore"></div>
+    </div>
+  </div>
+  <div class="row">
+    <button id="phraseTyped" disabled>Type it instead</button>
+  </div>
+  <div id="phraseOut"></div>
+</section>
+
+<section class="panel">
+  <h2>4 · Hard names</h2>
   <p class="hint">Pick a name, hold the button and say it. Whistle hears the same clip twice: once with the names list and once without, so you can see what the list is worth.</p>
+  <div class="opts">
+    <label><input type="checkbox" id="optNamesReal"> Use the best-known people as the list (the number under Commands) instead of these test names, the way the app would</label>
+  </div>
   <div class="chips" id="nameChips"></div>
   <div class="row" style="margin-top:12px">
     <button class="hold small" id="nameBtn" disabled aria-label="Hold and say the name">
@@ -198,7 +222,7 @@
 </section>
 
 <section class="panel">
-  <h2>4 · Punctuation add-on</h2>
+  <h2>5 · Punctuation add-on</h2>
   <p class="hint">Type words with no capitals or punctuation, the way Whistle writes them.</p>
   <textarea id="punctIn" rows="3">how are you i am fine thank you</textarea>
   <div class="row" style="margin-top:8px">
@@ -209,15 +233,15 @@
 </section>
 
 <section class="panel">
-  <h2>5 · Sermon recording</h2>
-  <p class="hint">Start recording, then lock the screen for a few minutes and come back. When you stop, the lab checks whether any audio went missing while the screen was off. Try it first without keeping the screen awake.</p>
+  <h2>6 · Recording</h2>
+  <p class="hint">The mic goes silent when the screen locks (tested on the Fold, 10/27), so the screen stays awake while recording. When you stop, the lab checks for gaps and for stretches of dead silence, which is what a cut-off mic leaves behind.</p>
   <div class="row">
     <button class="primary" id="recBtn">● Record</button>
     <button id="pauseBtn" disabled>Pause</button>
     <button id="stopBtn" disabled>■ Stop</button>
   </div>
   <div class="opts" style="margin-top:10px">
-    <label><input type="checkbox" id="optRecAwake"> Keep the screen awake while recording</label>
+    <label><input type="checkbox" id="optRecAwake" checked> Keep the screen awake while recording</label>
   </div>
   <div class="kv" id="recLive" style="margin-top:8px"></div>
   <div class="meter" style="width:100%;margin-top:6px"><i id="recMeter"></i></div>
@@ -228,7 +252,7 @@
 </section>
 
 <section class="panel" id="txPanel">
-  <h2>6 · Transcript</h2>
+  <h2>7 · Transcript</h2>
   <div class="opts">
     <label><input type="checkbox" id="optTxNames" checked> Favor the app's names</label>
     <label><input type="checkbox" id="optTxAwake" checked> Keep the screen awake while transcribing</label>
@@ -248,13 +272,13 @@
 </section>
 
 <section class="panel">
-  <h2>7 · Nothing sent online</h2>
+  <h2>8 · Nothing sent online</h2>
   <div id="netStatus" class="status">Starts watching once the models are loaded.</div>
   <ul id="netList"></ul>
 </section>
 
 <section class="panel">
-  <h2>8 · Results</h2>
+  <h2>9 · Results</h2>
   <p class="hint">A plain-text summary of everything above, to paste back to Claude.</p>
   <button class="primary" id="copyReport">Copy results</button>
   <span class="kv" id="copyMsg"></span>
@@ -263,7 +287,7 @@
 </main>
 
 <script type="module">
-import { APP_KEYWORDS, HARD_NAMES, bibleWord, findCommentary } from '/voice-control-lab/tools.js';
+import { APP_KEYWORDS, HARD_NAMES, PHRASES, bibleWord, findCommentary } from '/voice-control-lab/tools.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -282,7 +306,7 @@ const store = {
 };
 
 // Everything the summary reports.
-const R = { device: '', load: null, commands: [], names: [], punct: [], recordings: [], transcripts: [], net: [] };
+const R = { device: '', load: null, commands: [], phrases: [], names: [], punct: [], recordings: [], transcripts: [], net: [] };
 
 // ── Device ──────────────────────────────────────────────────────────────────
 
@@ -397,6 +421,7 @@ const STAGES = {
   needle: 'Loading Needle…',
   punct: 'Loading the punctuation add-on…',
   vad: 'Loading the voice detector…',
+  app: "Reading the app's people and verses…",
 };
 let ready = false;
 
@@ -433,16 +458,23 @@ async function loadModels(cacheOnly) {
       `<div>Engine <b>${ms(r.ms.engine)}</b> · Whistle <b>${ms(r.ms.whistle)}</b> · Needle <b>${ms(r.ms.needle)}</b></div>`,
       `<div>Punctuation <b>${ms(r.ms.punct)}</b> · voice detector <b>${ms(r.ms.vad)}</b></div>`,
       `<div>Engine memory <b>${r.heapMB.toFixed(0)} MB</b></div>`,
+      `<div>${esc(appDataText(r))}</div>`,
     ].join('');
-    for (const id of ['holdBtn', 'nameBtn', 'typed', 'typedBtn', 'punctBtn']) $(id).disabled = false;
+    for (const id of ['holdBtn', 'nameBtn', 'typed', 'typedBtn', 'punctBtn', 'phraseBtn', 'phraseTyped']) $(id).disabled = false;
     $('holdMsg').textContent = 'Hold to talk';
     $('nameMsg').innerHTML = `Hold and say <b>${esc(HARD_NAMES[nameAt])}</b>`;
+    showPhrase();
     renderRecs();
   } catch (e) {
     $('loadStatus').textContent = e.message;
     $('loadStatus').className = 'status err';
     $('loadBtn').disabled = false;
   }
+}
+function appDataText(r) {
+  const a = r.app;
+  if (!a || (!a.people && !a.verses)) return "App data: none on this device (open irisBible here once), so no people list or verse matching";
+  return `App data: ${a.people.toLocaleString()} people · ${a.verses.toLocaleString()} verses (${a.translations.join(', ').toUpperCase() || 'none'}) read in ${ms(r.ms.app)}`;
 }
 $('loadBtn').onclick = () => loadModels(false);
 $('forgetBtn').onclick = async () => {
@@ -646,7 +678,12 @@ function holdButton(btn, say, meter, { idle, onClip }) {
 
 // ── 2 · Commands ────────────────────────────────────────────────────────────
 
-for (const id of ['optNames', 'optKeep', 'optAll', 'optRecAwake', 'optTxNames', 'optTxAwake']) {
+// The locked-screen test is done: recording starts with the screen kept awake again, once.
+if (!store.get('recAwakeBack', false)) {
+  store.set('optRecAwake', true);
+  store.set('recAwakeBack', true);
+}
+for (const id of ['optNames', 'optPeople', 'optKeep', 'optAll', 'optNamesReal', 'optRecAwake', 'optTxNames', 'optTxAwake']) {
   const el = $(id);
   el.checked = store.get(id, el.checked);
   el.addEventListener('change', () => {
@@ -654,7 +691,7 @@ for (const id of ['optNames', 'optKeep', 'optAll', 'optRecAwake', 'optTxNames', 
     if (id === 'optKeep' && !el.checked) mic.stop();
   });
 }
-for (const id of ['actAt', 'askAt', 'paraSec']) {
+for (const id of ['actAt', 'askAt', 'paraSec', 'peopleN']) {
   const el = $(id);
   el.value = store.get(id, el.value);
   el.addEventListener('change', () => store.set(id, el.value));
@@ -674,6 +711,14 @@ const argsOf = (c) => {
   }
   return c.arguments || {};
 };
+
+/** What Needle is sent with every command, from the options above. */
+const common = () => ({ system: systemFacts(), everything: $('optAll').checked, maxNewTokens: 256 });
+/** The hearing list for a spoken command: the app's names, and the best-known people if that's on. */
+const hearing = () => ({
+  keywords: $('optNames').checked ? APP_KEYWORDS : null,
+  people: $('optPeople').checked ? Number($('peopleN').value) || 0 : 0,
+});
 
 /** A heard word as the Bible word it most likely is, with the sound-alikes a tap would switch to. */
 function soundsLike(heard) {
@@ -699,7 +744,9 @@ function wouldDo(name, a) {
     case 'strongs': return [a.query ? `Strong's: ${a.query}` : "Open Strong's"];
     case 'highlight': {
       const v = String(a.verses ?? '');
-      const where = /^\d+$/.test(v.trim()) ? `verse ${v}` : /^\d/.test(v.trim()) && !/:/.test(v) ? `verses ${v}` : v;
+      const chapter = /\bchapter\s+\d+/i.exec(v);
+      const where = chapter ? `every verse in ${chapter[0]}`
+        : /^\d+$/.test(v.trim()) ? `verse ${v}` : /^\d/.test(v.trim()) && !/:/.test(v) ? `verses ${v}` : v;
       const look = { marker: 'marker', letters: 'letters', underline: 'underline', dashed: 'dashed underline', squiggle: 'squiggle', box: 'box' }[a.look] || 'marker';
       return a.color
         ? [`Highlight ${where}: ${a.color} ${look}`]
@@ -748,6 +795,49 @@ function verdictOf(answer) {
   return ['no', `${pct} · "Didn't catch that"`];
 }
 
+const QUESTION_RE = /^\s*(who|whom|whose|what|what's|whats|when|where|why|how|which|is|are|was|were|does|do|did|can|could|will|would|should)\b|\?\s*$/i;
+const CANT_ANSWER = "I can steer the wheel, but can't answer questions.";
+
+/**
+ * What the app would end up doing. Needle's pick, unless the words quote a
+ * verse (most of what was said, or Needle had nothing better than a search),
+ * or it's a "how many sons…" the people list answers. When nothing fits, a
+ * question gets the steering-wheel reply instead of "Didn't catch that".
+ */
+function decide(r, said) {
+  const calls = r.answer?.function_calls || [];
+  const [cls, text] = verdictOf(r.answer);
+  const q = r.quote?.ref ? r.quote : null;
+  if (q) {
+    const strong = q.whole || (q.run >= 4 && q.run / q.of >= 0.75);
+    const weak = !calls.length || cls !== 'act'
+      || calls.every((c) => c.name === 'search' || (c.name === 'passage' && !/\d/.test(argsOf(c).reference || '')));
+    if (strong || weak) return { kind: 'quote', cls: 'act', text: `Go to ${q.ref} (the words match that verse)` };
+  }
+  if (r.count?.length) {
+    const others = r.count.length > 1 ? ` (and ${r.count.length - 1} more by that name)` : '';
+    return { kind: 'count', cls: 'act', text: `Answer from the people list, and open the family tree on ${r.countWho}${others}` };
+  }
+  if (cls === 'no' && QUESTION_RE.test(said)) return { kind: 'no', cls, text: text.replace(`"Didn't catch that"`, `"${CANT_ANSWER}"`) };
+  return { kind: cls, cls, text };
+}
+
+/** Who a person argument turned out to be in the people list. */
+function personText(p) {
+  if (!p) return '';
+  if (p.how === 'none' || !p.people.length) return `No "${p.heard}" in the people list`;
+  const heard = p.how === 'sounds like' ? `heard "${p.heard}", sounds like ${p.name}: ` : '';
+  if (p.people.length === 1) return `${heard}${p.people[0].title}${p.people[0].line ? ` (${p.people[0].line})` : ''}`;
+  return `${heard}Which ${p.name.replace(/^./, (c) => c.toUpperCase())}? ${p.people.map((x) => `${x.title}${x.line ? ` (${x.line})` : ''}`).join(' · ')}`;
+}
+
+function quoteText(q) {
+  if (!q || q.none) return '';
+  if (q.common) return `${q.run} words in a row match ${q.common} verses, so it's a saying, not one verse`;
+  const also = q.also?.length ? `, also ${q.also.join(', ')}` : '';
+  return `${q.ref} (${q.tids.join(', ').toUpperCase()}): ${q.whole ? 'the whole verse' : `${q.run} of ${q.of} words in a row`}${also}`;
+}
+
 function playPcm(pcm) {
   const ctx = new AudioContext();
   const buf = ctx.createBuffer(1, pcm.length, 16000);
@@ -759,7 +849,7 @@ function playPcm(pcm) {
   s.start();
 }
 
-function renderCommand(card, { r, typed, pcm, meta, total }) {
+function renderCommand(card, { r, typed, pcm, meta, total }, { record = true } = {}) {
   const said = typed ?? r.transcript?.text ?? '';
   const answer = r.answer;
   const calls = answer?.function_calls || [];
@@ -767,6 +857,7 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
     said, typed: typed != null, tidied: r.tidied && r.tidied !== said ? r.tidied : null, calls: [], confidence: answer?.confidence ?? null, whistleMs: r.whistleMs, needleMs: r.needleMs,
     speechSec: pcm ? pcm.length / 16000 : null, tools: r.toolCount, sent: r.toolNames || [],
     held: (answer?.suppressed_calls || []).map((c) => callText(c) + (c.reason ? ` (${c.reason})` : '')), check: engineCheck(answer),
+    people: [], quote: quoteText(r.quote), count: r.count || null, decision: null, kind: null,
   };
   let html = said.trim()
     ? `<div class="said">“${esc(said)}”${typed != null ? ' <span class="times">(typed)</span>' : ''}</div>`
@@ -776,17 +867,28 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
     if (answer.success === false || answer.error) html += `<div class="err">${esc(answer.error || 'Needle reported a failure')}</div>`;
     if (calls.length) {
       html += '<ol class="calls">';
-      for (const c of calls) {
+      calls.forEach((c, i) => {
         const a = argsOf(c);
         const [text, cls] = wouldDo(c.name, a);
         row.calls.push(callText(c));
         html += `<li><code>${esc(c.name)}</code> <span class="args">${esc(Object.entries(a).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(' · '))}</span>`;
-        html += `<div class="would ${cls || ''}">→ ${esc(text)}</div></li>`;
-      }
+        html += `<div class="would ${cls || ''}">→ ${esc(text)}</div>`;
+        const who = personText(r.people?.[i]);
+        if (who) {
+          row.people.push(who);
+          html += `<div class="would ${r.people[i].people.length === 1 ? '' : 'warn'}">→ ${esc(who)}</div>`;
+        }
+        html += '</li>';
+      });
       html += '</ol>';
     }
-    const [cls, text] = verdictOf(answer);
-    html += `<div class="verdict ${cls}">${esc(text)}</div>`;
+    const d = decide(r, said);
+    row.decision = d.text;
+    row.kind = d.kind;
+    html += `<div class="verdict ${d.cls}">${esc(d.text)}</div>`;
+    if (row.quote) html += `<div class="times">Verse match: ${esc(row.quote)}${r.quote?.ms != null ? ` (${ms(r.quote.ms)})` : ''}</div>`;
+    for (const line of row.count || []) html += `<div class="would">Answer: ${esc(line)}</div>`;
+    if (r.appData === false) html += `<div class="times">No app data on this device, so no verse matching or people list.</div>`;
     if (row.held.length) html += `<div class="times">Held back by the engine: ${esc(row.held.join('; '))}</div>`;
     if (row.check) html += `<div class="times">Engine check: ${esc(row.check)}</div>`;
     if (answer.reasoning) html += `<div class="times">Why: ${esc(answer.reasoning)}</div>`;
@@ -817,7 +919,7 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
     again.textContent = 'Hear it with and without the names list';
     again.onclick = async () => {
       again.disabled = true;
-      const h = await call('hear', { pcm, keywords: APP_KEYWORDS });
+      const h = await call('hear', { pcm, keywords: APP_KEYWORDS, people: hearing().people });
       const note = document.createElement('div');
       note.className = 'times';
       note.textContent = `With list: “${h.withList.text}” (${ms(h.withMs)}) · without: “${h.without.text}” (${ms(h.withoutMs)})`;
@@ -825,7 +927,8 @@ function renderCommand(card, { r, typed, pcm, meta, total }) {
     };
     buttons.append(play, again);
   }
-  R.commands.push(row);
+  if (record) R.commands.push(row);
+  return row;
 }
 
 async function runCommand({ pcm, meta, typed }) {
@@ -835,10 +938,9 @@ async function runCommand({ pcm, meta, typed }) {
   $('cmdOut').prepend(card);
   const t = performance.now();
   try {
-    const common = { system: systemFacts(), everything: $('optAll').checked, maxNewTokens: 256 };
     const r = typed != null
-      ? await call('choose', { ...common, text: typed })
-      : await call('command', { ...common, pcm, keywords: $('optNames').checked ? APP_KEYWORDS : null });
+      ? await call('choose', { ...common(), text: typed })
+      : await call('command', { ...common(), pcm, ...hearing() });
     renderCommand(card, { r, typed, pcm, meta, total: performance.now() - t });
   } catch (e) {
     card.innerHTML = `<div class="err">${esc(e.message)}</div>`;
@@ -892,7 +994,103 @@ for (const ex of EXAMPLES) {
   $('examples').append(b);
 }
 
-// ── 3 · Hard names ──────────────────────────────────────────────────────────
+// ── 3 · Test phrases ────────────────────────────────────────────────────────
+
+let phraseAt = 0;
+const phraseResults = new Map();
+const MARKS = { yes: '✓', ask: '?', no: '✗' };
+/** Lower case, letters and digits only; "chapter", "verse" and "the" don't count. */
+const flat = (s) => String(s ?? '').toLowerCase().replace(/\b(chapters?|verses?|the|book of)\b/g, '').replace(/[^a-z0-9]/g, '');
+
+/**
+ * How a phrase went: ✓ the app would do what it should, ? it would ask "Did
+ * you mean…?" first, ✗ anything else. A wanted value written "a|b" takes either.
+ */
+function grade(want, r, row) {
+  const calls = (r.answer?.function_calls || []).map((c) => ({ name: c.name, args: flat(JSON.stringify(Object.values(argsOf(c)))) }));
+  const has = (args, need) => need.split('|').some((alt) => args.includes(flat(alt)));
+  const person = !want.person || (r.people || []).some((p) => p?.people.some((x) => flat(x.title).startsWith(flat(want.person))));
+  if (want.quote && row.kind === 'quote' && flat(r.quote?.ref) === flat(want.quote)) return 'yes';
+  if (want.count && row.kind === 'count') return 'yes';
+  if (want.none) return row.kind === 'no' ? 'yes' : row.kind === 'ask' ? 'ask' : 'no';
+  if (!want.do || row.kind === 'quote' || row.kind === 'count') return 'no';
+  const done = want.do.every(([name, ...need]) => calls.some((c) => name.split('|').includes(c.name) && need.every((n) => has(c.args, n))));
+  if (!done || !person) return 'no';
+  return row.kind === 'act' ? 'yes' : row.kind === 'ask' ? 'ask' : 'no';
+}
+
+function showPhrase() {
+  const p = PHRASES[phraseAt];
+  if (ready) $('phraseMsg').innerHTML = `Hold and say: <b>${esc(p.say)}</b>`;
+  $('phraseShould').textContent = `Should: ${p.should} · Tests: ${p.tests}`;
+}
+
+function renderPhraseChips() {
+  const box = $('phraseChips');
+  box.innerHTML = '';
+  PHRASES.forEach((p, i) => {
+    const b = document.createElement('button');
+    const res = phraseResults.get(p.say);
+    const g = res?.spoken?.grade || res?.typed?.grade;
+    b.className = 'chip' + (i === phraseAt ? ' on' : '') + (g === 'yes' ? ' yes' : g ? ' no' : '');
+    b.textContent = (g ? MARKS[g] + ' ' : '') + p.say;
+    b.onclick = () => {
+      phraseAt = i;
+      renderPhraseChips();
+      showPhrase();
+    };
+    box.append(b);
+  });
+  const said = [...phraseResults.values()].map((x) => x.spoken).filter(Boolean);
+  if (said.length) {
+    const n = (g) => said.filter((x) => x.grade === g).length;
+    $('phraseScore').innerHTML = `Said: <b>${n('yes')} ✓</b> · ${n('ask')} asked first · ${n('no')} ✗ of ${said.length} tried`;
+  }
+}
+renderPhraseChips();
+showPhrase();
+
+async function runPhrase({ pcm, meta, typed }) {
+  const p = PHRASES[phraseAt];
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<div class="said"><i>${typed != null ? 'Choosing actions…' : 'Listening back…'}</i></div>`;
+  $('phraseOut').prepend(card);
+  const t = performance.now();
+  try {
+    const r = typed != null
+      ? await call('choose', { ...common(), text: typed })
+      : await call('command', { ...common(), pcm, ...hearing() });
+    const row = renderCommand(card, { r, typed, pcm, meta, total: performance.now() - t }, { record: false });
+    const g = row.decision ? grade(p.want, r, row) : 'no';
+    const head = document.createElement('div');
+    head.className = `verdict ${g === 'yes' ? 'act' : g === 'ask' ? 'ask' : 'no'}`;
+    head.style.margin = '0 0 6px';
+    head.textContent = `${MARKS[g]} ${p.say} · should: ${p.should}`;
+    card.prepend(head);
+    const res = phraseResults.get(p.say) || { say: p.say, should: p.should };
+    res[typed != null ? 'typed' : 'spoken'] = { grade: g, ...row };
+    phraseResults.set(p.say, res);
+    R.phrases = PHRASES.map((x) => phraseResults.get(x.say)).filter(Boolean);
+    // A spoken try moves on to the next phrase not tried yet.
+    if (typed == null) {
+      const next = PHRASES.findIndex((x, i) => i > phraseAt && !phraseResults.get(x.say)?.spoken);
+      if (next >= 0) phraseAt = next;
+    }
+  } catch (e) {
+    card.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+  renderPhraseChips();
+  showPhrase();
+}
+
+holdButton($('phraseBtn'), (s) => ($('phraseMsg').textContent = s), null, {
+  idle: () => `Hold and say: ${PHRASES[phraseAt].say}`,
+  onClip: (pcm, meta) => runPhrase({ pcm, meta }),
+});
+$('phraseTyped').onclick = () => runPhrase({ typed: PHRASES[phraseAt].say });
+
+// ── 4 · Hard names ──────────────────────────────────────────────────────────
 
 const NAMES_LIST = APP_KEYWORDS + '\n' + HARD_NAMES.join('\n');
 let nameAt = 0;
@@ -927,10 +1125,12 @@ holdButton($('nameBtn'), (s) => ($('nameMsg').textContent = s), null, {
   idle: () => `Hold and say ${HARD_NAMES[nameAt]}`,
   onClip: async (pcm) => {
     const name = HARD_NAMES[nameAt];
+    const real = $('optNamesReal').checked;
+    const count = Number($('peopleN').value) || 0;
     try {
-      const h = await call('hear', { pcm, keywords: NAMES_LIST });
+      const h = await call('hear', real ? { pcm, keywords: APP_KEYWORDS, people: count } : { pcm, keywords: NAMES_LIST });
       const r = {
-        name,
+        name, list: real ? `app names + ${count} best-known people` : 'app names + these test names',
         withText: h.withList.text, withOk: squash(h.withList.text).includes(squash(name)),
         withoutText: h.without.text, withoutOk: squash(h.without.text).includes(squash(name)),
         withMs: h.withMs, withoutMs: h.withoutMs,
@@ -941,7 +1141,7 @@ holdButton($('nameBtn'), (s) => ($('nameMsg').textContent = s), null, {
       tbody.querySelector(`tr[data-n="${CSS.escape(name)}"]`)?.remove();
       const tr = document.createElement('tr');
       tr.dataset.n = name;
-      tr.innerHTML = `<td>${esc(name)}</td>`
+      tr.innerHTML = `<td>${esc(name)}${real ? `<div class="times">${count} people list</div>` : ''}</td>`
         + `<td class="${r.withOk ? 'yes' : 'no'}">${r.withOk ? '✓' : '✗'} ${esc(r.withText || '(nothing)')}</td>`
         + `<td class="${r.withoutOk ? 'yes' : 'no'}">${r.withoutOk ? '✓' : '✗'} ${esc(r.withoutText || '(nothing)')}</td>`;
       tbody.prepend(tr);
@@ -957,7 +1157,7 @@ holdButton($('nameBtn'), (s) => ($('nameMsg').textContent = s), null, {
   },
 });
 
-// ── 4 · Punctuation ─────────────────────────────────────────────────────────
+// ── 5 · Punctuation ─────────────────────────────────────────────────────────
 
 $('punctBtn').onclick = async () => {
   const text = $('punctIn').value;
@@ -972,7 +1172,7 @@ $('punctBtn').onclick = async () => {
   }
 };
 
-// ── 5 · Sermon recording ────────────────────────────────────────────────────
+// ── 6 · Recording ───────────────────────────────────────────────────────────
 // Saved in 2-second pieces as it goes, so closing the page loses only the
 // last couple of seconds. Pieces live in IndexedDB on this device only.
 
@@ -1006,6 +1206,32 @@ async function deleteRec(id) {
   await idb('recs', 'readwrite', (s) => s.delete(id));
 }
 
+/**
+ * Stretches of dead silence at least 2 s long, as [start, end] seconds. A
+ * cut-off mic records flat zeros; even a quiet room is far louder than this.
+ */
+function deadStretches(pcm) {
+  const win = 1600;
+  const out = [];
+  let from = -1;
+  for (let i = 0; i < pcm.length; i += win) {
+    let peak = 0;
+    const end = Math.min(pcm.length, i + win);
+    for (let j = i; j < end; j++) {
+      const v = Math.abs(pcm[j]);
+      if (v > peak) peak = v;
+    }
+    if (peak < 0.0001) {
+      if (from < 0) from = i;
+    } else if (from >= 0) {
+      if (i - from >= 32000) out.push([from / 16000, i / 16000]);
+      from = -1;
+    }
+  }
+  if (from >= 0 && pcm.length - from >= 32000) out.push([from / 16000, pcm.length / 16000]);
+  return out;
+}
+
 /** Any audio file → 16 kHz mono samples. */
 async function decode16k(blob) {
   const ctx = new OfflineAudioContext(1, 1, 16000);
@@ -1032,7 +1258,7 @@ function onRecVisibility() {
     rec.offSince = Date.now();
     rec.save();
   } else if (rec.offSince) {
-    const span = { from: rec.offSince, to: Date.now(), savedWhileOff: rec.times.filter((t) => t >= rec.offSince && t < Date.now() - 500).length };
+    const span = { from: rec.offSince, to: Date.now(), savedWhileOff: rec.times.filter((t) => t >= rec.offSince && t < Date.now() - 500).length, deadSec: null };
     rec.meta.screenOff.push(span);
     recLine(`Screen was off ${clock((span.to - span.from) / 1000)}; pieces saved while it was off: ${span.savedWhileOff}`);
     rec.offSince = 0;
@@ -1151,7 +1377,7 @@ async function finishRecording() {
   rec = null;
   $('recBtn').disabled = false;
   $('pauseBtn').textContent = 'Pause';
-  recLine('Stopped. Checking for missing audio…');
+  recLine('Stopped. Checking for gaps and dead silence…');
   try {
     const pcm = await decode16k(await recBlob(r.meta));
     r.meta.audioSec = pcm.length / 16000;
@@ -1159,7 +1385,19 @@ async function finishRecording() {
     r.meta.missingSec = Math.max(0, missing);
     recLine(missing > 2
       ? `✗ ${clock(missing)} of audio is missing: ${clock(r.meta.audioSec)} recorded over ${clock(r.meta.wallMs / 1000)}.`
-      : `✓ Nothing missing: ${clock(r.meta.audioSec)} of audio over ${clock(r.meta.wallMs / 1000)}.`);
+      : `✓ No gaps: ${clock(r.meta.audioSec)} of audio over ${clock(r.meta.wallMs / 1000)}.`);
+    const dead = deadStretches(pcm);
+    r.meta.deadSec = dead.reduce((a, [s, e]) => a + e - s, 0);
+    r.meta.deadCount = dead.length;
+    // Pauses are left out, so a screen-off span lines up with the audio only roughly.
+    for (const span of r.meta.screenOff) {
+      const from = (span.from - r.meta.startedAt) / 1000;
+      const to = (span.to - r.meta.startedAt) / 1000;
+      span.deadSec = dead.reduce((a, [s, e]) => a + Math.max(0, Math.min(e, to) - Math.max(s, from)), 0);
+    }
+    recLine(dead.length
+      ? `✗ ${clock(r.meta.deadSec)} of dead silence in ${dead.length} stretch${dead.length > 1 ? 'es' : ''}: ${dead.map(([s, e]) => `${clock(s)}–${clock(e)}`).join(', ')}. The mic was cut off.`
+      : '✓ No dead silence: the mic was live the whole time.');
   } catch (e) {
     r.meta.checkError = e.message;
     recLine('Could not read the recording back: ' + e.message);
@@ -1186,7 +1424,8 @@ async function renderRecs() {
     bits.push(mb(r.bytes));
     if (!r.stopped) bits.push('not stopped properly, saved up to the last piece');
     if (r.missingSec > 2) bits.push(`${clock(r.missingSec)} missing`);
-    else if (r.audioSec != null) bits.push('nothing missing');
+    else if (r.audioSec != null) bits.push('no gaps');
+    if (r.deadSec) bits.push(`${clock(r.deadSec)} dead silent`);
     if (r.screenOff?.length) bits.push(`screen off ${r.screenOff.length}×`);
     el.innerHTML = `<div class="t">${esc(r.name)}</div><div class="m">${esc(bits.join(' · '))}</div><div class="row"></div>`;
     const row = el.querySelector('.row');
@@ -1210,7 +1449,7 @@ async function renderRecs() {
     btn('Save file', async () => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(await recBlob(r));
-      a.download = `sermon-${new Date(r.startedAt).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${/mp4/.test(r.mime) ? 'm4a' : /ogg/.test(r.mime) ? 'ogg' : 'webm'}`;
+      a.download = `recording-${new Date(r.startedAt).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${/mp4/.test(r.mime) ? 'm4a' : /ogg/.test(r.mime) ? 'ogg' : 'webm'}`;
       a.click();
     });
     const del = btn('Delete', async () => {
@@ -1239,7 +1478,7 @@ $('filePick').onchange = (e) => {
   e.target.value = '';
 };
 
-// ── 6 · Transcript ──────────────────────────────────────────────────────────
+// ── 7 · Transcript ──────────────────────────────────────────────────────────
 
 let tx = null;
 let txView = store.get('txView', 'punct');
@@ -1360,7 +1599,7 @@ $('txCopy').onclick = async () => {
   } catch { /* clipboard refused */ }
 };
 
-// ── 8 · Results ─────────────────────────────────────────────────────────────
+// ── 9 · Results ─────────────────────────────────────────────────────────────
 
 function reportText() {
   const L = [];
@@ -1370,32 +1609,60 @@ function reportText() {
   if (R.load) {
     const r = R.load;
     L.push(`Models: ${mb(r.bytes)} ${r.fromCache ? 'read from the device' : 'downloaded'} in ${ms(r.ms.download)}; engine ${ms(r.ms.engine)}, Whistle ${ms(r.ms.whistle)}, Needle ${ms(r.ms.needle)}, punctuation ${ms(r.ms.punct)}, voice detector ${ms(r.ms.vad)}; engine memory ${r.heapMB.toFixed(0)} MB`);
+    L.push(appDataText(r));
   } else {
     L.push('Models: not loaded');
   }
+  L.push(`Hearing list: ${$('optNames').checked ? 'app names' : 'off'}${$('optPeople').checked ? ` + ${$('peopleN').value} best-known people` : ''} · act at ${$('actAt').value}, ask at ${$('askAt').value}`);
   L.push('');
+  // One command's lines, shared by Commands and Test phrases.
+  const commandLines = (c, pad) => {
+    if (c.tidied) L.push(`${pad}written as: "${c.tidied}"`);
+    L.push(`${pad}→ ${c.calls.length ? c.calls.join('; ') : 'nothing'}${c.confidence != null ? ` · confidence ${c.confidence.toFixed(2)}` : ''}`);
+    for (const p of c.people || []) L.push(`${pad}people list: ${p}`);
+    if (c.quote) L.push(`${pad}verse match: ${c.quote}`);
+    for (const a of c.count || []) L.push(`${pad}answer: ${a}`);
+    if (c.decision) L.push(`${pad}app would: ${c.decision}`);
+    if (c.held?.length) L.push(`${pad}held back: ${c.held.join('; ')}${c.check ? ` · ${c.check}` : ''}`);
+    if (c.sent?.length) L.push(`${pad}shown: ${c.sent.join(', ')}`);
+    L.push(`${pad}${[c.speechSec != null && `speech ${c.speechSec.toFixed(1)} s`, c.whistleMs != null && `Whistle ${ms(c.whistleMs)}`, c.needleMs != null && `Needle ${ms(c.needleMs)}`, c.tools && `${c.tools} actions`].filter(Boolean).join(' · ')}`);
+  };
   L.push(`Commands (${R.commands.length}):`);
   for (const c of R.commands) {
     L.push(`  "${c.said}"${c.typed ? ' (typed)' : ''}`);
-    if (c.tidied) L.push(`    written as: "${c.tidied}"`);
-    L.push(`    → ${c.calls.length ? c.calls.join('; ') : 'nothing'}${c.confidence != null ? ` · confidence ${c.confidence.toFixed(2)}` : ''}`);
-    if (c.held?.length) L.push(`    held back: ${c.held.join('; ')}${c.check ? ` · ${c.check}` : ''}`);
-    if (c.sent?.length) L.push(`    shown: ${c.sent.join(', ')}`);
-    L.push(`    ${[c.speechSec != null && `speech ${c.speechSec.toFixed(1)} s`, c.whistleMs != null && `Whistle ${ms(c.whistleMs)}`, c.needleMs != null && `Needle ${ms(c.needleMs)}`, c.tools && `${c.tools} actions`].filter(Boolean).join(' · ')}`);
+    commandLines(c, '    ');
   }
   const spoken = R.commands.filter((c) => !c.typed && c.whistleMs != null);
   if (spoken.length) L.push(`  Average: Whistle ${ms(avg(spoken.map((c) => c.whistleMs)))} for ${avg(spoken.map((c) => c.speechSec)).toFixed(1)} s of speech · Needle ${ms(avg(R.commands.filter((c) => c.needleMs != null).map((c) => c.needleMs)))}`);
   L.push('');
+  if (R.phrases.length) {
+    const said = R.phrases.map((p) => p.spoken).filter(Boolean);
+    const typed = R.phrases.map((p) => p.typed).filter(Boolean);
+    const tally = (xs) => `${xs.filter((x) => x.grade === 'yes').length} ✓ · ${xs.filter((x) => x.grade === 'ask').length} ? · ${xs.filter((x) => x.grade === 'no').length} ✗`;
+    L.push(`Test phrases (${R.phrases.length} of ${PHRASES.length}): said ${tally(said)}${typed.length ? ` · typed ${tally(typed)}` : ''}`);
+    for (const p of R.phrases) {
+      L.push(`  "${p.say}" (should: ${p.should})`);
+      for (const [how, x] of [['said', p.spoken], ['typed', p.typed]]) {
+        if (!x) continue;
+        L.push(`    ${MARKS[x.grade]} ${how}${how === 'said' ? `, heard "${x.said}"` : ''}`);
+        commandLines(x, '      ');
+      }
+    }
+    L.push('');
+  }
   if (R.names.length) {
-    L.push(`Hard names: with the list ${R.names.filter((n) => n.withOk).length}/${R.names.length}, without ${R.names.filter((n) => n.withoutOk).length}/${R.names.length}`);
-    for (const n of R.names) L.push(`  ${n.name}: with "${n.withText}" ${n.withOk ? '✓' : '✗'} · without "${n.withoutText}" ${n.withoutOk ? '✓' : '✗'}`);
+    for (const list of [...new Set(R.names.map((n) => n.list))]) {
+      const ns = R.names.filter((n) => n.list === list);
+      L.push(`Hard names (${list}): with the list ${ns.filter((n) => n.withOk).length}/${ns.length}, without ${ns.filter((n) => n.withoutOk).length}/${ns.length}`);
+      for (const n of ns) L.push(`  ${n.name}: with "${n.withText}" ${n.withOk ? '✓' : '✗'} (${ms(n.withMs)}) · without "${n.withoutText}" ${n.withoutOk ? '✓' : '✗'}`);
+    }
     L.push('');
   }
   for (const p of R.punct) L.push(`Punctuation: "${p.in}" → "${p.out}" (${ms(p.ms)})`);
   if (R.punct.length) L.push('');
   for (const r of R.recordings) {
-    L.push(`Recording ${r.name}: ${r.audioSec != null ? clock(r.audioSec) : '?'} of audio over ${clock(r.wallMs / 1000)}${r.missingSec > 2 ? ` · ${clock(r.missingSec)} MISSING` : ' · nothing missing'}${r.awake ? ' · screen kept awake' : ''} · ${mb(r.bytes)}`);
-    for (const s of r.screenOff) L.push(`  screen off ${clock((s.to - s.from) / 1000)}, pieces saved while off: ${s.savedWhileOff}`);
+    L.push(`Recording ${r.name}: ${r.audioSec != null ? clock(r.audioSec) : '?'} of audio over ${clock(r.wallMs / 1000)}${r.missingSec > 2 ? ` · ${clock(r.missingSec)} MISSING` : ' · no gaps'}${r.deadSec ? ` · ${clock(r.deadSec)} DEAD SILENT in ${r.deadCount} stretch${r.deadCount > 1 ? 'es' : ''}` : r.deadSec === 0 ? ' · no dead silence' : ''}${r.awake ? ' · screen kept awake' : ''} · ${mb(r.bytes)}`);
+    for (const s of r.screenOff) L.push(`  screen off ${clock((s.to - s.from) / 1000)}${s.deadSec != null ? `, ${clock(s.deadSec)} of it dead silent` : ''}, pieces saved while off: ${s.savedWhileOff}`);
   }
   if (R.recordings.length) L.push('');
   for (const t of R.transcripts) {
