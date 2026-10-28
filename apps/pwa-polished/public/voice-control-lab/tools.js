@@ -188,16 +188,22 @@ const NUMBER_RE = new RegExp(String.raw`(\b(?:verses?|chapters?|${BOOK_ALT})\s+(
 // "Psalm one nineteen" is Psalm 119; no other book has a hundred chapters.
 const PSALM_HUNDREDS_RE = new RegExp(String.raw`\b(psalms?\s+)(${UNIT})\s+(${UNDER_100})\b`, 'gi');
 
+// "One thousand B.C.", "fifteen hundred BC": a year said in words, before its era.
+const YEAR_RE = new RegExp(String.raw`\b((?:${UNIT}\s+thousand(?:\s+(?:and\s+)?(?:${UNIT}\s+hundred(?:\s+and)?(?:\s+${UNDER_100})?|${UNDER_100}))?)|(?:${UNIT}|${UNDER_100})\s+hundred(?:\s+and)?(?:\s+${UNDER_100})?)\s+(BC|AD|BCE|CE)\b`, 'gi');
+
 function wordsToNumber(words) {
   const w = words.toLowerCase().split(/[\s-]+/).filter((x) => x !== 'and');
+  let total = 0;
   let n = 0;
   for (let i = 0; i < w.length; i++) {
-    if (w[i] === 'hundred') n *= 100;
-    else if (w[i] === 'oh') n *= 100;
+    if (w[i] === 'thousand') {
+      total += n * 1000;
+      n = 0;
+    } else if (w[i] === 'hundred' || w[i] === 'oh') n *= 100;
     else if (TENS.includes(w[i])) n += 10 * TENS.indexOf(w[i]);
     else n += SMALL.indexOf(w[i]);
   }
-  return n;
+  return total + n;
 }
 
 /**
@@ -217,6 +223,9 @@ export function tidy(text) {
   let t = text
     .replace(new RegExp(String.raw`\bver(?:se?)?(${SMALL.slice(1).join('|')}|twenty|thirty|forty|fifty)\b`, 'gi'), 'verse $1')
     .replace(/\b(verses?|chapters?)\s+(?:no\.?|number)\s*/gi, '$1 ')
+    .replace(/\bb\.\s?c\.?(?=\s|$)/gi, 'BC')
+    .replace(/\ba\.\s?d\.?(?=\s|$)/gi, 'AD')
+    .replace(YEAR_RE, (m, num, era) => `${wordsToNumber(num)} ${era.toUpperCase()}`)
     .replace(PSALM_HUNDREDS_RE, (m, lead, h, rest) => `${lead}${100 * wordsToNumber(h) + wordsToNumber(rest)}`);
   // Twice, so "verses three and four" gets both.
   for (let i = 0; i < 2; i++) t = t.replace(NUMBER_RE, (m, lead, num) => `${lead}${wordsToNumber(num)}`);
@@ -290,6 +299,10 @@ export function personNamed(t) {
 }
 
 const FAMILY_RE = /\b(tree|family|genealog\w*|ancestors?|descend\w*|sons?|daughters?|child(ren)?|kids?|father|mother|parents?|wife|wives|husbands?|brothers?|sisters?|grand(son|daughter|father|mother|child|children)s?|begat|born to|related|relatives?|cousins?|uncles?|aunts?|nephews?|nieces?|offspring|firstborn|married|marry)\b/;
+const SAYS_RE = /\bwhere\b[^.?!]*\b(say|says|said|written|talks?|mentions?|speaks?|teach(es)?)\b|\bwhere in the bible\b/;
+/** "Where's Bethlehem", "where did Paul go": a place. "Where does it say…" is a search. */
+const placeWhere = (t) => /\bwhere\b/.test(t) && !SAYS_RE.test(t);
+
 // "Tell me about" asks for the bio even next to a family word; "who was" gives way to one.
 const STRONG_BIO_RE = /\b(bio|biography|tell me about|life of|story of)\b/;
 const WEAK_BIO_RE = /\b(who (is|was|were|are)|who's|person|people)\b/;
@@ -386,7 +399,7 @@ export const CORE = [
   },
   {
     key: 'search',
-    triggers: /\b(search\w*|find|look for|where does it say|which verses?|verses? (about|that|with))\b/,
+    triggers: { test: (t) => /\b(search\w*|find|look for|which verses?|verses? (about|that|with)|what does the bible say)\b/.test(t) || SAYS_RE.test(t) },
     tools: [
       {
         name: 'search',
@@ -402,8 +415,9 @@ export const CORE = [
   {
     key: 'windows',
     // Only the windows no other action owns. "In a new window" belongs to the
-    // commentary's new_window.
-    triggers: /\b((?<!new )windows?|panels?|panes?|bible|harmon(y|ies)|art|notes|journal)\b/,
+    // commentary's new_window, and "the Bible" is a window only when it's
+    // opened ("where does the Bible talk about…" is a search).
+    triggers: /\b((?<!new )windows?|panels?|panes?|(?:open|show|bring up|pull up)\s+(?:me\s+)?(?:the\s+|a\s+|my\s+)?bible|harmon(y|ies)|art|notes|journal)\b/,
     tools: [
       {
         name: 'window',
@@ -496,7 +510,8 @@ export const GROUPS = [
   },
   {
     key: 'map',
-    triggers: /\b(maps?|where (is|was|were|did)|how far|located|location)\b/,
+    // "Where" means a place, unless it asks where the Bible says something.
+    triggers: { test: (t) => /\b(maps?|how far|located|location)\b/.test(t) || placeWhere(t) },
     tools: [
       {
         name: 'map',
@@ -605,6 +620,7 @@ export const GROUPS = [
  * - a bare book name counts only when nothing else was asked for
  * - a reference in a highlight, commentary or connections request belongs to it
  * - stop words beat reading, and closing beats opening
+ * - "where" means the map, even with a person named
  * - with a person named, family words mean the tree and bio words the bio
  */
 export function toolsFor(text, everything = false) {
@@ -616,6 +632,11 @@ export function toolsFor(text, everything = false) {
   if (keys.has('passage') && ['highlight', 'commentary', 'connections'].some((k) => keys.has(k))) keys.delete('passage');
   if (keys.has('stopping')) keys.delete('reading');
   if (keys.has('closing')) keys.delete('windows');
+  // "Where was Jesus born": the question is about a place, not the person.
+  if (keys.has('map') && placeWhere(t)) {
+    keys.delete('tree');
+    keys.delete('people');
+  }
   if (keys.has('tree') && keys.has('people')) {
     const family = FAMILY_RE.test(t);
     const bio = STRONG_BIO_RE.test(t);
@@ -895,6 +916,8 @@ export const PHRASES = [
   { say: 'Where is Bethlehem', should: 'map at Bethlehem', tests: 'a place in a question', want: { do: [['map', 'bethlehem']] } },
   { say: 'Show Jerusalem on the map in 1000 BC', should: 'map at Jerusalem, 1000 BC', tests: 'a place and a year', want: { do: [['map', 'jerusalem', '1000']] } },
   { say: 'When did the exodus happen', should: 'timeline at the exodus', tests: 'Exodus the event, not the book', want: { do: [['timeline', 'exodus']] } },
+  { say: 'Where was Jesus born', should: 'the map', tests: '"where" with a person named', want: { do: [['map']] } },
+  { say: 'Where does the Bible talk about forgiveness', should: 'search for forgiveness', tests: 'a "where" that isn\'t a place', want: { do: [['search', 'forgiveness']] } },
   // The app itself
   { say: 'Close everything', should: 'close every window', tests: 'no window named', want: { do: [['close_window', 'all']] } },
   { say: 'Start reading from verse ten', should: 'read aloud from verse 10', tests: 'a number word after "verse"', want: { do: [['read_aloud', '10']] } },

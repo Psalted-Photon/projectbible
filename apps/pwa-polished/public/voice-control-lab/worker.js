@@ -529,15 +529,21 @@ function useTools(system, toolsJson) {
 function settle(text, picked, answer) {
   const notes = [];
   const words = text.toLowerCase();
+  const said = (v) => typeof v !== 'string' || (v.trim() !== '' && words.includes(v.toLowerCase().trim()));
+  const refs = findRefs(text);
   let calls = (answer?.function_calls || []).map((c) => ({ name: c.name, args: { ...argsOf(c) } }));
   let promoted = false;
   if (!calls.length && picked.tools.length === 1) {
-    const held = (answer?.suppressed_calls || []).find((c) => c.name === picked.tools[0].name
-      && Object.values(argsOf(c)).every((v) => typeof v !== 'string' || (v.trim() && words.includes(v.toLowerCase().trim()))));
+    const held = (answer?.suppressed_calls || []).find((c) => c.name === picked.tools[0].name && Object.values(argsOf(c)).every(said));
     if (held) {
       calls = [{ name: held.name, args: { ...argsOf(held) } }];
       promoted = true;
       notes.push('held back by the engine, but every word of it was said');
+    } else if (picked.tools[0].name === 'passage' && refs.some((r) => r.valid)) {
+      // "Open Mark 4": Needle had nothing, but a reference said alone is a passage.
+      calls = [{ name: 'passage', args: { reference: refs[0].text } }];
+      promoted = true;
+      notes.push('Needle had nothing, but a reference on its own is a passage');
     }
   }
   for (const c of calls) {
@@ -554,12 +560,21 @@ function settle(text, picked, answer) {
       c.args.new_window = false;
     }
   }
-  const refs = findRefs(text);
-  // "Matthew Henry on Romans 8": the commentary opens there.
+  // "Matthew Henry on Romans 8": the commentary opens there. A year Needle left out of a map is taken from the words.
+  const year = /\b(\d{1,4})\s*(BC|AD|BCE|CE)\b/i.exec(text);
   for (const c of calls) {
     if (refs.length && c.name === 'commentary' && !c.args.at) c.args.at = refs[0].text;
     if (refs.length && c.name === 'connections' && !c.args.reference) c.args.reference = refs[0].text;
+    if (c.name === 'map' && !c.args.year && year) {
+      c.args.year = `${year[1]} ${year[2].toUpperCase()}`;
+      notes.push(`year ${c.args.year} taken from the words`);
+    }
   }
+  // Every value in the picks was said (the commentator's name, the search
+  // words), so a low score from Needle needn't stop a turn with one action.
+  const grounded = calls.length > 0
+    && calls.every((c) => Object.entries(c.args).filter(([k, v]) => k !== 'at' && typeof v === 'string').some(([, v]) => v.trim())
+      && Object.entries(c.args).every(([k, v]) => k === 'at' || said(v)));
   const at = calls.findIndex((c) => c.name === 'passage');
   if (at >= 0) {
     const needle = calls.filter((c) => c.name === 'passage').map((c) => c.args.reference).join(' + ');
@@ -576,7 +591,7 @@ function settle(text, picked, answer) {
     calls = [...rest.slice(0, at), ...passages, ...rest.slice(at)];
   }
   const bad = refs.find((r) => !r.valid);
-  return { calls, notes, promoted, refProblem: bad ? (bad.suggest ? `Did you mean ${bad.suggest}?` : `There's no ${bad.text}`) : null };
+  return { calls, notes, promoted, grounded, refProblem: bad ? (bad.suggest ? `Did you mean ${bad.suggest}?` : `There's no ${bad.text}`) : null };
 }
 
 /** One piece of what was said through Needle, with the actions its trigger words picked. */

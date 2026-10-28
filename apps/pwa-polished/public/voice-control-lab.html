@@ -163,7 +163,7 @@
   </div>
   <div class="opts" style="margin-top:12px">
     <label><input type="checkbox" id="optNames" checked> Favor the app's names (books, commentary authors, windows)</label>
-    <label><input type="checkbox" id="optPeople"> Also favor the <input type="number" id="peopleN" value="300" min="20" max="3000" step="20"> best-known people's names</label>
+    <label><input type="checkbox" id="optPeople"> Also favor the <input type="number" id="peopleN" value="300" min="20" max="3000" step="20"> best-known people's names (10/28: helped 3 names, but pulled "Psalm one" to "Solomon" and Bartholomew to "Ruth Solomon")</label>
     <label><input type="checkbox" id="optKeep" checked> Keep the mic open between presses (catches your first word)</label>
     <label><input type="checkbox" id="optAll"> Send every action at once, not only the groups a trigger word picks (Needle then keeps the 5 it thinks closest)</label>
     <label>Act at <input type="number" id="actAt" value="0.8" min="0" max="1" step="0.05"> · ask "Did you mean…?" at <input type="number" id="askAt" value="0.4" min="0" max="1" step="0.05"></label>
@@ -801,6 +801,7 @@ function pieceVerdict(p) {
   if (p.refProblem) return ['ask', p.refProblem];
   if (p.promoted) return ['act', 'Held back by the engine, but every word of it was said · go ahead'];
   if (p.single && (c == null || c >= SINGLE_FLOOR)) return ['act', `${pct} · go ahead (the only action shown)`];
+  if (p.single && p.grounded) return ['act', `${pct} · go ahead (the only action shown, and every value in it was said)`];
   if (c == null) return ['act', pct];
   if (c >= Number($('actAt').value)) return ['act', `${pct} · go ahead`];
   if (c >= Number($('askAt').value)) return ['ask', `${pct} · ask "Did you mean…?"`];
