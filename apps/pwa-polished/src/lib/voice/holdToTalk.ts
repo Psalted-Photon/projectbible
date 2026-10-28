@@ -1,6 +1,7 @@
 /**
- * Hold to talk, for every mic button: the floating one (FloatingMic.svelte)
- * and the try row in Settings. One take at a time, as there is one mic.
+ * Hold to talk, for every mic button: the floating one (FloatingMic.svelte),
+ * the search bar's (NavigationBar.svelte) and the try row in Settings. One
+ * take at a time, as there is one mic.
  *
  * Before the mic opens, a press checks what it needs from what is already
  * known, so it is never kept waiting: Voice Control downloaded, a mic plugged
@@ -139,7 +140,7 @@ export async function allowMic(): Promise<void> {
 // ── A take ──────────────────────────────────────────────────────────────────
 
 /** Which button the take came from: each shows it its own way. */
-export type TalkSource = 'float' | 'settings';
+export type TalkSource = 'float' | 'search' | 'settings';
 
 export type TalkPhase =
   | 'idle'
@@ -291,7 +292,8 @@ export async function releaseTalk(): Promise<void> {
     return;
   }
   try {
-    const outcome = await hearCommand(pcm);
+    // From the search bar, what isn't a command is searched for.
+    const outcome = await hearCommand(pcm, { orSearch: s.source === 'search' });
     end('', outcome);
   } catch (error) {
     end(error instanceof Error ? error.message : String(error));

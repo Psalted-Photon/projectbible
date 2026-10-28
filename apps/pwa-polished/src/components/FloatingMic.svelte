@@ -76,7 +76,7 @@
   <div
     bind:this={el}
     use:portal
-    class="fmic themed"
+    class="fmic themed no-edge-gesture"
     class:dragging={$drag.dragging}
     style="left: {$drag.left}px; top: {$drag.top}px; visibility: {$drag.ready ? 'visible' : 'hidden'};"
     role="region"

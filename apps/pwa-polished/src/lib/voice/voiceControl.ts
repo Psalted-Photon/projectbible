@@ -199,11 +199,26 @@ export function voiceGesture(): void {
   unlockTtsAudio();
 }
 
-/** A spoken command: 16 kHz mono speech, start to finish. */
-export async function hearCommand(pcm: Float32Array): Promise<VoiceOutcome> {
+/**
+ * From the search bar's mic, words that ask for nothing the app does are
+ * searched for, the way typing them would: "grace and peace", "what does the
+ * Bible say about anxiety".
+ */
+function orSearch(heard: string, plan: VoicePlan): VoicePlan {
+  if (plan.kind !== 'reply' || (plan.text !== NOT_CAUGHT && plan.text !== CANT_ANSWER)) return plan;
+  const query = heard.replace(/[.?!,;:]+$/, '').trim();
+  return query ? { kind: 'act', calls: [{ name: 'search', args: { query } }] } : plan;
+}
+
+/**
+ * A spoken command: 16 kHz mono speech, start to finish. `orSearch` (the
+ * search bar's mic) searches for what was said when it isn't a command.
+ */
+export async function hearCommand(pcm: Float32Array, opts: { orSearch?: boolean } = {}): Promise<VoiceOutcome> {
   await loadVoiceControl();
   const { heard, choice } = await call<{ heard: string; choice: VoiceChoice | null }>('command', { pcm, system: systemFacts() }, undefined, [pcm.buffer as ArrayBuffer]);
-  return carryOut(heard, decide(heard, choice));
+  const plan = decide(heard, choice);
+  return carryOut(heard, opts.orSearch ? orSearch(heard, plan) : plan);
 }
 
 /** A typed command, the same way, without Whistle. */

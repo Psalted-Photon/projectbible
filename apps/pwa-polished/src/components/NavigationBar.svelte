@@ -46,6 +46,14 @@
     searchQuery as searchQueryStore,
     triggerSearch,
   } from "../stores/searchStore";
+  import {
+    talk,
+    voiceReady,
+    pressToTalk,
+    moveTalk,
+    releaseTalk,
+    cancelTalk,
+  } from "../lib/voice/holdToTalk";
   import PowerSearchModal from "./PowerSearchModal.svelte";
   import { profileModalStore } from "../stores/profileModalStore";
   import { readingPlanModalStore } from "../stores/readingPlanModalStore";
@@ -1341,10 +1349,20 @@
   function handleSearchBlur() {
     blurTimeout = window.setTimeout(() => {
       searchFocused = false;
-      if (!searchQuery.trim() && !showResults) {
+      if (!searchQuery.trim() && !showResults && !searchTalking) {
         searchExpanded = false;
       }
     }, 150);
+  }
+
+  // The search box's mic (Voice Control): the box stays open while it's held
+  // and while what was heard shows beside it, then closes as a blur would.
+  $: searchTalking = $talk.source === "search" && $talk.phase !== "idle";
+  $: searchMicLive = searchTalking && $talk.phase === "listening" && !$talk.off;
+  let wasSearchTalking = false;
+  $: if (searchTalking !== wasSearchTalking) {
+    wasSearchTalking = searchTalking;
+    if (!searchTalking && !searchFocused && !searchQuery.trim() && !showResults) searchExpanded = false;
   }
 
   function openSettings() {
@@ -3020,6 +3038,31 @@
                 <X size={12} weight="duotone" />
               </button>
             {/if}
+            <!-- Hold to give a Voice Control command, or to search for what
+                 you say. Only once Voice Control is downloaded. Its press
+                 keeps focus where it is, so the box doesn't close under it. -->
+            {#if $voiceReady.installed}
+              <button
+                type="button"
+                class="search-mic no-edge-gesture"
+                class:live={searchMicLive}
+                class:off={searchTalking && $talk.off}
+                title="Hold to talk"
+                aria-label="Hold to talk"
+                on:mousedown|preventDefault
+                on:pointerdown={(e) => pressToTalk(e, "search")}
+                on:pointermove={moveTalk}
+                on:pointerup={releaseTalk}
+                on:pointercancel={cancelTalk}
+                on:contextmenu|preventDefault
+              >
+                {#if searchTalking && $talk.phase === "working"}
+                  <BrandSpinner size={14} title="Working…" />
+                {:else}
+                  <Microphone size={14} weight={searchMicLive ? "fill" : "bold"} />
+                {/if}
+              </button>
+            {/if}
           </div>
         </div>
         <!-- Advanced search stays out of the way until there is something to
@@ -4357,6 +4400,41 @@
 
   .clear-search:hover {
     color: #ccc;
+  }
+
+  .search-mic {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 26px;
+    height: 100%;
+    padding: 0;
+    border: none;
+    border-left: 1px solid #2a2a2a;
+    border-radius: 0 4px 4px 0;
+    background: transparent;
+    color: #e6b84a;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .search-mic:hover {
+    background: rgba(230, 184, 74, 0.12);
+  }
+
+  .search-mic.live {
+    background: #e6b84a;
+    color: #1c1c1e;
+  }
+
+  .search-mic.off {
+    background: #555;
+    color: #eee;
   }
 
   /* BrandSpinner turns itself, so this only positions it — a rotation here
