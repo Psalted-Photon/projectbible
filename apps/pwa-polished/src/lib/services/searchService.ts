@@ -14,6 +14,7 @@ import { patternMatcher, wordMatcher, type TextMatcher } from '../searchWords';
 import { indexedVerseSearch } from '../search/searchClient';
 import type { TranslationHits } from '../search/searchWorker';
 import { translationSortIndex } from '../bibleData';
+import { addedWords, leadCategory, readIntent, type QueryIntent } from '../search/queryIntent';
 
 export type SearchCategoryKey =
   | 'bible'
@@ -172,29 +173,39 @@ export class UnifiedSearchService {
       return [];
     }
 
+    // The bar reads a plain question for what it asks: "who was Boaz" searches
+    // Boaz, people first (lib/search/queryIntent). Advanced Search's text is
+    // taken as typed.
+    const intent: QueryIntent = options.pattern ? { text: normalizedQuery, kind: null, also: {} } : readIntent(normalizedQuery);
+    const words = intent.text;
     const match: Matchers = options.pattern
       ? { all: patternMatcher(options.pattern), phrase: patternMatcher(options.pattern), pattern: true }
-      : { all: wordMatcher(normalizedQuery, 'all'), phrase: wordMatcher(normalizedQuery, 'phrase'), pattern: false };
+      : { all: wordMatcher(words, 'all', intent.also), phrase: wordMatcher(words, 'phrase'), pattern: false };
 
     // Every category is independent, so fetch them together rather than
     // serially — the slowest one sets the pace instead of their sum — and
     // hand each one on as it lands.
     const listOf = (run: Promise<SearchResult[]>) => run.then((results) => ({ results }));
     const sources: { key: SearchCategoryKey; name: string; run: Promise<{ results: SearchResult[]; total?: number }> }[] = [
-      { key: 'bible', name: 'Bible', run: this.searchVerses(normalizedQuery, match, options) },
-      { key: 'strongs', name: "Strong's", run: listOf(this.searchStrongs(normalizedQuery)) },
+      { key: 'bible', name: 'Bible', run: this.searchVerses(words, match, options, intent.also) },
+      { key: 'strongs', name: "Strong's", run: listOf(this.searchStrongs(words)) },
       { key: 'notes', name: 'Notes', run: listOf(this.searchNotes(match.phrase)) },
       { key: 'journal', name: 'Journal', run: listOf(this.searchJournal(match.phrase)) },
       { key: 'saved', name: 'Highlights', run: listOf(this.searchSaved(match.phrase)) },
-      { key: 'characters', name: 'Biblical Characters', run: listOf(this.searchCharacters(normalizedQuery)) },
-      { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', run: listOf(this.searchEncyclopedia(normalizedQuery, !!options.deep)) },
-      { key: 'topical', name: "Topical (Nave's)", run: listOf(this.searchTopical(normalizedQuery, !!options.deep)) },
-      { key: 'devotionals', name: 'Devotionals', run: listOf(this.searchDevotionals(normalizedQuery, match)) },
-      { key: 'commentaries', name: 'Commentaries', run: listOf(options.deep ? this.searchCommentaries(normalizedQuery, match) : Promise.resolve([])) },
+      { key: 'characters', name: 'Biblical Characters', run: listOf(this.searchCharacters(words)) },
+      { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', run: listOf(this.searchEncyclopedia(words, !!options.deep)) },
+      { key: 'topical', name: "Topical (Nave's)", run: listOf(this.searchTopicalWith(words, addedWords(intent), !!options.deep)) },
+      { key: 'devotionals', name: 'Devotionals', run: listOf(this.searchDevotionals(words, match)) },
+      { key: 'commentaries', name: 'Commentaries', run: listOf(options.deep ? this.searchCommentaries(words, match) : Promise.resolve([])) },
     ];
 
+    // What the question is after goes first; the rest keep their usual order.
+    const lead = leadCategory(intent);
     const found: (SearchCategory | null)[] = sources.map(() => null);
-    const soFar = () => found.filter((c): c is SearchCategory => !!c && c.count > 0);
+    const soFar = () =>
+      found
+        .filter((c): c is SearchCategory => !!c && c.count > 0)
+        .sort((a, b) => Number(b.key === lead) - Number(a.key === lead));
     await Promise.all(
       sources.map(async ({ key, name, run }, i) => {
         const { results, total } = await run.catch(() => ({ results: [] as SearchResult[], total: undefined }));
@@ -220,11 +231,12 @@ export class UnifiedSearchService {
     query: string,
     match: Matchers,
     options: SearchOptions,
+    also: Record<string, string[]> = {},
   ): Promise<{ results: SearchResult[]; total: number }> {
     const limit = options.limit ?? 250;
     try {
       const groups =
-        (!match.pattern && (await indexedVerseSearch({ query, limit, first: options.translation }))) ||
+        (!match.pattern && (await indexedVerseSearch({ query, limit, first: options.translation, also }))) ||
         this.groupScan(await this.searchIndex.scan(match.all), limit, options.translation);
 
       const results: SearchResult[] = [];
@@ -724,6 +736,22 @@ export class UnifiedSearchService {
       console.error('Error searching topical:', error);
       return [];
     }
+  }
+
+  /**
+   * Topics for the words, and for the Bible's wording a "verses about"
+   * question added (worry → Care), each topic once.
+   */
+  private async searchTopicalWith(query: string, also: string[], deep: boolean): Promise<SearchResult[]> {
+    const lists = await Promise.all([query, ...also].map((term) => this.searchTopical(term, deep)));
+    const seen = new Set<number>();
+    const out: SearchResult[] = [];
+    for (const result of lists.flat()) {
+      if (seen.has(result.data.topicId)) continue;
+      seen.add(result.data.topicId);
+      out.push(result);
+    }
+    return out;
   }
 
   // ── Devotionals ──────────────────────────────────────────────────────────

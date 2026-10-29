@@ -26,6 +26,7 @@
   import { buildSearchTree } from "../lib/searchTree";
   import { closeSpelling, suggestFor, warmSearchIndex } from "../lib/search/searchClient";
   import type { Suggestion } from "../lib/search/searchWorker";
+  import { addedWords, leadCategory, readIntent, topMatch } from "../lib/search/queryIntent";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import { portal } from "../lib/portal";
@@ -983,6 +984,15 @@
   /** A close spelling, offered above the results the typed words did find. */
   let didYouMean: string | null = null;
 
+  /** How the shown results' words read as a question: "who was Boaz" searched Boaz (lib/search/queryIntent). */
+  $: shownIntent = readIntent(resultsQuery);
+  /** The Bible's wording a "verses about" question added: "Also searched: anxious". */
+  $: alsoSearched = searchRan ? addedWords(shownIntent) : [];
+  /** The words marked in the results: the ones searched, the lead-in left out. */
+  $: markQuery = [shownIntent.text, ...addedWords(shownIntent)].join(" ");
+  /** A person, place or topic the words name exactly, pinned above the results. */
+  $: pinned = searchRan ? topMatch(searchResults, shownIntent) : null;
+
   /** "Search for shepard instead": the typed words, as typed, with no spelling put right. */
   function searchAsTyped() {
     const typed = correctedFrom;
@@ -1073,14 +1083,19 @@
     didYouMean = null;
     dropSuggestions();
     // Asked alongside the search, so it's ready when the results are. A
-    // misspelled book has its own Go-to row, so it isn't asked about twice.
-    const spelling = opts.exact || closeQueryRef(query) ? Promise.resolve(null) : closeSpelling(query);
+    // misspelled book has its own Go-to row, so it isn't asked about twice,
+    // and a question the Bible's wording was added to is answered already.
+    const spelling =
+      opts.exact || closeQueryRef(query) || addedWords(readIntent(query)).length ? Promise.resolve(null) : closeSpelling(query);
 
     // The list fills in as each category finishes; the spinner stays until
     // the last one has. The last search's results stay up until this one has
     // something to show, or has finished with nothing.
     let fresh = true;
     let openedBible = false;
+    // A question opens the group it asks for too: people for "who was…".
+    const asked = leadCategory(readIntent(query));
+    let openedAsked = !asked;
     const show = (results: SearchCategory[], final: boolean) => {
       if (ticket !== searchTicket) return;
       if (!results.length && !final) return;
@@ -1108,6 +1123,10 @@
       if (!openedBible && bibleCount > 0) {
         openedBible = true;
         expandedSearchNodes = new Set([...expandedSearchNodes, "bible"]);
+      }
+      if (!openedAsked && results.some((c) => c.key === asked)) {
+        openedAsked = true;
+        expandedSearchNodes = new Set([...expandedSearchNodes, asked as string]);
       }
 
       searchRan = true;
@@ -3425,6 +3444,35 @@
             Did you mean <button class="load-all-link" on:click={takeSpelling}>{didYouMean}</button>?
           </div>
         {/if}
+        {#if alsoSearched.length}
+          <div class="spelling-row">Also searched: {alsoSearched.join(", ")}</div>
+        {/if}
+        {#if pinned}
+          {@const top = pinned}
+          <div class="top-match">
+            <div class="spelling-caption">Top match</div>
+            <button type="button" class="suggestion-row top-match-row" on:click={() => handleResultClick(top)}>
+              <span class="suggestion-icon">
+                {#if top.type === "character"}
+                  <User size={14} weight="bold" />
+                {:else if top.type === "topical"}
+                  <Tag size={14} weight="bold" />
+                {:else if top.data?.isPlace}
+                  <MapPin size={14} weight="bold" />
+                {:else}
+                  <BookOpen size={14} weight="bold" />
+                {/if}
+              </span>
+              <span class="top-match-text">
+                <span class="top-match-title">{top.title}</span>
+                {#if top.subtitle}<span class="top-match-sub">{top.subtitle}</span>{/if}
+              </span>
+              <span class="suggestion-kind">
+                {top.type === "character" ? "Person" : top.type === "topical" ? "Topic" : top.data?.isPlace ? "Place" : "Encyclopedia"}
+              </span>
+            </button>
+          </div>
+        {/if}
         {#if displayedResultCount > 0}
           <div class="search-stats">
             Showing {displayedResultCount}
@@ -3442,7 +3490,7 @@
           <SearchResultsTree
             nodes={searchTree}
             expanded={expandedSearchNodes}
-            query={correctedFrom ? resultsQuery : searchQuery}
+            query={markQuery}
             onToggle={toggleSearchNode}
             onSelect={handleResultClick}
           />
@@ -5225,6 +5273,44 @@
     flex-shrink: 0;
     color: #777;
     font-size: 11px;
+  }
+
+  .top-match {
+    padding: 6px 0 4px;
+    border-bottom: 1px solid #3a3a3a;
+  }
+
+  .top-match .spelling-caption {
+    padding: 2px 14px 2px;
+  }
+
+  .top-match-row {
+    align-items: flex-start;
+  }
+
+  .top-match-row .suggestion-icon {
+    padding-top: 2px;
+  }
+
+  .top-match-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .top-match-title {
+    color: #f0f0f0;
+    font-weight: 600;
+  }
+
+  .top-match-sub {
+    color: #999;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .spelling-row {
