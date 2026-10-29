@@ -14,11 +14,15 @@
  * BSB's per chapter at read time, and NET only carries 1,750 of the 4,879 rows —
  * strip the rest and most chapters silently lose their titles.
  *
+ * Also writes packs/starter.sha256, which is committed (the pack is not) so the
+ * deploy can check the release copy is this build — see ensure-starter-pack.mjs.
+ *
  * Usage: node scripts/build-starter-pack.mjs
  */
 
 import Database from 'better-sqlite3';
-import { existsSync, statSync, unlinkSync } from 'fs';
+import { createHash } from 'crypto';
+import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -28,6 +32,7 @@ const repoRoot = join(__dirname, '..');
 const NET_SOURCE = join(repoRoot, 'packs/net.sqlite');
 const HEADINGS_SOURCE = join(repoRoot, 'packs/section-headings.sqlite');
 const OUTPUT = join(repoRoot, 'packs/starter.sqlite');
+const HASH_OUTPUT = join(repoRoot, 'packs/starter.sha256');
 
 /** Lowercase to match the ids the consolidated pack already uses. */
 const TRANSLATION_ID = 'net';
@@ -35,7 +40,7 @@ const TRANSLATION_ID = 'net';
 for (const [label, path] of [['NET', NET_SOURCE], ['section headings', HEADINGS_SOURCE]]) {
   if (!existsSync(path)) {
     console.error(`❌ Missing ${label} source: ${path}`);
-    console.error('   Git LFS files may not be materialized. Run: git lfs pull');
+    console.error('   Packs are not kept in git; build it or copy it in first.');
     process.exit(1);
   }
   // An unmaterialized LFS pointer is a ~130-byte text file that would otherwise
@@ -150,5 +155,8 @@ db.exec('VACUUM');
 db.close();
 
 const bytes = statSync(OUTPUT).size;
+const sha256 = createHash('sha256').update(readFileSync(OUTPUT)).digest('hex');
+writeFileSync(HASH_OUTPUT, `${sha256}\n`);
 console.log(`\n✅ ${OUTPUT}`);
-console.log(`   ${(bytes / 1024 / 1024).toFixed(2)} MB (${bytes.toLocaleString()} bytes)\n`);
+console.log(`   ${(bytes / 1024 / 1024).toFixed(2)} MB (${bytes.toLocaleString()} bytes)`);
+console.log(`   sha256 ${sha256} → packs/starter.sha256 (commit it, upload the pack)\n`);

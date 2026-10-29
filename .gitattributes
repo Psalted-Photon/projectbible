@@ -1,6 +1,2 @@
-# SQLite packs (large binary files)
-*.sqlite filter=lfs diff=lfs merge=lfs -text
-packs/*.sqlite filter=lfs diff=lfs merge=lfs -text
-# JSON files are normal text - NOT in LFS
+# JSON files are normal text
 *.json text eol=lf
-packs/consolidated/*.sqlite filter=lfs diff=lfs merge=lfs -text

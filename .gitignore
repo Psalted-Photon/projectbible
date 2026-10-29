@@ -8,9 +8,13 @@ dist/
 # Python virtual environment
 .venv/
 
-# Data packs - allow committed packs for mobile deployment
-# (packs are small enough for GitHub, ~16MB each)
-# Ignore generated data sources, but allow final packs
+# Data packs are never committed. Production downloads every pack from the
+# GitHub release, and Vercel never reads one from git, so pushing them through
+# LFS only filled the 10 GB quota (every rebuild stored the full file again).
+# The starter's hash is committed instead, in packs/starter.sha256.
+*.sqlite
+
+# Ignore downloaded data sources
 data-sources/*
 # …except the journeys editorial layer: the curated index, the license and the
 # notes are ours to keep, small, and the thing that makes the feature

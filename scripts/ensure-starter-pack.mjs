@@ -5,18 +5,19 @@
  * apps/pwa-polished/public/, which vite copies into dist.
  *
  * Two sources, because CI and a laptop have different things available. Locally
- * the built pack is sitting in packs/ and is simply copied. On Vercel that file
- * is an unmaterialized Git LFS pointer, so it is downloaded from the release
- * instead — the same trick ensure-bundled-packs.mjs uses.
+ * the built pack is sitting in packs/ and is simply copied. On Vercel it is not
+ * there at all (packs are not kept in git), so it is downloaded from the release
+ * instead.
  *
  * This one is deliberately fatal. Every other pack is optional and downloads on
  * demand; the starter is the text a first-time visitor reads, so a deploy
  * without it ships an app that opens to an empty page.
  *
- * The LFS pointer names the sha256 of the starter this commit was built with,
- * and the download has to match it. Without that check a release copy that was
- * never replaced after a rebuild ships quietly, and every device that is told
- * to fetch the corrected starter fetches the old one again.
+ * packs/starter.sha256, written by build-starter-pack.mjs and committed, names
+ * the sha256 of the starter this commit was built with, and the download has to
+ * match it. Without that check a release copy that was never replaced after a
+ * rebuild ships quietly, and every device that is told to fetch the corrected
+ * starter fetches the old one again.
  *
  * Usage: node scripts/ensure-starter-pack.mjs
  */
@@ -34,17 +35,21 @@ const releaseBase =
 
 const FILENAME = 'starter.sqlite';
 const source = resolve(__dirname, '../packs', FILENAME);
+const hashSource = resolve(__dirname, '../packs/starter.sha256');
 const dest = resolve(__dirname, '../apps/pwa-polished/public', FILENAME);
 
-/** An LFS pointer is a ~130-byte text file, so size alone is not enough. */
 function isSqlite(buffer) {
   return buffer.subarray(0, 15).toString('utf8') === 'SQLite format 3';
 }
 
-/** The sha256 an LFS pointer names, or null if this is not one. */
-function pointerSha256(buffer) {
-  const match = /^oid sha256:([a-f0-9]{64})$/m.exec(buffer.subarray(0, 512).toString('utf8'));
-  return match ? match[1] : null;
+/** The sha256 in packs/starter.sha256, or null if it is missing or malformed. */
+async function committedSha256() {
+  try {
+    const match = /^([a-f0-9]{64})\s*$/i.exec(await readFile(hashSource, 'utf8'));
+    return match ? match[1].toLowerCase() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The pack itself, or the hash the release copy must have. */
@@ -52,12 +57,12 @@ async function readLocal() {
   try {
     const buffer = await readFile(source);
     if (!isSqlite(buffer)) {
-      console.log(`📦 ${source} is a Git LFS pointer, not a database — falling back to the release`);
-      return { buffer: null, expectedSha256: pointerSha256(buffer) };
+      console.log(`📦 ${source} is not a database — falling back to the release`);
+      return { buffer: null, expectedSha256: await committedSha256() };
     }
     return { buffer, expectedSha256: null };
   } catch {
-    return { buffer: null, expectedSha256: null };
+    return { buffer: null, expectedSha256: await committedSha256() };
   }
 }
 
@@ -77,7 +82,7 @@ async function downloadFromRelease(expectedSha256) {
 
   const actual = createHash('sha256').update(buffer).digest('hex');
   if (!expectedSha256) {
-    console.warn(`⚠️  No LFS pointer to check against — using the release copy unchecked (${actual})`);
+    console.warn(`⚠️  No packs/starter.sha256 to check against — using the release copy unchecked (${actual})`);
   } else if (actual !== expectedSha256) {
     throw new Error(
       `The release's ${FILENAME} (${actual}) is not the one this commit was built with (${expectedSha256}). ` +
