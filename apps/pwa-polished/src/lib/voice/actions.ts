@@ -46,6 +46,11 @@ import { ScriptureSearch } from '../atlas/search.js';
 import { timelineInstalled, loadTimeline } from '../timeline/data';
 import { searchItems } from '../timeline/query';
 import { voiceForTap, useVoice } from '../tts/voiceForTap';
+import { getTodayPlaylist, hasActivePlan, goToPlanStart, playPlanPlaylist } from '../tts/planPlaylist';
+import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
+import { openDailyGreeting } from '../../stores/dailyGreetingStore';
+import { openDevotional } from '../../stores/devotionalStore';
+import { devotionalTargetFromParams } from '../devotionals/deepLink';
 import { canSpeakOriginal } from '../tts/originalText';
 import { originalLanguageOf } from '../translationKind';
 import {
@@ -339,6 +344,21 @@ function closeWindow(name: unknown): string {
 
 // ── Read Aloud ──────────────────────────────────────────────────────────────
 
+/** The Read Aloud voice made the one to read with, or a notice saying why it can't be. */
+async function voiceReady(greek: boolean): Promise<boolean> {
+  const check = await voiceForTap(greek);
+  if (check.status !== 'ready') {
+    say(
+      check.status === 'downloading'
+        ? 'The Read Aloud voice is still downloading.'
+        : 'Read Aloud needs its voice first: tap the speaker under the chapter title.',
+    );
+    return false;
+  }
+  useVoice(check.voiceId, greek);
+  return true;
+}
+
 async function readAloud(fromVerse: unknown): Promise<string> {
   const verse = Number(fromVerse) > 0 ? Math.floor(Number(fromVerse)) : null;
   const nav = get(navigationStore);
@@ -355,16 +375,7 @@ async function readAloud(fromVerse: unknown): Promise<string> {
     return 'Reading again';
   }
   const greek = originalLanguageOf(nav.translation) === 'greek' && canSpeakOriginal(nav.translation);
-  const check = await voiceForTap(greek);
-  if (check.status !== 'ready') {
-    say(
-      check.status === 'downloading'
-        ? 'The Read Aloud voice is still downloading.'
-        : 'Read Aloud needs its voice first: tap the speaker under the chapter title.',
-    );
-    return 'No voice yet';
-  }
-  useVoice(check.voiceId, greek);
+  if (!(await voiceReady(greek))) return 'No voice yet';
   await startReading(nav.translation, nav.book, nav.chapter, verse);
   return verse != null ? `Reading ${nav.book} ${nav.chapter} from verse ${verse}` : `Reading ${nav.book} ${nav.chapter}`;
 }
@@ -595,6 +606,41 @@ async function timeline(event: unknown): Promise<string> {
   return openWindowOfType('timeline') ? 'Opened the timeline' : 'No room for another window';
 }
 
+// ── Reading plan, Verse of the Day, devotional ──────────────────────────────
+
+/** The plan, or today's reading in it: gone to, or played the way Play this reading plays it. */
+async function readingPlan(a: Record<string, any>): Promise<string> {
+  if (!a.today && !a.aloud) {
+    readingPlanModalStore.open();
+    return 'Opened the reading plan';
+  }
+  const playlist = await getTodayPlaylist();
+  if (!playlist) {
+    readingPlanModalStore.open();
+    say(hasActivePlan() ? 'Nothing is due on your reading plan today.' : "You haven't started a reading plan yet.");
+    return 'No reading today';
+  }
+  if (a.aloud && !(await voiceReady(false))) return 'No voice yet';
+  navigationStore.pushHistory(get(navigationStore), 'voice');
+  if (a.aloud) playPlanPlaylist(playlist);
+  else goToPlanStart(playlist);
+  const first = playlist.passages[0];
+  return `${a.aloud ? "Reading today's reading" : "Went to today's reading"}, ${first.book} ${first.chapter}`;
+}
+
+/** The devotionals' ids, by the names the rules give them. */
+const DEVOTIONAL_IDS: Record<string, string> = {
+  'Morning and Evening': 'spurgeon-me', "Faith's Checkbook": 'faiths-checkbook', 'Daily Light': 'daily-light',
+};
+
+/** Today's reading, the same one a ?devo=today link opens, in the morning or evening one when that was said. */
+function devotional(a: Record<string, any>): string {
+  const params = new URLSearchParams({ devo: DEVOTIONAL_IDS[String(a.work)] ?? 'today' });
+  if (a.time) params.set('s', String(a.time));
+  openDevotional(devotionalTargetFromParams(params)!);
+  return `Opened today's ${a.work ?? 'devotional'}`;
+}
+
 // ── All of them ─────────────────────────────────────────────────────────────
 
 /** Carry out one call. Returns what was done, in a short line. */
@@ -620,6 +666,11 @@ export async function runCall(call: VoiceCall): Promise<string> {
     case 'encyclopedia': return encyclopedia(a.topic);
     case 'topical': return topical(a.topic);
     case 'timeline': return timeline(a.event);
+    case 'reading_plan': return readingPlan(a);
+    case 'verse_of_the_day':
+      openDailyGreeting();
+      return 'Opened the Verse of the Day';
+    case 'devotional': return devotional(a);
     default: return `Can't do ${call.name}`;
   }
 }
@@ -647,6 +698,9 @@ export function describeCall(call: VoiceCall): string {
     case 'encyclopedia': return a.topic ? `the encyclopedia on "${subject(a.topic)}"` : 'the encyclopedia';
     case 'topical': return a.topic ? `the topical index on "${subject(a.topic)}"` : 'the topical index';
     case 'timeline': return a.event ? `the timeline at ${a.event}` : 'the timeline';
+    case 'reading_plan': return a.aloud ? "play today's reading" : a.today ? "go to today's reading" : 'open the reading plan';
+    case 'verse_of_the_day': return 'the Verse of the Day';
+    case 'devotional': return `today's ${a.work ?? 'devotional'}${a.time ? ` (${a.time})` : ''}`;
     default: return call.name;
   }
 }

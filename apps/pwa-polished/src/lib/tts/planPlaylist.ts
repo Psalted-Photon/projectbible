@@ -7,12 +7,15 @@
  * route from storage for any caller with no card in front of it.
  */
 
+import { get } from 'svelte/store';
 import type { HarmonyPassage, HarmonySection } from '@projectbible/core';
 import { planDayDateStr } from '@projectbible/core';
 import { normalizeBookName } from '../bibleData';
 import { readingProgressStore } from '../../stores/ReadingProgressStore';
 import { localDateStr } from '../../stores/clockStore';
-import type { Passage } from './readingEngine';
+import { navigationStore } from '../../stores/navigationStore';
+import { startReadingPlaylist, type Passage } from './readingEngine';
+import { beginPlanRun } from './planTicker';
 
 const STORAGE_ACTIVE_PLAN = 'projectbible_active_reading_plan'; // legacy key
 const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
@@ -51,6 +54,11 @@ function loadActivePlan(): { id: string; plan: any } | null {
     // A corrupt plan is not worth a thrown error at the tap of a play button.
   }
   return null;
+}
+
+/** Whether a reading plan has been started on this device. */
+export function hasActivePlan(): boolean {
+  return !!loadActivePlan()?.plan?.days?.length;
 }
 
 /** Catch-up days the plan screen has generated for this plan, if any. */
@@ -163,6 +171,45 @@ export async function buildPlaylistForDay(planId: string, day: any): Promise<Pla
     harmonySections: [],
     chapters,
   };
+}
+
+/** True when the day runs straight through one book, as the plan links judge it. */
+function isConsecutiveDay(chapters: Array<{ book: string; chapter: number }>): boolean {
+  if (chapters.length <= 1) return true;
+  for (let i = 1; i < chapters.length; i++) {
+    if (chapters[i].book !== chapters[i - 1].book) return false;
+    if (chapters[i].chapter !== chapters[i - 1].chapter + 1) return false;
+  }
+  return true;
+}
+
+/**
+ * The reader goes to the day's first passage, marked the way the plan's own
+ * links mark it. `false` because the plan paints its own green mark, so no
+ * category-colored one too.
+ */
+export function goToPlanStart(playlist: PlanPlaylist): void {
+  const first = playlist.passages[0];
+  if (!first) return;
+  navigationStore.setReadingPlanActiveTarget(
+    first.book,
+    first.chapter,
+    first.startVerse ?? null,
+    isConsecutiveDay(playlist.chapters)
+  );
+  navigationStore.navigateTo(get(navigationStore).translation, first.book, first.chapter, first.startVerse ?? null, false);
+}
+
+/**
+ * Play the day straight through, ticking each passage off as it's heard. The
+ * reader goes to the first passage now rather than at the engine's first clock
+ * tick: synthesis takes a while, and until then the page sat wherever the user
+ * happened to be. The voice has to be on the device already.
+ */
+export function playPlanPlaylist(playlist: PlanPlaylist): void {
+  goToPlanStart(playlist);
+  beginPlanRun(playlist);
+  void startReadingPlaylist(get(navigationStore).translation, playlist.passages);
 }
 
 /**

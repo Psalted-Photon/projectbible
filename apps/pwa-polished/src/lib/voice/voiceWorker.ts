@@ -21,6 +21,7 @@ import {
   usePeopleNames,
   personNamed,
   isEveryday,
+  wordValues,
   APP_KEYWORDS,
   type ToolSpec,
 } from './rules';
@@ -409,12 +410,14 @@ function useTools(engine: NeedleEngine, system: string, toolsJson: string): void
  * - a person is the name the people list has, matched by sound if need be
  * - references come from the words, not from Needle, which split "1
  *   thessalonians 4:16" in two and dropped the 5 from "2 Corinthians 5"
+ * - the reading plan, Verse of the Day and devotional take their values from
+ *   the words (wordValues)
  */
 function settle(text: string, tools: ToolSpec[], answer: NeedleAnswer | undefined): Omit<VoicePiece, 'text' | 'confidence' | 'single'> {
   const words = text.toLowerCase();
   const said = (v: unknown) => typeof v !== 'string' || (v.trim() !== '' && words.includes(v.toLowerCase().trim()));
   const refs = findRefs(text);
-  let calls: VoiceCall[] = (answer?.function_calls || []).map((c) => ({ name: c.name, args: { ...argsOf(c) } }));
+  let calls: VoiceCall[] = (answer?.function_calls || []).map((c) => ({ name: c.name, args: wordValues(c.name, text) ?? { ...argsOf(c) } }));
   let promoted = false;
   if (!calls.length && tools.length === 1) {
     const held = (answer?.suppressed_calls || []).find((c) => c.name === tools[0].name && Object.values(argsOf(c)).every(said));
@@ -500,6 +503,9 @@ function settle(text: string, tools: ToolSpec[], answer: NeedleAnswer | undefine
 /** One piece of what was said through Needle, with the actions its trigger words picked. */
 function runPiece(engine: NeedleEngine, text: string, system: string): VoicePiece {
   const { tools } = toolsFor(text);
+  // "Verse of the day" said alone needs nothing from Needle: the words say it all.
+  const sure = tools.length === 1 ? wordValues(tools[0].name, text) : null;
+  if (sure) return { text, confidence: null, single: true, calls: [{ name: tools[0].name, args: sure }], promoted: true, grounded: true, refProblem: null };
   const toolsJson = JSON.stringify(tools);
   useTools(engine, system, toolsJson);
   engine.reset();

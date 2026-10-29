@@ -450,6 +450,41 @@ const placeWhere = (t: string) => /\bwhere\b/.test(t) && !SAYS_RE.test(t);
 const STRONG_BIO_RE = /\b(bio|biography|tell me about|life of|story of)\b/;
 const WEAK_BIO_RE = /\b(who (is|was|were|are)|who's|person|people)\b/;
 
+const PLAN_RE = /\b(reading plans?|(?:my|today'?s) plan|today'?s (?:reading|chapters?|passages?)|(?:my|daily) reading|reading for today)\b/;
+const DEVOTIONAL_RE = /\b(devotion(?:al)?s?|faith'?s check ?book|daily light|morning and evening)\b/;
+
+/** The devotionals as people say them, each with the words that name it. Faith's Checkbook is Spurgeon's too, so it's looked for first. */
+const DEVOTIONAL_WORKS: Array<[string, RegExp]> = [
+  ["Faith's Checkbook", /\bcheck ?book\b/],
+  ['Daily Light', /\bdaily light\b/],
+  ['Morning and Evening', /\b(spurgeon|morning and evening)\b/],
+];
+
+/**
+ * The values of an action whose trigger words say all there is about it, read
+ * from the words rather than left to Needle. Null for every other action.
+ */
+export function wordValues(name: string, text: string): Record<string, unknown> | null {
+  const t = text.toLowerCase();
+  switch (name) {
+    case 'reading_plan': {
+      // "Read today's reading", "play my reading plan": today's, out loud.
+      const aloud = /\b(aloud|out loud|play|listen|hear|read)\b/.test(t);
+      return { today: aloud || /\b(today|today'?s|daily)\b|\bmy reading\b(?! plans?)/.test(t), aloud };
+    }
+    case 'verse_of_the_day':
+      return {};
+    case 'devotional': {
+      const work = DEVOTIONAL_WORKS.find(([, re]) => re.test(t))?.[0];
+      const rest = t.replace(/\bmorning and evening\b/, ' ');
+      const time = /\b(evening|tonight|night)\b/.test(rest) ? 'evening' : /\bmorning\b/.test(rest) ? 'morning' : undefined;
+      return { ...(work ? { work } : {}), ...(time ? { time } : {}) };
+    }
+    default:
+      return null;
+  }
+}
+
 const str = (description: string) => ({ type: 'string', description });
 
 const CORE: Group[] = [
@@ -754,6 +789,51 @@ const GROUPS: Group[] = [
       },
     ],
   },
+  {
+    key: 'plan',
+    triggers: PLAN_RE,
+    tools: [
+      {
+        name: 'reading_plan',
+        description: "The reading plan, or today's reading in it.",
+        parameters: {
+          type: 'object',
+          properties: {
+            today: { type: 'boolean', description: "True when today's reading is asked for." },
+            aloud: { type: 'boolean', description: 'True when it is to be read aloud.' },
+          },
+        },
+      },
+    ],
+  },
+  {
+    key: 'daily_verse',
+    triggers: /\b((?:verses?|versus) of (?:the day|today)|daily verse|today'?s verse|verse for today)\b/,
+    tools: [
+      {
+        name: 'verse_of_the_day',
+        description: 'The Verse of the Day card.',
+        parameters: { type: 'object', properties: {} },
+      },
+    ],
+  },
+  {
+    key: 'devotional',
+    triggers: DEVOTIONAL_RE,
+    tools: [
+      {
+        name: 'devotional',
+        description: "Today's devotional reading, in the morning or evening reading if one is said.",
+        parameters: {
+          type: 'object',
+          properties: {
+            work: { type: 'string', enum: DEVOTIONAL_WORKS.map(([w]) => w), description: 'The devotional, when one is named.' },
+            time: { type: 'string', enum: ['morning', 'evening'], description: 'Morning or evening, when one is said.' },
+          },
+        },
+      },
+    ],
+  },
 ];
 
 const ALL_GROUPS = [...CORE, ...GROUPS];
@@ -765,6 +845,8 @@ const ALL_GROUPS = [...CORE, ...GROUPS];
  * - a bare book name counts only when nothing else was asked for
  * - a reference in a highlight, commentary or connections request belongs to it
  * - stop words beat reading, and closing beats opening
+ * - the reading plan, Verse of the Day and devotional beat reading, and a
+ *   devotional beats the commentary ("Spurgeon's devotional")
  * - "where" means the map, even with a person named
  * - with a person named, family words mean the tree and bio words the bio
  */
@@ -775,6 +857,9 @@ export function toolsFor(text: string): { tools: ToolSpec[]; groups: string[] } 
   if (keys.has('passage') && ['highlight', 'commentary', 'connections'].some((k) => keys.has(k))) keys.delete('passage');
   if (keys.has('stopping')) keys.delete('reading');
   if (keys.has('closing')) keys.delete('windows');
+  // "Open my reading plan" isn't Read Aloud, nor is "read me the verse of the day".
+  if (['plan', 'daily_verse', 'devotional'].some((k) => keys.has(k))) keys.delete('reading');
+  if (keys.has('devotional')) keys.delete('commentary');
   // "Where was Jesus born": the question is about a place, not the person.
   if (keys.has('map') && placeWhere(t)) {
     keys.delete('tree');
@@ -871,4 +956,5 @@ export const APP_KEYWORDS = [
   'Lightfoot', 'Luther', 'Aquinas', 'Treasury of Scripture Knowledge',
   'Connections', 'Encyclopedia', 'Topical', "Strong's", 'Timeline', 'Family Tree',
   'Harmonies', 'King James', 'World English Bible', 'Berean', 'NET Bible', 'Septuagint',
+  'Reading Plan', 'Verse of the Day', 'Devotional', 'Morning and Evening', "Faith's Checkbook", 'Daily Light',
 ].join('\n');
