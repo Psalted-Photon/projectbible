@@ -1,6 +1,6 @@
 /**
  * Dots on Voice Control: the mic button and the search bar's mic, with
- * things to say, and recording and transcribing in Notes.
+ * things to say, and recording and writing it out in Notes and the journal.
  */
 
 import type { Tip } from '../types';
@@ -55,15 +55,35 @@ export const VOICE_TIPS: Tip[] = [
     target: '.recs .rec-btn',
     title: 'Record',
     body:
-      'A voice note, a journal entry said out loud, a talk or a song. It’s saved every couple of seconds as it ' +
-      'goes, and the screen stays awake so nothing is missed. Recordings stay on this device.',
+      'A voice note, a talk or a song. It’s saved every couple of seconds as it goes, and the screen stays awake ' +
+      'so nothing is missed. Recordings stay on this device, journal ones too, labeled with their day.',
   },
   {
     id: 'voice-record-page',
     area,
     target: '.notes-pane .icon-btn[title="Record into this page"]',
     title: 'Record into this page',
-    body: 'Record here, then Transcribe, and the words land on this page.',
+    body:
+      'A pill goes in where your cursor is. When you stop, choose Write it out and the words land just in front ' +
+      'of it, with what came after the cursor still after them.',
+  },
+  {
+    id: 'voice-record-journal',
+    area,
+    target: '.journal-nav .mic',
+    title: 'Talk into your journal',
+    body:
+      'Tap, say the day out loud, and stop. The words land where your cursor was. The recording stays with the ' +
+      'entry on this device, and while the journal lock is on it’s locked with the journal too.',
+  },
+  {
+    id: 'voice-recording-chip',
+    area,
+    target: '.lexical-editor .rec-chip',
+    title: 'A recording in the writing',
+    body:
+      'Tap it to play the recording, write it out, or delete it. While it’s being written out it shows how far ' +
+      'it’s got; one stopped while another is being written out waits its turn.',
   },
   {
     id: 'voice-recording-pill',
@@ -73,16 +93,16 @@ export const VOICE_TIPS: Tip[] = [
     title: 'Recording',
     body:
       'Pause, stop, or the moon for the pocket screen: black, so the screen costs little and taps in a pocket do ' +
-      'nothing. On the pocket screen, hold Stop to finish.',
+      'nothing. On the pocket screen, hold Stop to finish. Every Stop asks whether to write it out.',
   },
   {
     id: 'voice-transcribe',
     area,
     target: '.recs .tx-go',
-    title: 'Transcribe',
+    title: 'Write it out',
     body:
-      'Turns the recording into words on a page, with periods, commas and capitals, while you carry on with the ' +
-      'app. While recording you can say “new paragraph”, “heading, …” or “the first point is …” to shape the note, ' +
-      'and verses you name, like “Romans six verse four”, become links.',
+      'Turns the recording into words on its page or journal day, with periods, commas and capitals, while you ' +
+      'carry on with the app. While recording you can say “new paragraph”, “heading, …” or “the first point is …” ' +
+      'to shape the note, and verses you name, like “Romans six verse four”, become links.',
   },
 ];

@@ -16,6 +16,7 @@
 import { get, writable, type Readable } from 'svelte/store';
 import type { DBJournalKeySlot, DBJournalLock } from '../../adapters/db';
 import { IndexedDBJournalStore } from '../../adapters/JournalStore';
+import { hasScrambledRecordings } from '../recorder/recordings';
 import { deriveContentKey, isScrambled, keyIdFor } from './crypto';
 import {
   lockFromRow, readLocalLock, readLocalSlots, replaceLocalSlots, writeLocalLock, type LockMode,
@@ -25,6 +26,8 @@ export interface JournalWork {
   kind: 'scramble' | 'unscramble';
   done: number;
   total: number;
+  /** How many of the total are journal recordings on this device. */
+  recordings?: number;
 }
 
 export interface JournalLockView {
@@ -300,9 +303,11 @@ export function journalLockVisibilityChanged(hidden: boolean): void {
 
 // ── Adopting lock state ───────────────────────────────────────────────────
 
+/** Scrambled journal text on this device: an entry, or a journal recording (recordingCrypto.ts). */
 async function hasScrambledEntries(): Promise<boolean> {
   const entries = await new IndexedDBJournalStore().getEntries();
-  return entries.some((e) => isScrambled(e.title) || isScrambled(e.text));
+  if (entries.some((e) => isScrambled(e.title) || isScrambled(e.text))) return true;
+  return hasScrambledRecordings(get(store).userId);
 }
 
 /** Setup and turn-off write the new state here after the cloud accepted it. */

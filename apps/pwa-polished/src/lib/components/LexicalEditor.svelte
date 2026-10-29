@@ -3,7 +3,7 @@
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   // Aliased on import: Svelte reserves the $ prefix for store subscriptions,
   // so the Lexical naming convention can't be used as a local binding here.
-  import { BibleRefNode, $isBibleRefNode as isBibleRefNode } from '../lexical/BibleRefNode';
+  import { $isBibleRefNode as isBibleRefNode } from '../lexical/BibleRefNode';
   import {
     registerBibleRefTransforms,
     $expandRef as expandRefNode,
@@ -142,7 +142,7 @@
   let lexGetSelection: any = null;
   let lexIsRangeSelection: any = null;
   let lexGetNodeByKey: any = null;
-  /** Lexical itself and its list and heading parts, once loaded, for appendBlocks and the toolbar. */
+  /** Lexical itself and its list and heading parts, once loaded, for the toolbar. */
   let lex: typeof import('lexical') | null = null;
   let lexList: typeof import('@lexical/list') | null = null;
   let lexRich: typeof import('@lexical/rich-text') | null = null;
@@ -150,50 +150,49 @@
   /** What the caret's block is, for the heading and list buttons. */
   let activeBlock: 'p' | 'h' | 'ol' = 'p';
 
+  /** Where recordings' pills go and their words land (lib/lexical/transcriptWrite.ts), once loaded. */
+  let writeMod: typeof import('../lexical/transcriptWrite') | null = null;
   /**
-   * A transcript's next piece, added at the end without touching the caret
-   * (lib/voice/transcriptSink.ts). A block that joins carries on the last one
-   * when that is still the last thing here and reads as `tail` says.
-   * Returns what the last block now reads, or undefined before the editor is
-   * ready.
+   * The caret as it last was. Tapping Record takes it out of the editor, and
+   * the pill still has to go where it was.
    */
-  export function appendBlocks(blocks: TranscriptBlock[], tail: TranscriptTail | null): TranscriptTail | null | undefined {
-    if (!editor || !lex || !lexList || !lexRich) return undefined;
-    const L = lex;
-    const List = lexList;
-    const Rich = lexRich;
-    const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
-    let last = tail;
+  let lastRange: any = null;
+
+  /** Drops a recording's pill at the caret. False before the editor is ready. */
+  export function placeRecording(recId: string): boolean {
+    if (!editor || !writeMod) return false;
+    const W = writeMod;
+    const remembered = lastRange;
+    // The caret moves past the pill in the editor's own record, but the
+    // screen's is left alone: no jump, and no keyboard popping up.
+    editor.update(() => W.$placeRecording(recId, remembered), { tag: ['skip-dom-selection', 'skip-scroll-into-view'] });
+    return true;
+  }
+
+  /**
+   * A transcript's next piece, in front of the recording's pill, or at the
+   * end when it isn't here, without touching the caret. Returns what the
+   * last block now reads, or undefined before the editor is ready.
+   */
+  export function writeTranscript(recId: string | null, blocks: TranscriptBlock[], tail: TranscriptTail | null): TranscriptTail | null | undefined {
+    if (!editor || !writeMod) return undefined;
+    const W = writeMod;
+    let last: TranscriptTail | null = tail;
     editor.update(() => {
-      const root = L.$getRoot();
-      if (!squash(root.getTextContent())) root.clear();
-      for (const b of blocks) {
-        if (!b.text.trim()) continue;
-        const end = root.getLastChild();
-        // The block this one would carry on: the last paragraph, or the last item of a closing list.
-        const prev =
-          b.kind === 'p' && L.$isParagraphNode(end) ? end
-          : b.kind === 'li' && List.$isListNode(end) ? end.getLastChild()
-          : null;
-        if (b.joins && last && last.kind === b.kind && L.$isElementNode(prev) && squash(prev.getTextContent()) === squash(last.text)) {
-          prev.append(L.$createTextNode(' ' + b.text));
-          last = { kind: b.kind, text: squash(last.text + ' ' + b.text) };
-          continue;
-        }
-        const text = L.$createTextNode(b.text);
-        if (b.kind === 'h') {
-          root.append(Rich.$createHeadingNode('h2').append(text));
-        } else if (b.kind === 'li') {
-          const item = List.$createListItemNode().append(text);
-          if (List.$isListNode(end) && end.getListType() === 'number' && last?.kind === 'li') end.append(item);
-          else root.append(List.$createListNode('number', b.n && b.n > 1 ? b.n : 1).append(item));
-        } else {
-          root.append(L.$createParagraphNode().append(text));
-        }
-        last = { kind: b.kind, text: squash(b.text) };
-      }
+      last = W.$writeTranscript(recId, blocks, tail).tail;
     });
     return last;
+  }
+
+  /** Takes a recording's pill out. Undefined before the editor is ready, else whether it was here. */
+  export function removeRecording(recId: string): boolean | undefined {
+    if (!editor || !writeMod) return undefined;
+    const W = writeMod;
+    let found = false;
+    editor.update(() => {
+      found = W.$removeRecording(recId);
+    });
+    return found;
   }
 
   /** Print the verse inside a reference and lock the pair. */
@@ -277,6 +276,7 @@
         historyModule,
         selectionModule,
         listModule,
+        writeModule,
       ] = await Promise.all([
         import('lexical'),
         import('@lexical/html'),
@@ -284,7 +284,9 @@
         import('@lexical/history'),
         import('@lexical/selection'),
         import('@lexical/list'),
+        import('../lexical/transcriptWrite'),
       ]);
+      writeMod = writeModule;
       lexList = listModule;
       lexRich = richTextModule;
       lexSelection = selectionModule;
@@ -315,22 +317,12 @@
         namespace: 'JournalEditor',
         // BibleRefNode makes a typed reference a real thing the editor knows
         // about, so it survives editing and round-trips through save/reload.
-        // Headings and numbered lists come from the toolbar and from
-        // transcripts' spoken cues (lib/voice/transcriptFormat.ts).
-        nodes: [BibleRefNode, richTextModule.HeadingNode, listModule.ListNode, listModule.ListItemNode],
-        theme: {
-          paragraph: 'editor-paragraph',
-          heading: { h1: 'editor-heading', h2: 'editor-heading', h3: 'editor-heading' },
-          list: { ol: 'editor-ol', ul: 'editor-ul', listitem: 'editor-li' },
-          text: {
-            bold: 'editor-text-bold',
-            italic: 'editor-text-italic',
-            underline: 'editor-text-underline',
-            strikethrough: 'editor-text-strikethrough',
-            superscript: 'editor-text-superscript',
-            subscript: 'editor-text-subscript',
-          },
-        },
+        // RecordingNode is a recording's pill. Headings and numbered lists
+        // come from the toolbar and from transcripts' spoken cues
+        // (lib/voice/transcriptFormat.ts). Shared with the saved-text writer
+        // in transcriptWrite.ts, so both write the same HTML.
+        nodes: writeModule.EDITOR_NODES,
+        theme: writeModule.EDITOR_THEME,
         onError: (error: Error) => console.error('Lexical error:', error),
       });
 
@@ -346,9 +338,17 @@
 
       editorInput.addEventListener('blur', () => dispatch('blur'));
 
-      // Clicking a reference asks the host what to do with it, rather than
-      // acting here — the popover belongs to whoever mounted this editor.
+      // Clicking a reference or a recording's pill asks the host what to do
+      // with it, rather than acting here — the popover belongs to whoever
+      // mounted this editor.
       editorInput.addEventListener('click', (e: MouseEvent) => {
+        const chip = (e.target as HTMLElement | null)?.closest?.('.rec-chip[data-rec]') as HTMLElement | null;
+        if (chip) {
+          e.preventDefault();
+          const rect = chip.getBoundingClientRect();
+          dispatch('recClick', { recId: chip.dataset.rec ?? '', x: rect.left + rect.width / 2, y: rect.top });
+          return;
+        }
         const el = (e.target as HTMLElement | null)?.closest?.('.bible-ref') as HTMLElement | null;
         // A pending link is mid-edit with no destination — leave the click alone
         // so it just places the caret.
@@ -416,6 +416,8 @@
             const sel = $getSelection();
 
             if ($isRangeSelection(sel)) {
+              lastRange = sel.clone();
+
               // Block alignment
               try {
                 const anchor = sel.anchor.getNode();
@@ -986,5 +988,72 @@
   :global(.bible-ref.is-expanded)::selection,
   :global(.bible-ref.is-expanded *)::selection {
     background: color-mix(in srgb, var(--ref-color, #c0392b) 30%, transparent);
+  }
+
+  /* A recording's pill (lib/lexical/RecordingNode.ts): a small chip in the
+     line, painted by lib/recorder/recordingChips.ts. It wears the text's own
+     color, so it follows the editor's theme. */
+  :global(.rec-chip) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    margin: 0 0.15em;
+    padding: 0.05em 0.55em;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 0.78em;
+    font-style: normal;
+    font-weight: 600;
+    line-height: 1.5;
+    vertical-align: 0.08em;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  :global(.rec-chip:hover) {
+    background: color-mix(in srgb, currentColor 15%, transparent);
+  }
+  :global(.rec-chip-icon) {
+    width: 0.95em;
+    height: 0.95em;
+    flex-shrink: 0;
+  }
+  :global(.rec-chip-dot) {
+    width: 0.6em;
+    height: 0.6em;
+    border-radius: 50%;
+    background: #e5484d;
+    flex-shrink: 0;
+  }
+  :global(.rec-chip.is-live .rec-chip-dot) {
+    animation: rec-chip-pulse 1.6s ease-in-out infinite;
+  }
+  :global(.rec-chip.is-paused .rec-chip-dot),
+  :global(.rec-chip.is-saving .rec-chip-dot) {
+    background: #8e8e93;
+  }
+  :global(.rec-chip.is-live),
+  :global(.rec-chip.is-paused) {
+    border-color: rgba(229, 72, 77, 0.55);
+  }
+  :global(.rec-chip.is-writing),
+  :global(.rec-chip.is-queued),
+  :global(.rec-chip.is-waiting),
+  :global(.rec-chip.is-missing),
+  :global(.rec-chip.is-locked),
+  :global(.rec-chip.is-loading) {
+    opacity: 0.7;
+  }
+  @keyframes -global-rec-chip-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  /* Reduced or Off in Settings → Appearance → Motion. */
+  :global(:root:not([data-motion="full"]) .rec-chip.is-live .rec-chip-dot) {
+    animation: none;
   }
 </style>

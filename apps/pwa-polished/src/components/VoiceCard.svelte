@@ -105,8 +105,8 @@
         <h3 id="vcard-title"><Microphone size={20} weight="bold" /> The microphone</h3>
         {#if $micFor === 'record'}
           <p>
-            Notes records through the microphone, only while a recording runs. The
-            recording stays on this device.
+            Notes and the journal record through the microphone, only while a
+            recording runs. The recording stays on this device.
           </p>
         {:else}
           <p>

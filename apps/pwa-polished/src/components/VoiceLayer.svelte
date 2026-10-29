@@ -2,11 +2,13 @@
   /**
    * Voice Control's pieces that float over the app: the mic button (while it
    * is switched on), the line beside whichever mic is held, the card a press
-   * opens when something is missing, and a Notes recording's pill and pocket
-   * screen while one runs. Voice Control's models load on the first command,
-   * never here.
+   * opens when something is missing, a recording's pill and pocket screen
+   * while one runs, and the card every Stop opens. Voice Control's models
+   * load on the first command, never here.
    *
    * A transcript the app closed on carries on a few seconds after launch.
+   * Recordings' own pills in the writing paint themselves
+   * (lib/recorder/recordingChips.ts).
    */
   import { onMount } from 'svelte';
   import FloatingMic from './FloatingMic.svelte';
@@ -14,6 +16,7 @@
   import VoiceCard from './VoiceCard.svelte';
   import RecorderPill from './RecorderPill.svelte';
   import PocketScreen from './PocketScreen.svelte';
+  import StopRecordingCard from './StopRecordingCard.svelte';
   import { watchVoiceReady } from '../lib/voice/holdToTalk';
   import { resumeWaitingTranscript } from '../lib/voice/transcribe';
 
@@ -32,3 +35,4 @@
 <VoiceCard />
 <RecorderPill />
 <PocketScreen />
+<StopRecordingCard />

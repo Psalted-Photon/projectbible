@@ -15,7 +15,7 @@
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import RecordingsList from './RecordingsList.svelte';
   import { recorder, recordingLive, startRecording } from '../lib/recorder/recorder';
-  import { registerPageWriter, stopAndNoticeSaved } from '../lib/voice/transcribe';
+  import { registerPageWriter, placeRecordingChip, stopAndAsk } from '../lib/voice/transcribe';
   import { OPEN_NOTES_PAGE, NOTES_PAGE_WRITTEN, type NotesPageRef } from '../lib/openNotesPage';
   import SearchResultsTree from './SearchResultsTree.svelte';
   import { groupResultsByBook } from '../lib/searchTree';
@@ -1389,15 +1389,20 @@
     debouncedSave();
   }
 
+  /** Records into this page: its pill goes in at the cursor, and its words land in front of the pill. */
   function recordIntoPage() {
     if (target?.kind !== 'page') return;
-    void startRecording({ page: { notebookId: target.notebookId, pageId: target.pageId } });
+    void startRecording({
+      page: { notebookId: target.notebookId, pageId: target.pageId },
+      onStarted: (rec) => void placeRecordingChip(rec),
+    });
   }
 
   // ─── Transcripts ────────────────────────────────────────────────────────────
-  // A recording being transcribed into the page that is open here writes
+  // A recording being written out into the page that is open here writes
   // through this editor, so the words appear as they come and the editor's
-  // own save keeps them (lib/voice/transcribe.ts).
+  // own save keeps them; its pill goes in and comes out here too
+  // (lib/voice/transcribe.ts).
 
   let pageEditor: RefAwareEditor | null = null;
   let unregisterWriter: (() => void) | null = null;
@@ -1406,7 +1411,23 @@
 
   function setWriter(pageId: string | null) {
     unregisterWriter?.();
-    unregisterWriter = pageId ? registerPageWriter(pageId, (blocks, tail) => pageEditor?.appendBlocks(blocks, tail)) : null;
+    unregisterWriter = pageId
+      ? registerPageWriter(pageId, {
+          write: (recId, blocks, tail) => pageEditor?.writeTranscript(recId, blocks, tail),
+          place: (recId) => pageEditor?.placeRecording(recId) ?? false,
+          remove: (recId) => pageEditor?.removeRecording(recId),
+          save: saveNow,
+        })
+      : null;
+  }
+
+  /** Saves now, waiting out a save already under way. False when it couldn't be. */
+  async function saveNow(): Promise<boolean> {
+    // The editor tells this pane about its last change a moment after making it.
+    await new Promise((r) => setTimeout(r, 0));
+    for (let i = 0; i < 40 && isSaving; i++) await new Promise((r) => setTimeout(r, 50));
+    if (isDirty) await save();
+    return !isDirty;
   }
 
   /** Something else asked for a page: a transcript's Open. */
@@ -1680,16 +1701,17 @@
         <button class="icon-btn" title="Go to this verse" on:click={jumpToVerse}><ArrowUpRight size={17} weight="bold" /></button>
       {/if}
 
-      <!-- Records into this page: once transcribed, the words land here. The
-           recording itself is in Recordings, on this device. While it records
-           into this page it is the Stop, the same as the pill's. -->
+      <!-- Records into this page: its pill goes in at the cursor, and the
+           words land in front of it once written out. The recording itself is
+           in Recordings, on this device. While it records into this page it
+           is the Stop, the same as the pill's. -->
       {#if target?.kind === 'page' && $recorder.page?.pageId === target.pageId && recordingLive($recorder)}
         <button
           class="icon-btn rec-on"
-          title="Stop and save"
-          aria-label="Stop and save"
+          title="Stop"
+          aria-label="Stop"
           disabled={$recorder.phase === 'stopping'}
-          on:click={stopAndNoticeSaved}
+          on:click={stopAndAsk}
         >
           <Stop size={17} weight="fill" />
         </button>

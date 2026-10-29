@@ -26,6 +26,7 @@ import {
 } from './slotStore';
 import { refreshLockFromCloud } from './sync';
 import { sweepJournal } from './sweep';
+import { hasScrambledRecordings } from '../recorder/recordings';
 
 /** A problem worth showing the person as it is. */
 export class JournalLockError extends Error {
@@ -390,15 +391,18 @@ async function runTurnOff(opts: { leaveUnreadable?: boolean }): Promise<void> {
     }
   }
 
-  // 4.
+  // 4. A journal recording still scrambled here (one being recorded or
+  // written out was left for later) keeps this device's copies of the key
+  // slots, and the key itself, until the next pass opens it.
+  const recordingsLeft = await hasScrambledRecordings(account.userId);
   try {
     await deleteAllRemoteSlots(account.userId);
     const lock = await setRemoteLock(account.userId, 'off', null);
-    await adoptLock(lock, []);
+    await adoptLock(lock, recordingsLeft ? slots : []);
   } catch (err) {
     throw new JournalLockError(cloudProblem(err));
   }
   // The passkeys stay in the password manager on purpose: a device that was
   // offline through all this may still hold scrambled copies to open.
-  forgetJournalKey();
+  if (!recordingsLeft) forgetJournalKey();
 }

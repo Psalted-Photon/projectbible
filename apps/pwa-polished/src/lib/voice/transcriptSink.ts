@@ -1,16 +1,15 @@
 /**
- * How a transcript's words land on a notebook page, a piece at a time.
+ * How a transcript's words land in the writing, a piece at a time.
  *
- * Each piece comes as blocks: paragraphs, headings and numbered items. A
- * block that `joins` carries on the last one written, as long as that is
- * still the last thing on the page and still reads as it was written; if
- * the page was changed in between, it starts a new one rather than writing
- * into someone's own words.
+ * Each piece comes as blocks: paragraphs, headings and numbered items. They
+ * go in just in front of the recording's pill, so the text that was after
+ * the cursor stays after the new words; a page without one gets them at the
+ * end (lib/lexical/transcriptWrite.ts says how, for both).
  *
- * Two ways in: through the editor when the page is open in Notes
- * (LexicalEditor's appendBlocks), so the words appear as they come and the
- * editor's own save keeps them; otherwise straight into the page's saved
- * text, here.
+ * Two ways in: through the editor when the page or journal day is open
+ * (LexicalEditor's writeTranscript), so the words appear as they come and
+ * the editor's own save keeps them; otherwise straight into its saved text,
+ * here, through the same steps run without a screen.
  */
 
 import type { TranscriptTail } from '../recorder/recordings';
@@ -29,52 +28,30 @@ export interface TranscriptBlock {
   n?: number;
 }
 
-const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
+const write = () => import('../lexical/transcriptWrite');
 
-/** The page's last block element of this kind: a paragraph, a heading, or the last item of a closing numbered list. */
-function lastOf(body: HTMLElement, kind: TranscriptBlock['kind']): HTMLElement | null {
-  const last = body.lastElementChild as HTMLElement | null;
-  if (!last) return null;
-  if (kind === 'p') return last.tagName === 'P' ? last : null;
-  if (kind === 'h') return /^H[1-6]$/.test(last.tagName) ? last : null;
-  return last.tagName === 'OL' ? (last.lastElementChild as HTMLElement | null) : null;
-}
-
-/** The page's HTML with the blocks added at the end, and what the last of them now reads. */
-export function appendBlocksToHtml(
+/** Saved text with the blocks written in front of the recording's pill (or at the end), and what the last of them now reads. */
+export async function writeBlocksIntoHtml(
   html: string,
+  recId: string | null,
   blocks: TranscriptBlock[],
   tail: TranscriptTail | null,
-): { html: string; tail: TranscriptTail | null } {
-  const doc = new DOMParser().parseFromString(`<body>${html || ''}</body>`, 'text/html');
-  const body = doc.body;
-  // A page with nothing written on it is one empty paragraph.
-  if (!squash(body.textContent ?? '')) body.innerHTML = '';
-  let last = tail;
-  for (const b of blocks) {
-    if (!b.text.trim()) continue;
-    const el = lastOf(body, b.kind);
-    if (b.joins && last && last.kind === b.kind && el && squash(el.textContent ?? '') === squash(last.text)) {
-      el.append(doc.createTextNode(' ' + b.text));
-      last = { kind: b.kind, text: squash(last.text + ' ' + b.text) };
-      continue;
-    }
-    if (b.kind === 'li') {
-      let list = body.lastElementChild as HTMLElement | null;
-      if (!list || list.tagName !== 'OL' || !last || last.kind !== 'li') {
-        list = doc.createElement('ol');
-        if (b.n && b.n > 1) list.setAttribute('start', String(b.n));
-        body.append(list);
-      }
-      const li = doc.createElement('li');
-      li.textContent = b.text;
-      list.append(li);
-    } else {
-      const el2 = doc.createElement(b.kind === 'h' ? 'h2' : 'p');
-      el2.textContent = b.text;
-      body.append(el2);
-    }
-    last = { kind: b.kind, text: squash(b.text) };
-  }
-  return { html: body.innerHTML, tail: last };
+): Promise<{ html: string; tail: TranscriptTail | null }> {
+  const W = await write();
+  const out = W.editHtml(html, () => W.$writeTranscript(recId, blocks, tail));
+  return { html: out.html, tail: out.result.tail };
+}
+
+/** Saved text with a recording's pill added at the end, as a Record from a closed page or day. Null when it's already there. */
+export async function placeRecordingInHtml(html: string, recId: string): Promise<string | null> {
+  const W = await write();
+  if (W.htmlHasRecording(html, recId)) return null;
+  return W.editHtml(html, () => W.$placeRecording(recId, null)).html;
+}
+
+/** Saved text with a recording's pill taken out. Null when it isn't there. */
+export async function removeRecordingFromHtml(html: string, recId: string): Promise<string | null> {
+  const W = await write();
+  if (!W.htmlHasRecording(html, recId)) return null;
+  return W.editHtml(html, () => W.$removeRecording(recId)).html;
 }

@@ -1,11 +1,12 @@
 /**
- * The sweep: brings every journal entry on this device in line with the lock.
+ * The sweep: brings every journal entry on this device in line with the lock,
+ * and this device's journal recordings with them (recordingCrypto.ts).
  *
  * While the lock is on it scrambles anything still readable — entries left
  * over from a setup that was interrupted, or written by an old app version or
  * before this device heard the lock had turned on. While it's off or turning
  * off it unscrambles instead. Each changed entry is saved on the device and
- * queued for upload as a whole row.
+ * queued for upload as a whole row. Recordings stay on the device.
  *
  * Runs after every unlock, and on demand from setup and turn-off (which wait
  * for it). Only one pass runs at a time; a request made during a pass gets
@@ -20,6 +21,7 @@ import { syncQueue } from '../sync/SyncQueueService';
 import type { SyncOperation } from '../sync/types';
 import { isScrambled } from './crypto';
 import { entryIsScrambled, openEntry, sealFields } from './entryCrypto';
+import { recordingsToSweep, sweepRecordings } from './recordingCrypto';
 import {
   currentLockView, getContentKey, onLockChangedWhileUnlocked, onUnlocked, releaseSlotsIfDone, setJournalWork,
 } from './lockState';
@@ -29,6 +31,9 @@ export interface SweepResult {
   changed: number;
   /** Entries the key couldn't open; left exactly as they were. */
   failed: number;
+  /** Journal recordings changed, and ones that couldn't be. */
+  recordingsChanged: number;
+  recordingsFailed: number;
 }
 
 const local = new IndexedDBJournalStore();
@@ -91,15 +96,17 @@ async function scrubReadableUploads(): Promise<void> {
 
 async function runSweep(): Promise<SweepResult> {
   const target = targetFor(currentLockView().mode);
-  const result: SweepResult = { target, changed: 0, failed: 0 };
+  const result: SweepResult = { target, changed: 0, failed: 0, recordingsChanged: 0, recordingsFailed: 0 };
   if (!getContentKey()) return result;
 
   const entries = await local.getEntries();
   const todo = entries.filter((e) => (target === 'scrambled' ? hasReadableText(e) : entryIsScrambled(e)));
+  const recTodo = await recordingsToSweep(target).catch(() => []);
+  const total = todo.length + recTodo.length;
+  const kind = target === 'scrambled' ? 'scramble' : 'unscramble';
 
-  if (todo.length > 0) {
-    setJournalWork({ kind: target === 'scrambled' ? 'scramble' : 'unscramble', done: 0, total: todo.length });
-  }
+  const recordings = recTodo.length;
+  if (total > 0) setJournalWork({ kind, done: 0, total, recordings });
   try {
     for (const entry of todo) {
       // Locked, or the lock changed direction elsewhere: stop cleanly. The
@@ -118,14 +125,20 @@ async function runSweep(): Promise<SweepResult> {
         await syncQueue.enqueue(uploadRow(entry, stored.title, stored.text, updatedAt));
         result.changed++;
       }
-      setJournalWork({
-        kind: target === 'scrambled' ? 'scramble' : 'unscramble',
-        done: result.changed + result.failed,
-        total: todo.length,
-      });
+      setJournalWork({ kind, done: result.changed + result.failed, total, recordings });
     }
 
     if (target === 'scrambled' && getContentKey()) await scrubReadableUploads();
+
+    const entriesDone = result.changed + result.failed;
+    const recs = await sweepRecordings(
+      recTodo,
+      target,
+      () => !!getContentKey() && targetFor(currentLockView().mode) === target,
+      (done) => setJournalWork({ kind, done: entriesDone + done, total, recordings }),
+    );
+    result.recordingsChanged = recs.changed;
+    result.recordingsFailed = recs.failed;
   } finally {
     setJournalWork(null);
   }
@@ -134,9 +147,12 @@ async function runSweep(): Promise<SweepResult> {
     console.log(`[JournalLock] ${target === 'scrambled' ? 'Scrambled' : 'Unscrambled'} ${result.changed} journal entr${result.changed === 1 ? 'y' : 'ies'}`);
     void syncQueue.processQueue();
   }
+  if (result.recordingsChanged > 0) {
+    console.log(`[JournalLock] ${target === 'scrambled' ? 'Scrambled' : 'Unscrambled'} ${result.recordingsChanged} journal recording(s)`);
+  }
 
   // Lock fully off and nothing scrambled left here: the device's copies of
-  // the key slots have done their job.
+  // the key slots have done their job. (Scrambled recordings count too.)
   if (result.failed === 0) await releaseSlotsIfDone();
 
   return result;

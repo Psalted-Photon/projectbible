@@ -1,5 +1,6 @@
 /**
- * Recording in Notes: record, pause and stop, one recording at a time.
+ * Recording in Notes and the journal: record, pause and stop, one recording
+ * at a time.
  *
  * The browser's own recorder does the work, in a speech-quality format (about
  * 15 MB an hour) or, with Settings → Voice Control → Recording quality, a
@@ -16,6 +17,11 @@
  *
  * The recording itself is never turned into commands: a preacher saying "turn
  * to John 3" can't move the reader.
+ *
+ * A journal recording while the journal lock is on is scrambled as it goes,
+ * each piece with the journal key (journalLock/recordingCrypto.ts). The key
+ * is held from Record to Stop only, so the pieces carry on being scrambled
+ * if the journal relocks part way through.
  */
 
 import { get, writable } from 'svelte/store';
@@ -24,6 +30,8 @@ import { showNotice } from '../../stores/noticeStore';
 import { stayAwake, allowSleep } from '../installAwake';
 import { micTrouble } from '../voice/mic';
 import { micReadyToRecord, recordMicFailed } from '../voice/holdToTalk';
+import { getContentKey, scramblesWrites } from '../journalLock/lockState';
+import { sealName, sealPiece } from '../journalLock/recordingCrypto';
 import {
   addChunk,
   clock,
@@ -31,6 +39,7 @@ import {
   markLive,
   newRecordingId,
   putRecording,
+  type JournalTarget,
   type Recording,
   type RecordingGap,
   type RecordQuality,
@@ -49,9 +58,11 @@ export interface RecorderState {
   pocket: boolean;
   /** The page the recording was started from, if any. */
   page: Recording['page'];
+  /** Or the journal day. */
+  journal: JournalTarget | null;
 }
 
-const IDLE: RecorderState = { phase: 'idle', id: null, elapsed: 0, level: 0, pocket: false, page: null };
+const IDLE: RecorderState = { phase: 'idle', id: null, elapsed: 0, level: 0, pocket: false, page: null, journal: null };
 
 export const recorder = writable<RecorderState>(IDLE);
 
@@ -93,6 +104,8 @@ const METER = `
 
 interface Live {
   rec: Recording;
+  /** The journal key, while a scrambled recording runs. */
+  key: CryptoKey | null;
   mr: MediaRecorder;
   stream: MediaStream;
   ctx: AudioContext | null;
@@ -208,20 +221,34 @@ async function openMeter(l: Live): Promise<void> {
   }
 }
 
+export interface RecordOptions {
+  /** The notebook page its words go into once written out. */
+  page?: Recording['page'];
+  /** Or the journal day. */
+  journal?: JournalTarget | null;
+  /** The recording has started: its pill goes in at the cursor. */
+  onStarted?: (rec: Recording) => void;
+}
+
 /**
  * Starts a recording, opening the mic card first when the mic isn't ready
  * (the first time, the app says what it's for before the browser asks).
- * `page` is the notebook page its words go into once transcribed.
  */
-export async function startRecording(opts: { page?: Recording['page'] } = {}): Promise<void> {
+export async function startRecording(opts: RecordOptions = {}): Promise<void> {
   if (get(recorder).phase !== 'idle') return;
   if (!micReadyToRecord(() => void startRecording(opts))) return;
   if (typeof MediaRecorder === 'undefined') {
     showNotice('This browser can’t record audio.', 'error');
     return;
   }
+  // Taken now and held to Stop: the journal can relock part way through.
+  const key = opts.journal && scramblesWrites() ? getContentKey() : null;
+  if (opts.journal && scramblesWrites() && !key) {
+    showNotice('Unlock the journal to record into it.', 'info');
+    return;
+  }
   const quality: RecordQuality = getSettings().recordQuality === 'music' ? 'music' : 'speech';
-  patch({ ...IDLE, phase: 'starting', page: opts.page ?? null });
+  patch({ ...IDLE, phase: 'starting', page: opts.page ?? null, journal: opts.journal ?? null });
   const turn = ++startTurn;
   let stream: MediaStream;
   try {
@@ -256,9 +283,21 @@ export async function startRecording(opts: { page?: Recording['page'] } = {}): P
     return;
   }
 
+  const id = newRecordingId();
+  let name = defaultRecordingName();
+  if (key) {
+    try {
+      name = await sealName(key, id, name);
+    } catch (err) {
+      stream.getTracks().forEach((t) => t.stop());
+      recorder.set(IDLE);
+      showNotice(`Recording couldn’t start: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      return;
+    }
+  }
   const rec: Recording = {
-    id: newRecordingId(),
-    name: defaultRecordingName(),
+    id,
+    name,
     mime: mr.mimeType || mime || 'audio/webm',
     createdAt: Date.now(),
     durationSec: 0,
@@ -268,11 +307,14 @@ export async function startRecording(opts: { page?: Recording['page'] } = {}): P
     state: 'recording',
     gaps: [],
     page: opts.page ?? null,
+    journal: opts.journal ?? null,
+    scrambled: !!key,
     transcript: null,
   };
   let stoppedResolve!: () => void;
   const l: Live = {
     rec,
+    key,
     mr,
     stream,
     ctx: null,
@@ -296,7 +338,7 @@ export async function startRecording(opts: { page?: Recording['page'] } = {}): P
     l.rec.bytes += e.data.size;
     l.rec.pieces = l.seq;
     l.saving = l.saving
-      .then(() => addChunk(rec.id, seq, e.data))
+      .then(async () => addChunk(rec.id, seq, l.key ? await sealPiece(l.key, rec.id, seq, e.data) : e.data))
       .then(() => (seq % 5 === 4 ? saveDetails(l) : undefined))
       .catch((err) => {
         // Most likely the device is full. What's saved so far is kept.
@@ -326,6 +368,7 @@ export async function startRecording(opts: { page?: Recording['page'] } = {}): P
   stayAwake('recording');
   patch({ phase: 'recording', id: rec.id });
   void openMeter(l);
+  opts.onStarted?.({ ...rec });
 }
 
 export function pauseRecording(): void {
@@ -387,6 +430,7 @@ export async function stopRecording(): Promise<Recording | null> {
   allowSleep('recording');
   l.rec.state = 'done';
   l.rec.durationSec = end;
+  l.key = null;
   live = null;
   markLive(null);
   untold = null;

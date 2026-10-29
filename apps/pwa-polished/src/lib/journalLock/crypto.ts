@@ -131,6 +131,58 @@ export async function unscrambleField(
   return dec.decode(plain);
 }
 
+// ── Recordings ────────────────────────────────────────────────────────────
+
+/**
+ * What a journal recording's piece, name or transcript tail is bound to: a
+ * piece copied onto another recording, or into another place in the same
+ * one, fails to open instead of playing there.
+ */
+export function recordingContext(recId: string, part: string): Uint8Array<ArrayBuffer> {
+  return enc.encode(`hexapla journal recording v1|${recId}|${part}`);
+}
+
+/** scrambleField for bytes, an audio piece: the IV, then the sealed bytes. */
+export async function scrambleBytes(
+  contentKey: CryptoKey,
+  context: Uint8Array<ArrayBuffer>,
+  plain: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const iv = randomBytes(IV_BYTES);
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: context }, contentKey, plain));
+  const out = new Uint8Array(iv.length + sealed.length);
+  out.set(iv);
+  out.set(sealed, iv.length);
+  return out;
+}
+
+/** Opens scrambleBytes. Throws if the key is wrong or the bytes were tampered with or moved. */
+export async function unscrambleBytes(
+  contentKey: CryptoKey,
+  context: Uint8Array<ArrayBuffer>,
+  sealed: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: sealed.slice(0, IV_BYTES), additionalData: context },
+    contentKey,
+    sealed.slice(IV_BYTES),
+  );
+  return new Uint8Array(plain);
+}
+
+/** A recording's name or tail: scrambleBytes with the scramble tag, so it reads like a field. */
+export async function scrambleText(contentKey: CryptoKey, context: Uint8Array<ArrayBuffer>, plain: string): Promise<string> {
+  if (!plain) return '';
+  return SCRAMBLE_TAG + toBase64Url(await scrambleBytes(contentKey, context, enc.encode(plain)));
+}
+
+/** Opens scrambleText. A readable value comes back unchanged. */
+export async function unscrambleText(contentKey: CryptoKey, context: Uint8Array<ArrayBuffer>, value: string): Promise<string> {
+  if (!value) return '';
+  if (!isScrambled(value)) return value;
+  return dec.decode(await unscrambleBytes(contentKey, context, fromBase64Url(value.slice(SCRAMBLE_TAG.length))));
+}
+
 // ── Key slots ─────────────────────────────────────────────────────────────
 
 function slotContext(slotId: string, kind: string): Uint8Array<ArrayBuffer> {

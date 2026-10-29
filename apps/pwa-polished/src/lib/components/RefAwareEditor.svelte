@@ -1,16 +1,18 @@
 <script lang="ts">
   /**
-   * LexicalEditor plus the Bible-reference popover.
+   * LexicalEditor plus the Bible-reference popover and a recording pill's menu.
    *
    * Everywhere the app offers free writing — notes, notebook pages, the journal
-   * — wants the same behavior when a reference is clicked, so it lives here
-   * once rather than in each of them. Drop-in replacement for LexicalEditor:
-   * same props, same events, same exported methods.
+   * — wants the same behavior when a reference or a recording's pill is
+   * clicked, so it lives here once rather than in each of them. Drop-in
+   * replacement for LexicalEditor: same props, same events, same exported
+   * methods.
    */
   import { onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import LexicalEditor from './LexicalEditor.svelte';
   import BibleRefPopover from '../../components/BibleRefPopover.svelte';
+  import RecordingChipMenu from '../../components/RecordingChipMenu.svelte';
   import { navigationStore } from '../../stores/navigationStore';
   import { IndexedDBTextStore } from '../../adapters/TextStore';
   import type { EditorSurface } from '../../adapters/settings';
@@ -54,9 +56,27 @@
     editorRef?.setContent(html);
   }
 
-  /** A transcript's next piece — see LexicalEditor. */
-  export function appendBlocks(blocks: TranscriptBlock[], tail: TranscriptTail | null): TranscriptTail | null | undefined {
-    return editorRef?.appendBlocks(blocks, tail);
+  /** Drops a recording's pill at the caret — see LexicalEditor. */
+  export function placeRecording(recId: string): boolean {
+    return editorRef?.placeRecording(recId) ?? false;
+  }
+
+  /** A transcript's next piece, in front of its pill — see LexicalEditor. */
+  export function writeTranscript(recId: string | null, blocks: TranscriptBlock[], tail: TranscriptTail | null): TranscriptTail | null | undefined {
+    return editorRef?.writeTranscript(recId, blocks, tail);
+  }
+
+  /** Takes a recording's pill out — see LexicalEditor. */
+  export function removeRecording(recId: string): boolean | undefined {
+    return editorRef?.removeRecording(recId);
+  }
+
+  /** The recording pill whose menu is open. */
+  let chip: { recId: string; x: number; y: number } | null = null;
+
+  function handleRecClick(e: CustomEvent<{ recId: string; x: number; y: number }>) {
+    hit = null;
+    chip = e.detail.recId ? e.detail : null;
   }
 
   function handleRefClick(e: CustomEvent<RefHit>) {
@@ -117,15 +137,19 @@
     close();
   }
 
-  /** Any click that isn't on the popover or another reference dismisses it. */
+  /** Any click that isn't on the popover or another reference dismisses it; the same for a pill's menu. */
   function handleWindowPointer(e: PointerEvent) {
-    if (!hit) return;
     const t = e.target as HTMLElement | null;
+    if (chip && !t?.closest?.('.rec-menu') && !t?.closest?.('.rec-chip')) chip = null;
+    if (!hit) return;
     if (t?.closest?.('.ref-popover') || t?.closest?.('.bible-ref')) return;
     close();
   }
 
-  onDestroy(() => (hit = null));
+  onDestroy(() => {
+    hit = null;
+    chip = null;
+  });
 </script>
 
 <svelte:window on:pointerdown={handleWindowPointer} />
@@ -141,6 +165,7 @@
   on:change
   on:blur
   on:refClick={handleRefClick}
+  on:recClick={handleRecClick}
 />
 
 {#if hit}
@@ -156,5 +181,15 @@
     on:expand={expand}
     on:collapse={collapse}
     on:close={close}
+  />
+{/if}
+
+{#if chip}
+  <RecordingChipMenu
+    recId={chip.recId}
+    x={chip.x}
+    y={chip.y}
+    on:remove={() => chip && editorRef?.removeRecording(chip.recId)}
+    on:close={() => (chip = null)}
   />
 {/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import JournalNavigationBar from './JournalNavigationBar.svelte';
   import { syncedJournalStore, subscribeToJournalRemoteChanges } from '../adapters/SyncedJournalStore';
@@ -7,6 +8,10 @@
   import { onBeforeLock } from '../lib/journalLock/lockState';
   import type { JournalEntry } from '@projectbible/core';
   import { showNotice } from '../stores/noticeStore';
+  import { userProfileStore } from '../stores/userProfileStore';
+  import { recorder, recordingLive, startRecording } from '../lib/recorder/recorder';
+  import { registerJournalWriter, placeRecordingChip, stopAndAsk } from '../lib/voice/transcribe';
+  import { OPEN_JOURNAL_DAY } from '../lib/openJournalDay';
   
   export let initialDate: string | undefined = undefined;
   
@@ -30,8 +35,15 @@
   let remoteChangeUnsub: (() => void) | null = null;
   let beforeLockUnsub: (() => void) | null = null;
   
+  /** Something asked for a day: Recordings' Open the day, a transcript's Open. */
+  function onOpenDay(e: Event) {
+    const date = (e as CustomEvent<string>).detail;
+    if (date && date !== (goingTo ?? currentDate)) void goToDate(date);
+  }
+
   onMount(() => {
     loadEntry(currentDate);
+    window.addEventListener(OPEN_JOURNAL_DAY, onOpenDay);
 
     // The journal is about to lock: save unsaved typing while the key is
     // still in memory, so the 2-second autosave can't lose words.
@@ -48,6 +60,8 @@
   });
 
   onDestroy(() => {
+    window.removeEventListener(OPEN_JOURNAL_DAY, onOpenDay);
+    unregisterWriter?.();
     // Unsubscribe from remote-change signal
     remoteChangeUnsub?.();
     beforeLockUnsub?.();
@@ -69,10 +83,13 @@
   
   /** Days tapped through quickly can load out of order; only the last one shows. */
   let loadToken = 0;
+  /** The day the editor holds now. A transcript waits while another is loading. */
+  let loadedDate: string | null = null;
 
   async function loadEntry(date: string) {
     console.log('[JournalWriter] Loading entry for date:', date);
     const token = ++loadToken;
+    loadedDate = null;
     try {
       const entry = await syncedJournalStore.getEntryByDate(date);
       if (token !== loadToken) return;
@@ -98,6 +115,7 @@
       }
       
       isDirty = false;
+      loadedDate = date;
     } catch (error) {
       console.error('Failed to load journal entry:', error);
     }
@@ -220,6 +238,46 @@
   function handleDateChange(event: CustomEvent<string>) {
     void goToDate(event.detail);
   }
+
+  // ─── Recording ─────────────────────────────────────────────────────────────
+  // A recording made here is tied to the day's entry. Its pill goes in at
+  // the cursor, and once it is written out the words land in front of it,
+  // through this editor while the day is open and through the journal store
+  // otherwise (lib/voice/transcribe.ts). While the lock is on, the recording
+  // is scrambled with the entries.
+
+  $: recordingHere = recordingLive($recorder) && $recorder.journal?.date === currentDate;
+
+  function record() {
+    if (blocked) return;
+    void startRecording({
+      journal: { date: currentDate, userId: get(userProfileStore).userId },
+      onStarted: (rec) => void placeRecordingChip(rec),
+    });
+  }
+
+  /** Ready for a transcript's words: the editor holds this day, and it opened. */
+  const ready = (date: string) => !blocked && loadedDate === date && date === currentDate && !goingTo;
+
+  let unregisterWriter: (() => void) | null = null;
+  $: setWriter(blocked ? null : currentDate);
+
+  function setWriter(date: string | null) {
+    unregisterWriter?.();
+    unregisterWriter = date
+      ? registerJournalWriter(date, {
+          write: (recId, blocks, tail) => (ready(date) ? editorRef?.writeTranscript(recId, blocks, tail) : undefined),
+          place: (recId) => (ready(date) ? (editorRef?.placeRecording(recId) ?? false) : false),
+          remove: (recId) => (ready(date) ? editorRef?.removeRecording(recId) : undefined),
+          save: async () => {
+            // The editor tells this writer about its last change a moment after making it.
+            await new Promise((r) => setTimeout(r, 0));
+            await flushTyping();
+            return !isDirty;
+          },
+        })
+      : null;
+  }
 </script>
 
 <div class="journal-writer">
@@ -228,6 +286,11 @@
     {title}
     {isDirty}
     {isSaving}
+    recording={recordingHere}
+    stopping={$recorder.phase === 'stopping'}
+    recordDisabled={!!blocked || recordingLive($recorder)}
+    on:record={record}
+    on:stop={stopAndAsk}
     on:prev={() => navigateDate(-1)}
     on:next={() => navigateDate(1)}
     on:today={jumpToToday}

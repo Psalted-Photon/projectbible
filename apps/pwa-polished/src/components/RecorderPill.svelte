@@ -15,7 +15,7 @@
   import { getRecorderPos, setRecorderPos } from '../adapters/settings';
   import { recorder, recordingLive, pauseRecording, resumeRecording, setPocket } from '../lib/recorder/recorder';
   import { clock } from '../lib/recorder/recordings';
-  import { stopAndNoticeSaved } from '../lib/voice/transcribe';
+  import { stopAndAsk } from '../lib/voice/transcribe';
 
   let el: HTMLDivElement | null = null;
   const drag = floatDrag({
@@ -59,7 +59,7 @@
       </button>
     {/if}
     <!-- Live while starting too: a mic that never opens can still be given up on. -->
-    <button type="button" class="ctl stop" title="Stop and save" aria-label="Stop and save" disabled={stopping} on:click={stopAndNoticeSaved}>
+    <button type="button" class="ctl stop" title="Stop" aria-label="Stop" disabled={stopping} on:click={stopAndAsk}>
       <Stop size="1.05em" weight="fill" />
     </button>
     <button

@@ -1,6 +1,6 @@
 /**
- * The audio library: recordings made in Notes, and audio files brought in,
- * kept on this device only.
+ * The audio library: recordings made in Notes and the journal, and audio
+ * files brought in, kept on this device only.
  *
  * A recording is saved in 2-second pieces as it goes (recorder.ts), so a
  * crash or a closed app loses only the last couple of seconds. Each piece is
@@ -32,16 +32,29 @@ export interface TranscriptTail {
 
 /**
  * Where transcribing has got to (lib/voice/transcribe.ts). 'waiting' is one
- * the app closed on, picked up again by itself; 'paused' was stopped by hand.
+ * the app closed on, picked up again by itself; 'queued' is in line behind
+ * another; 'paused' was stopped by hand.
  */
 export interface TranscriptProgress {
-  state: 'running' | 'waiting' | 'paused' | 'done' | 'failed';
+  state: 'running' | 'waiting' | 'queued' | 'paused' | 'done' | 'failed';
   /** Seconds of the recording already turned into text. */
   doneSec: number;
   /** Pieces added to the page so far. */
   pieces: number;
+  /** Scrambled, like the name, while the recording is (journalLock/recordingCrypto.ts). */
   tail: TranscriptTail | null;
   error?: string;
+  /** Delete the recording, and its chip, once the words are safely in. */
+  deleteAfter?: boolean;
+  /** Waiting for the journal to be unlocked, not for the app to settle. */
+  forUnlock?: boolean;
+}
+
+/** The journal day a recording's words go into. */
+export interface JournalTarget {
+  date: string;
+  /** The account whose journal it is. */
+  userId: string | null;
 }
 
 export interface Recording {
@@ -63,6 +76,13 @@ export interface Recording {
   gaps: RecordingGap[];
   /** The notebook page its words go into. */
   page?: { notebookId: string; pageId: string } | null;
+  /** Or the journal day. */
+  journal?: JournalTarget | null;
+  /**
+   * The audio, name and transcript tail are scrambled with the journal key
+   * (journalLock/recordingCrypto.ts): a journal recording while the lock is on.
+   */
+  scrambled?: boolean;
   transcript?: TranscriptProgress | null;
 }
 
@@ -107,10 +127,27 @@ const chunkRange = (id: string) => IDBKeyRange.bound([id, 0], [id, Number.MAX_SA
 /** Every recording on this device, newest first. Filled by refreshRecordings. */
 export const recordings = writable<Recording[]>([]);
 
+/** The list above has been read at least once, so a recording missing from it really isn't here. */
+export const recordingsLoaded = writable(false);
+
 /** The one the mic is on now, set by the recorder, so it isn't taken for a cut-off one. */
 let liveId: string | null = null;
 export function markLive(id: string | null): void {
   liveId = id;
+}
+
+/**
+ * Recordings the recorder or a transcript is working on. The journal lock's
+ * pass leaves them alone (journalLock/recordingCrypto.ts): their own saves
+ * would undo its changes.
+ */
+const busy = new Set<string>();
+export function markBusy(id: string, on: boolean): void {
+  if (on) busy.add(id);
+  else busy.delete(id);
+}
+export function isBusy(id: string): boolean {
+  return busy.has(id) || id === liveId;
 }
 
 let checkedCutOff = false;
@@ -136,7 +173,14 @@ export async function refreshRecordings(): Promise<Recording[]> {
   }
   all = all.sort((a, b) => b.createdAt - a.createdAt);
   recordings.set(all);
+  recordingsLoaded.set(true);
   return all;
+}
+
+/** Scrambled journal recordings are still on this device: the journal's key slots must stay. */
+export async function hasScrambledRecordings(userId?: string | null): Promise<boolean> {
+  const all = await idb<Recording[]>('recs', 'readonly', (s) => s.getAll()).catch(() => [] as Recording[]);
+  return all.some((r) => r.scrambled && (!userId || !r.journal?.userId || r.journal.userId === userId));
 }
 
 export async function getRecording(id: string): Promise<Recording | null> {
@@ -150,22 +194,91 @@ export async function putRecording(rec: Recording, refresh = true): Promise<void
   else recordings.update((list) => list.map((r) => (r.id === rec.id ? { ...rec } : r)));
 }
 
-/** Change some of a recording's details, reading the latest first. */
-export async function updateRecording(id: string, patch: Partial<Recording>, refresh = true): Promise<Recording | null> {
-  const rec = await getRecording(id);
-  if (!rec) return null;
-  const next = { ...rec, ...patch };
-  await putRecording(next, refresh);
+/**
+ * Change a recording's details: `change` gets the latest and returns what to
+ * save, or null to leave it. Read and written in one go, so nothing saved in
+ * between is lost. Null when it isn't there, or was left.
+ */
+export async function changeRecording(
+  id: string,
+  change: (rec: Recording) => Recording | null,
+  refresh = true,
+): Promise<Recording | null> {
+  const d = await db();
+  const next = await new Promise<Recording | null>((resolve, reject) => {
+    const tx = d.transaction('recs', 'readwrite');
+    const store = tx.objectStore('recs');
+    let out: Recording | null = null;
+    const req = store.get(id);
+    req.onsuccess = () => {
+      const rec = req.result as Recording | undefined;
+      out = rec ? change(rec) : null;
+      if (out) store.put(out);
+    };
+    tx.oncomplete = () => resolve(out);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  if (next) {
+    if (refresh) await refreshRecordings();
+    else recordings.update((list) => list.map((r) => (r.id === id ? { ...next } : r)));
+  }
   return next;
+}
+
+/** Change some of a recording's details, on the latest. */
+export function updateRecording(id: string, patch: Partial<Recording>, refresh = true): Promise<Recording | null> {
+  return changeRecording(id, (rec) => ({ ...rec, ...patch }), refresh);
 }
 
 export async function addChunk(id: string, seq: number, blob: Blob): Promise<void> {
   await idb('chunks', 'readwrite', (s) => s.put({ rec: id, seq, blob }));
 }
 
-/** The whole recording as one file. */
+/** The pieces as saved, in order. Scrambled ones are opened by journalLock/recordingCrypto.ts. */
+export async function recordingChunks(id: string): Promise<Array<{ seq: number; blob: Blob }>> {
+  const rows = await idb<Array<{ seq: number; blob: Blob }>>('chunks', 'readonly', (s) => s.getAll(chunkRange(id)));
+  return rows.map((r) => ({ seq: r.seq, blob: r.blob }));
+}
+
+/**
+ * Every piece swapped for its scrambled or opened copy, and the details
+ * saved with them, in one go, so the recording is never left half and half.
+ * `change` gets the latest details and returns them changed, or null when
+ * they moved on in the meantime, which leaves everything as it was. False
+ * then.
+ */
+export async function replaceRecordingChunks(
+  id: string,
+  chunks: Array<{ seq: number; blob: Blob }>,
+  change: (rec: Recording) => Recording | null,
+): Promise<boolean> {
+  const d = await db();
+  const done = await new Promise<boolean>((resolve, reject) => {
+    const tx = d.transaction(['chunks', 'recs'], 'readwrite');
+    const recs = tx.objectStore('recs');
+    let ok = false;
+    const req = recs.get(id);
+    req.onsuccess = () => {
+      const rec = req.result as Recording | undefined;
+      const next = rec ? change(rec) : null;
+      if (!next) return;
+      const store = tx.objectStore('chunks');
+      for (const c of chunks) store.put({ rec: id, seq: c.seq, blob: c.blob });
+      recs.put(next);
+      ok = true;
+    };
+    tx.oncomplete = () => resolve(ok);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  if (done) await refreshRecordings();
+  return done;
+}
+
+/** The whole recording as one file, as saved. A scrambled one needs journalLock/recordingCrypto.ts's openRecordingBlob. */
 export async function recordingBlob(rec: Recording): Promise<Blob> {
-  const rows = await idb<Array<{ blob: Blob }>>('chunks', 'readonly', (s) => s.getAll(chunkRange(rec.id)));
+  const rows = await recordingChunks(rec.id);
   return new Blob(rows.map((r) => r.blob), { type: rec.mime });
 }
 
@@ -199,13 +312,14 @@ function extensionFor(mime: string): string {
   return 'webm';
 }
 
-/** Hand the recording to the browser to save as a file. */
-export async function saveRecordingFile(rec: Recording): Promise<void> {
-  const blob = await recordingBlob(rec);
+/** Hand the recording to the browser to save as a file: `opened` is a scrambled one's audio and name, already opened. */
+export async function saveRecordingFile(rec: Recording, opened?: { blob: Blob; name: string }): Promise<void> {
+  const blob = opened?.blob ?? (await recordingBlob(rec));
+  const name = opened?.name ?? rec.name;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${rec.name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Recording'}.${extensionFor(rec.mime)}`;
+  a.download = `${name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Recording'}.${extensionFor(rec.mime)}`;
   document.body.appendChild(a);
   a.click();
   a.remove();

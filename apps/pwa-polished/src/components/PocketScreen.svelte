@@ -2,17 +2,18 @@
   /**
    * The pocket screen: black over everything while a recording runs, so the
    * screen kept awake costs little and taps in a pocket do nothing. Both of
-   * its buttons have to be held for a second: one stops and saves, the other
-   * goes back to the app with the recording still running.
+   * its buttons have to be held for a second: one stops, and asks what next
+   * like every Stop, the other goes back to the app with the recording still
+   * running.
    *
    * Comes up from the recording pill's moon, or by itself on a phone after two
    * minutes without a touch (lib/recorder/recorder.ts).
    */
   import { onDestroy } from 'svelte';
   import { portal } from '../lib/portal';
-  import { recorder, stopRecording, setPocket } from '../lib/recorder/recorder';
+  import { recorder, setPocket } from '../lib/recorder/recorder';
   import { clock } from '../lib/recorder/recordings';
-  import { noticeSaved } from '../lib/voice/transcribe';
+  import { stopAndAsk } from '../lib/voice/transcribe';
 
   const HOLD_MS = 1000;
 
@@ -55,8 +56,7 @@
       setPocket(false);
       return;
     }
-    const rec = await stopRecording();
-    if (rec) noticeSaved(rec);
+    await stopAndAsk();
   }
 
   onDestroy(() => cancelAnimationFrame(frame));

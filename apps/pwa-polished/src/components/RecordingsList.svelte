@@ -5,26 +5,32 @@
    * Saving as a file and bringing it in is how a recording moves between a
    * phone and a computer; recordings don't sync by themselves.
    *
-   * Transcribe turns one into words on a notebook page (lib/voice/transcribe.ts),
-   * with its progress here while it runs.
+   * Journal recordings are here too, labeled with their day, so they can be
+   * found and deleted. While the journal is locked, a scrambled one shows
+   * only "Journal recording", its day and its length: no name and no play.
+   *
+   * Write it out turns one into words on its page or day
+   * (lib/voice/transcribe.ts), with its progress here while it runs.
    */
   import { onMount, onDestroy } from 'svelte';
-  import { Record, FileArrowUp, FileArrowDown, PencilSimple, Trash, CaretRight, TextAlignLeft, Stop, ArrowSquareOut } from 'phosphor-svelte';
-  import { transcribing, transcribeRecording, stopTranscribing, stopAndNoticeSaved } from '../lib/voice/transcribe';
+  import { Record, FileArrowUp, FileArrowDown, PencilSimple, Trash, CaretRight, TextAlignLeft, Stop, ArrowSquareOut, LockSimple } from 'phosphor-svelte';
+  import { transcribing, transcribeQueue, transcribeRecording, stopTranscribing, stopAndAsk, forgetRecording } from '../lib/voice/transcribe';
   import { openNotesPage } from '../lib/openNotesPage';
+  import { openJournalDay } from '../lib/openJournalDay';
   import {
     recordings,
     refreshRecordings,
-    recordingBlob,
-    renameRecording,
-    deleteRecording,
     saveRecordingFile,
     importRecording,
     clock,
     sizeLabel,
     type Recording,
   } from '../lib/recorder/recordings';
+  import { seekable } from '../lib/recorder/seekable';
+  import { writtenPercent } from '../lib/recorder/recordingChips';
   import { recorder, recordingLive, startRecording } from '../lib/recorder/recorder';
+  import { journalLock } from '../lib/journalLock/lockState';
+  import { openRecordingBlob, openName, openedNames, recordingLabel, renameAnyRecording } from '../lib/journalLock/recordingCrypto';
   import { askConfirm } from '../stores/confirmStore';
   import { showNotice, errorText } from '../stores/noticeStore';
 
@@ -42,25 +48,29 @@
   });
 
   $: live = recordingLive($recorder);
-  $: txBusy = $transcribing.phase !== 'idle';
+  /** Scrambled and the journal locked: no name, no play. */
+  $: lockedAway = (rec: Recording) => !!rec.scrambled && !$journalLock.unlocked;
+  $: labelOf = (rec: Recording) => recordingLabel(rec, $openedNames);
 
-  /** How far along this one's transcript is, 0–100, while it runs. */
-  function txPercent(rec: Recording, readSec: number): number {
-    return rec.durationSec ? Math.min(100, Math.round((readSec / rec.durationSec) * 100)) : 0;
-  }
-
-  async function toggle(rec: Recording) {
+  function closePlayer() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     audioUrl = null;
+  }
+
+  // The journal locked with a scrambled one open: its player goes.
+  $: if (!$journalLock.unlocked && openId && $recordings.find((r) => r.id === openId)?.scrambled) closePlayer();
+
+  async function toggle(rec: Recording) {
+    closePlayer();
     renamingId = null;
     if (openId === rec.id) {
       openId = null;
       return;
     }
     openId = rec.id;
-    if (rec.state === 'recording') return;
+    if (rec.state === 'recording' || lockedAway(rec)) return;
     try {
-      const url = URL.createObjectURL(await recordingBlob(rec));
+      const url = URL.createObjectURL(await openRecordingBlob(rec));
       if (openId === rec.id) audioUrl = url;
       else URL.revokeObjectURL(url);
     } catch (err) {
@@ -68,49 +78,46 @@
     }
   }
 
-  /**
-   * A recording straight from the browser's recorder has no length written in
-   * it, so the player can't seek until it has been sent to the far end once.
-   */
-  function seekable(audio: HTMLAudioElement) {
-    const fix = () => {
-      if (Number.isFinite(audio.duration)) return;
-      const back = () => {
-        if (!Number.isFinite(audio.duration)) return;
-        audio.removeEventListener('durationchange', back);
-        audio.currentTime = 0;
-      };
-      audio.addEventListener('durationchange', back);
-      audio.currentTime = 1e101;
-    };
-    audio.addEventListener('loadedmetadata', fix);
-    return { destroy: () => audio.removeEventListener('loadedmetadata', fix) };
-  }
-
   function startRename(rec: Recording) {
     renamingId = rec.id;
-    renameText = rec.name;
+    renameText = labelOf(rec);
   }
 
   async function commitRename() {
     const id = renamingId;
     renamingId = null;
-    if (id && renameText.trim()) await renameRecording(id, renameText);
+    const rec = $recordings.find((r) => r.id === id);
+    if (!rec || !renameText.trim()) return;
+    try {
+      await renameAnyRecording(rec, renameText);
+    } catch (err) {
+      showNotice(`That recording couldn’t be renamed: ${errorText(err)}`, 'error');
+    }
+  }
+
+  /** Saved readable: a scrambled one only after unlocking, the same rule as the backup file. */
+  async function saveFile(rec: Recording) {
+    try {
+      if (!rec.scrambled) return await saveRecordingFile(rec);
+      const [blob, name] = await Promise.all([openRecordingBlob(rec), openName(rec)]);
+      await saveRecordingFile(rec, { blob, name: name ?? 'Journal recording' });
+    } catch (err) {
+      showNotice(`That recording couldn’t be saved: ${errorText(err)}`, 'error');
+    }
   }
 
   async function remove(rec: Recording) {
-    const ok = await askConfirm(`Delete “${rec.name}”? The recording is gone from this device for good.`, {
+    const what = lockedAway(rec) ? 'this journal recording' : `“${labelOf(rec)}”`;
+    const ok = await askConfirm(`Delete ${what}? The recording is gone from this device for good. Words already written out from it stay.`, {
       confirmLabel: 'Delete',
       danger: true,
     });
     if (!ok) return;
-    if ($transcribing.id === rec.id) stopTranscribing();
     if (openId === rec.id) {
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      audioUrl = null;
+      closePlayer();
       openId = null;
     }
-    await deleteRecording(rec.id);
+    await forgetRecording(rec);
   }
 
   async function pickedFile() {
@@ -133,6 +140,30 @@
     return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  /** "Oct 28": a journal day, from its YYYY-MM-DD. */
+  function dayLabel(date: string): string {
+    return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  /** Where it stands with being written out, for the row's second line. */
+  function txWords(rec: Recording, txId: string | null, readSec: number, queue: string[]): string {
+    if (txId === rec.id) return ` · Writing out ${writtenPercent(readSec, rec.durationSec)}%`;
+    if (queue.includes(rec.id) || rec.transcript?.state === 'queued') return ' · Waiting its turn';
+    if (rec.transcript?.state === 'waiting') return rec.transcript.forUnlock ? ' · Waiting for the unlock' : ' · Waiting to carry on';
+    if (rec.transcript?.state === 'done') return ' · Written out';
+    return '';
+  }
+
+  /** The second line of a row that isn't locked away. */
+  function subLine(rec: Recording, txId: string | null, readSec: number, queue: string[]): string {
+    const parts = rec.journal
+      ? [`Journal · ${dayLabel(rec.journal.date)}`, clock(rec.durationSec), sizeLabel(rec.bytes)]
+      : [clock(rec.durationSec), sizeLabel(rec.bytes), dateLabel(rec.createdAt)];
+    if (rec.quality === 'music') parts.push('Music');
+    if (rec.imported) parts.push('From a file');
+    return parts.join(' · ') + txWords(rec, txId, readSec, queue);
+  }
+
   function guardPointer(e: Event) {
     e.stopPropagation();
   }
@@ -148,7 +179,7 @@
     <span class="label">Recordings</span>
     <span class="count">({$recordings.length})</span>
     {#if live}
-      <button type="button" class="rec-btn" disabled={$recorder.phase === 'stopping'} on:click={stopAndNoticeSaved}>
+      <button type="button" class="rec-btn" disabled={$recorder.phase === 'stopping'} on:click={stopAndAsk}>
         <Stop size={14} weight="fill" /> Stop
       </button>
     {:else}
@@ -171,6 +202,7 @@
 
   <ul class="list">
     {#each $recordings as rec (rec.id)}
+      {@const locked = lockedAway(rec)}
       <li class="row" class:open={openId === rec.id}>
         {#if renamingId === rec.id}
           <input
@@ -193,16 +225,16 @@
         {:else}
           <button type="button" class="title" aria-expanded={openId === rec.id} on:click={() => toggle(rec)}>
             <span class="caret motion-caret" class:open={openId === rec.id}><CaretRight size={11} weight="bold" /></span>
-            <span class="name">{rec.name}</span>
+            <span class="name">
+              {#if locked}<LockSimple size={12} weight="fill" class="ph-inline" /> Journal recording{:else}{labelOf(rec)}{/if}
+            </span>
             <span class="sub">
               {#if rec.state === 'recording'}
                 Recording now…
+              {:else if locked}
+                {rec.journal ? dayLabel(rec.journal.date) : dateLabel(rec.createdAt)} · {clock(rec.durationSec)}
               {:else}
-                {clock(rec.durationSec)} · {sizeLabel(rec.bytes)} · {dateLabel(rec.createdAt)}{rec.quality === 'music' ? ' · Music' : ''}{rec.imported ? ' · From a file' : ''}{$transcribing.id === rec.id
-                  ? ` · Transcribing ${txPercent(rec, $transcribing.readSec)}%`
-                  : rec.transcript?.state === 'done'
-                    ? ' · Transcribed'
-                    : ''}
+                {subLine(rec, $transcribing.id, $transcribing.readSec, $transcribeQueue)}
               {/if}
             </span>
           </button>
@@ -210,55 +242,66 @@
 
         {#if openId === rec.id && rec.state !== 'recording'}
           <div class="body">
-            {#if audioUrl}
-              <!-- svelte-ignore a11y_media_has_caption -->
-              <audio class="player" controls preload="metadata" src={audioUrl} use:seekable></audio>
-            {/if}
-            {#if rec.interrupted}
-              <p class="note">The app closed while this was recording, so the last couple of seconds may be missing.</p>
-            {/if}
-            {#each rec.gaps as gap}
-              <p class="note">
-                {gap.screenOff ? 'The screen locked' : 'The mic went silent'} at {clock(gap.from)}. Nothing was recorded
-                until {clock(gap.to)}.
-              </p>
-            {/each}
-            {#if $transcribing.id === rec.id}
-              <div class="tx">
-                <span class="tx-line">
-                  {$transcribing.stage ??
-                    ($transcribing.phase === 'stopping'
-                      ? 'Stopping…'
-                      : `Transcribing… ${clock($transcribing.readSec)} of ${clock(rec.durationSec)}`)}
-                </span>
-                <span class="tx-bar"><i style="width: {txPercent(rec, $transcribing.readSec)}%"></i></span>
-              </div>
-            {:else if rec.transcript?.state === 'done'}
-              <p class="tx-line">Transcribed into a page in Notes.</p>
-            {:else if rec.transcript && rec.transcript.doneSec > 0}
-              <p class="tx-line">Transcribed up to {clock(rec.transcript.doneSec)}.</p>
-            {/if}
-            {#if rec.transcript?.state === 'failed' && rec.transcript.error}
-              <p class="note">Transcribing stopped: {rec.transcript.error}</p>
+            {#if locked}
+              <p class="tx-line">Locked with the journal. Unlock it to play, rename, write out or save this one.</p>
+            {:else}
+              {#if audioUrl}
+                <!-- svelte-ignore a11y_media_has_caption -->
+                <audio class="player" controls preload="metadata" src={audioUrl} use:seekable></audio>
+              {/if}
+              {#if rec.interrupted}
+                <p class="note">The app closed while this was recording, so the last couple of seconds may be missing.</p>
+              {/if}
+              {#each rec.gaps as gap}
+                <p class="note">
+                  {gap.screenOff ? 'The screen locked' : 'The mic went silent'} at {clock(gap.from)}. Nothing was recorded
+                  until {clock(gap.to)}.
+                </p>
+              {/each}
+              {#if $transcribing.id === rec.id}
+                <div class="tx">
+                  <span class="tx-line">
+                    {$transcribing.stage ??
+                      ($transcribing.phase === 'stopping'
+                        ? 'Stopping…'
+                        : `Writing it out… ${clock($transcribing.readSec)} of ${clock(rec.durationSec)}`)}
+                  </span>
+                  <span class="tx-bar"><i style="width: {writtenPercent($transcribing.readSec, rec.durationSec)}%"></i></span>
+                </div>
+              {:else if rec.transcript?.state === 'done'}
+                <p class="tx-line">Written out {rec.journal ? 'into the journal' : 'into a page in Notes'}.</p>
+              {:else if rec.transcript && rec.transcript.doneSec > 0}
+                <p class="tx-line">Written out up to {clock(rec.transcript.doneSec)}.</p>
+              {/if}
+              {#if rec.transcript?.state === 'failed' && rec.transcript.error}
+                <p class="note">Writing it out stopped: {rec.transcript.error}</p>
+              {/if}
             {/if}
             <div class="actions">
-              {#if $transcribing.id === rec.id}
-                <button type="button" class="act" disabled={$transcribing.phase === 'stopping'} on:click={stopTranscribing}>
-                  <Stop size={14} weight="fill" /> Stop transcribing
-                </button>
-              {:else if rec.transcript?.state !== 'done'}
-                <button type="button" class="act tx-go" disabled={txBusy} on:click={() => transcribeRecording(rec.id)}>
-                  <TextAlignLeft size={14} weight="bold" />
-                  {rec.transcript && rec.transcript.doneSec > 0 ? 'Carry on transcribing' : 'Transcribe'}
-                </button>
+              {#if !locked}
+                {#if $transcribing.id === rec.id}
+                  <button type="button" class="act" disabled={$transcribing.phase === 'stopping'} on:click={stopTranscribing}>
+                    <Stop size={14} weight="fill" /> Stop writing it out
+                  </button>
+                {:else if rec.transcript?.state !== 'done' && rec.transcript?.state !== 'queued' && !$transcribeQueue.includes(rec.id)}
+                  <!-- Another being written out puts this one in line, rather than refusing. -->
+                  <button type="button" class="act tx-go" on:click={() => transcribeRecording(rec.id)}>
+                    <TextAlignLeft size={14} weight="bold" />
+                    {rec.transcript && rec.transcript.doneSec > 0 ? 'Carry on writing it out' : 'Write it out'}
+                  </button>
+                {/if}
+                {#if rec.journal}
+                  <button type="button" class="act" on:click={() => rec.journal && openJournalDay(rec.journal.date)}>
+                    <ArrowSquareOut size={14} weight="bold" /> Open the day
+                  </button>
+                {:else if rec.page}
+                  <button type="button" class="act" on:click={() => rec.page && openNotesPage(rec.page)}>
+                    <ArrowSquareOut size={14} weight="bold" /> Open the page
+                  </button>
+                {/if}
+                <button type="button" class="act" on:click={() => startRename(rec)}><PencilSimple size={14} weight="bold" /> Rename</button>
+                <button type="button" class="act" on:click={() => saveFile(rec)}><FileArrowDown size={14} weight="bold" /> Save as a file</button>
               {/if}
-              {#if rec.page}
-                <button type="button" class="act" on:click={() => rec.page && openNotesPage(rec.page)}>
-                  <ArrowSquareOut size={14} weight="bold" /> Open the page
-                </button>
-              {/if}
-              <button type="button" class="act" on:click={() => startRename(rec)}><PencilSimple size={14} weight="bold" /> Rename</button>
-              <button type="button" class="act" on:click={() => saveRecordingFile(rec)}><FileArrowDown size={14} weight="bold" /> Save as a file</button>
               <button type="button" class="act danger" on:click={() => remove(rec)}><Trash size={14} weight="bold" /> Delete</button>
             </div>
           </div>

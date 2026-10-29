@@ -763,7 +763,7 @@ Notes and notebooks sync to your account like everything else. Shared notebooks 
 
 ## 27. Voice Control
 
-Steer the app by talking, and turn what you say into notes. It all runs **on your device**: nothing you say is sent anywhere, and once it's downloaded it works offline.
+Steer the app by talking, and turn what you say into notes and journal entries. It all runs **on your device**: nothing you say is sent anywhere, and once it's downloaded it works offline.
 
 ### 27.1 The mic button
 
@@ -798,25 +798,37 @@ Steer the app by talking, and turn what you say into notes. It all runs **on you
 ### 27.3 Downloads
 
 - **Voice Control**, about 53 MB, once: Whistle hears and Needle chooses. From Settings → Voice Control, the mic button's own card, or Install everything. Settings lists only what's still to download, so once both are in, nothing shows there; to delete them, Dev Options → Manage Packs → Voice Control.
-- **The Transcribe add-on**, about 10 MB: punctuation and a voice detector. Offered the first time you tap Transcribe.
+- **The Transcribe add-on**, about 10 MB: punctuation and a voice detector. Offered the first time you write a recording out.
 - New versions show in Storage & updates like any pack.
 
-### 27.4 Recording in Notes
+### 27.4 Recording in Notes and the journal
 
-- **Record** from Notes → Recordings, or into a page with the mic in the page's header.
+- **Record** from Notes → Recordings, into a page with the mic in the page's header, or into the journal with the mic in its header bar.
+- **A pill at the cursor.** Recording into a page or a day drops a small "● Recording" pill into the text where the cursor is. Record again later and a new pill goes wherever the cursor is then.
 - **Saved as it goes**, every couple of seconds, so closing the app loses only the last couple of seconds.
 - **The screen stays awake** while it records, because a locked phone silences the mic.
-- **A floating pill** shows how long, with Pause, Stop and the pocket screen. It stays when Notes closes, so you can read along while you record.
+- **A floating pill** shows how long, with Pause, Stop and the pocket screen. It stays when Notes or the journal closes, so you can read along while you record.
 - **The pocket screen** is black, so it costs little battery, and taps in a pocket do nothing: hold Stop to finish, or hold Go back. On a phone it comes up by itself after two minutes without a touch.
 - **If the mic goes silent anyway**, you're told when there's sound again: "The screen locked at 2:13. Nothing was recorded until 3:05."
+- **Every Stop asks what next**, whichever Stop it is (the page's, the day's, the floating pill's, the pocket screen's or Recordings'): **Write it out** and keep the recording, **Write it out, then delete the recording**, or **Recording only**. Closing the card keeps the recording only, so nothing is lost.
 - **Recording quality** in Settings → Voice Control: Speech (about 15 MB an hour) or Music (about 58 MB an hour, for singing).
-- **The Recordings list** plays, renames, saves as a file and deletes, and adds an audio file from the device. Recordings stay on the device they were made on; save one as a file and add it on another to move it.
+- **The Recordings list** plays, renames, saves as a file and deletes, and adds an audio file from the device. Journal recordings are listed too, labeled with their day ("Journal · Oct 28"), with Open the day. Recordings stay on the device they were made on: they aren't in the cloud or the backup file. Save one as a file and add it on another to move it.
 
-### 27.5 Transcribing
+### 27.5 Writing it out
 
-- **Tap Transcribe** on a recording, or on the notice after Stop. The words go into the page it was recorded from, or a new page in Quick Notes named after it.
-- **It runs in the background** while you use the app, and the words appear on the page as it goes. An hour takes about 5–7 minutes on a phone, and the screen stays awake while it runs.
-- **Stop it any time** and carry on later. If the app closes, it carries on by itself the next time the app opens.
+- **The words land in front of the pill**, a piece at a time, so the text that was after the cursor stays after the new words. They go into the page or the day it was recorded from; one recorded from Recordings gets a page of its own in Quick Notes, named after it.
+- **A kept recording leaves a "▶ 0:42" chip** at the end of its words. Tap it to Play, Write it out or Delete. With "then delete", the chip and the audio go once the words are safely in. If writing it out fails, the recording is kept and you're told. On another device the chip says the recording is on another device.
+- **One at a time.** Stopping a second recording while one is still being written out puts it in line ("Waiting its turn"); it starts as soon as the first is done.
+- **It runs in the background** while you use the app, and the words appear as it goes. An hour takes about 5–7 minutes on a phone, and the screen stays awake while it runs.
+- **Stop it any time** and carry on later from its chip or from Recordings. If the app closes, it carries on by itself the next time the app opens.
 - **How it's written up:** periods, commas, question marks and capitals; capitals on the Bible's names (the books, people, places, God, Jesus, the Holy Spirit), with names that are everyday words too (Job, Mark, Eve) only where the words around them say so ("the book of Job", "Mark 5", "Adam and Eve"); a new paragraph after a pause of a few seconds; and verses you name become links ("Romans six verse four" is Romans 6:4).
 - **Say it to shape it:** "new paragraph"; "heading, …" or "new heading" and then the words; "the first point is …", "my second point", "point three:" or "number four," for numbered items.
-- Expect a missed comma or question mark now and then. It's a normal note, so you fix misses by hand. The notes editor has Heading and Numbered list buttons too.
+- Expect a missed comma or question mark now and then. It's a normal note, so you fix misses by hand. The editor has Heading and Numbered list buttons too.
+
+### 27.6 Journal recordings and the lock
+
+- **While the journal lock is on**, a journal recording's audio and name are scrambled with the same key as the entries, piece by piece as it records. The recorder holds the key from Record to Stop, so a recording carries on being scrambled if the journal relocks part way through.
+- **While the journal is locked**, its recordings show in Recordings only as "Journal recording", their day and their length: no name and no play. Unlock the journal to play, rename, write out or save one.
+- **Writing one out** opens the audio in memory only, and the words go into the entry like typing, so they're scrambled too. If the journal locks part way, it pauses, and carries on after you unlock. After the app reopens, it waits for the unlock too.
+- **Turning the lock on or off** scrambles or opens this device's journal recordings along with the entries. Until none is left scrambled, this device keeps what it needs to open them.
+- **Save as a file** works on a locked-journal recording only after unlocking, and saves it readable: the same rule as the backup file.

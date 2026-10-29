@@ -1,11 +1,17 @@
 <script lang="ts">
-  import { CaretLeft, CaretRight } from "phosphor-svelte";
+  import { CaretLeft, CaretRight, Microphone, Stop } from "phosphor-svelte";
   import { createEventDispatcher } from 'svelte';
   
   export let currentDate: string;
   export let title: string;
   export let isDirty: boolean;
   export let isSaving: boolean;
+  /** Recording into this day now: the mic is its Stop, the same as the recording pill's. */
+  export let recording = false;
+  /** Saving the recording that just stopped. */
+  export let stopping = false;
+  /** Another recording is running, or the day can't be written. */
+  export let recordDisabled = false;
   
   const dispatch = createEventDispatcher();
   
@@ -72,6 +78,32 @@
   >
     <CaretRight size="1em" weight="bold" />
   </button>
+
+  <!-- Talk into the day: the pill goes in at the cursor, and the words land
+       in front of it once the recording is written out. -->
+  {#if recording}
+    <button
+      class="mic rec-on"
+      on:click={() => dispatch('stop')}
+      title="Stop"
+      aria-label="Stop"
+      type="button"
+      disabled={stopping}
+    >
+      <Stop size="1em" weight="fill" />
+    </button>
+  {:else}
+    <button
+      class="mic"
+      on:click={() => dispatch('record')}
+      title="Record into this day"
+      aria-label="Record into this day"
+      type="button"
+      disabled={recordDisabled}
+    >
+      <Microphone size="1em" weight="bold" />
+    </button>
+  {/if}
   
   {#if isSaving}
     <span class="status">Saving...</span>
@@ -110,6 +142,21 @@
   
   button:active {
     transform: scale(0.95);
+  }
+
+  button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .mic {
+    padding-left: calc(10px * var(--bar-scale, 1));
+    padding-right: calc(10px * var(--bar-scale, 1));
+  }
+
+  .mic.rec-on {
+    color: #e5484d;
+    border-color: rgba(229, 72, 77, 0.6);
   }
   
   input[type="date"] {

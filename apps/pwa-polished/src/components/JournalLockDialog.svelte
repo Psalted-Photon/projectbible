@@ -45,6 +45,8 @@
   let copied = false;
   let typedGroup = '';
   let workedTotal = 0;
+  /** How many of workedTotal were journal recordings on this device. */
+  let workedRecordings = 0;
   let unreadableCount = 0;
 
   onMount(() => {
@@ -69,7 +71,19 @@
   $: typedNormal = typedGroup.toUpperCase().replace(/\s/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
   $: groupMatches = !!code && typedNormal === lastGroupOf(code);
   $: canClose = step !== 'working' && step !== 'preparing';
-  $: if ($journalLock.work) workedTotal = $journalLock.work.total;
+  $: if ($journalLock.work) {
+    workedTotal = $journalLock.work.total;
+    workedRecordings = $journalLock.work.recordings ?? 0;
+  }
+
+  /** "3 entries and 1 recording were scrambled." */
+  function workedLine(total: number, recordings: number, done: string): string {
+    const entries = total - recordings;
+    const parts: string[] = [];
+    if (entries > 0) parts.push(`${entries} ${entries === 1 ? 'entry' : 'entries'}`);
+    if (recordings > 0) parts.push(`${recordings} ${recordings === 1 ? 'recording' : 'recordings'}`);
+    return `${parts.join(' and ')} ${total === 1 ? 'was' : 'were'} ${done}.`;
+  }
 
   function close() {
     if (!canClose) return;
@@ -280,14 +294,14 @@
         {#if kind === 'turn-off'}
           <p>The journal lock is off.</p>
           {#if workedTotal > 0}
-            <p class="ld-quiet">{workedTotal} {workedTotal === 1 ? 'entry was' : 'entries were'} unscrambled.</p>
+            <p class="ld-quiet">{workedLine(workedTotal, workedRecordings, 'unscrambled')}</p>
           {/if}
         {:else if kind === 'new-code'}
           <p>Your new recovery code is saved. The old one no longer works.</p>
         {:else}
           <p>Your journal is locked.</p>
           {#if workedTotal > 0}
-            <p class="ld-quiet">{workedTotal} {workedTotal === 1 ? 'entry was' : 'entries were'} scrambled.</p>
+            <p class="ld-quiet">{workedLine(workedTotal, workedRecordings, 'scrambled')}</p>
           {/if}
           <p class="ld-quiet">It locks again when you leave the app for longer than the time set in Settings → Privacy.</p>
         {/if}
