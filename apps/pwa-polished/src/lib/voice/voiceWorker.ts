@@ -21,10 +21,10 @@ import {
   usePeopleNames,
   personNamed,
   isEveryday,
-  editDistance,
   APP_KEYWORDS,
   type ToolSpec,
 } from './rules';
+import { editDistance, soundKey } from '../fuzzy';
 
 /** One action, as the app carries it out. */
 export interface VoiceCall {
@@ -199,16 +199,6 @@ const parseList = (v: unknown): any[] => {
     return [];
   }
 };
-
-/** How a name sounds, roughly: "mephibosheth" and "mefa boshes" both come out "mfps(t)". */
-function soundKey(s: string): string {
-  const k = s.replace(/[^a-z]/g, '')
-    .replace(/ph/g, 'f').replace(/sh/g, 's').replace(/th/g, 't').replace(/ch/g, 'k').replace(/gh/g, 'g')
-    .replace(/c(?=[eiy])/g, 's').replace(/[cq]/g, 'k').replace(/x/g, 'ks')
-    .replace(/d/g, 't').replace(/g/g, 'k').replace(/b/g, 'p').replace(/v/g, 'f').replace(/z/g, 's');
-  if (!k) return '';
-  return (k[0] + k.slice(1).replace(/[aeiouhwy]/g, '')).replace(/(.)\1+/g, '$1');
-}
 
 /** The name in the people list that a misheard name sounds most like, or null. */
 function soundAlike(q: string): string | null {

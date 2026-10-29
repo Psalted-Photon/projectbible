@@ -24,6 +24,7 @@
     type SearchResult,
   } from "../lib/services/searchService";
   import { buildSearchTree } from "../lib/searchTree";
+  import { warmSearchIndex } from "../lib/search/searchClient";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import { portal } from "../lib/portal";
@@ -936,7 +937,7 @@
     try {
       const limit = loadAll ? -1 : 250;
       // Explicit search, so the expensive categories (commentaries) run too.
-      const results = await searchService.search(searchQuery, { limit, deep: true });
+      const results = await searchService.search(searchQuery, { limit, deep: true, translation: currentTranslation });
       if (ticket !== searchTicket) return;
       searchResults = results;
 
@@ -1305,7 +1306,7 @@
     expandedSearchNodes = next;
   }
 
-  $: searchTree = buildSearchTree(searchResults);
+  $: searchTree = buildSearchTree(searchResults, currentTranslation);
 
   function clearSearch() {
     dropSearchInFlight();
@@ -1318,6 +1319,8 @@
 
   async function expandSearch() {
     searchExpanded = true;
+    // The word lists start building now if they haven't yet.
+    warmSearchIndex();
     await tick();
     const input = searchContainerRef?.querySelector('.search-input') as HTMLInputElement;
     input?.focus();

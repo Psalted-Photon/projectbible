@@ -56,8 +56,13 @@ export function groupResultsByBook(parentKey: string, results: SearchResult[]): 
  *
  * Bible results nest twice (translation, then book). Categories that declare a
  * `groupKey` on their results nest once. Everything else is a flat leaf list.
+ *
+ * The reader's translation (`firstTranslation`) leads the Bible's list; the
+ * rest follow by how much each found.
  */
-export function buildSearchTree(categories: SearchCategory[]): SearchTreeNode[] {
+export function buildSearchTree(categories: SearchCategory[], firstTranslation?: string): SearchTreeNode[] {
+  const isFirst = (translationId: string) =>
+    !!firstTranslation && translationId.toLowerCase() === firstTranslation.toLowerCase();
   return categories
     .filter((category) => category.count > 0)
     .map((category) => {
@@ -70,9 +75,11 @@ export function buildSearchTree(categories: SearchCategory[]): SearchTreeNode[] 
             key: `${key}::${translationId}`,
             label: translationId.toUpperCase(),
             count: results.length,
+            first: isFirst(translationId),
             children: groupResultsByBook(`${key}::${translationId}`, results),
           }))
-          .sort((a, b) => b.count - a.count);
+          .sort((a, b) => Number(b.first) - Number(a.first) || b.count - a.count)
+          .map(({ first: _first, ...node }) => node);
 
         return { key, label: category.name, count: category.count, children };
       }

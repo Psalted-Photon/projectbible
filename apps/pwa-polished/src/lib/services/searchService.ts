@@ -11,6 +11,9 @@ import { cleanVersePreviewText, dropHebrewPartMarks } from '../verseRendering';
 import { parseRefString } from '../parseRefString';
 import { getAllReadings, listWorks, shortReadingLabel } from '../devotionals/devotionalsData';
 import { patternMatcher, wordMatcher, type TextMatcher } from '../searchWords';
+import { indexedVerseSearch } from '../search/searchClient';
+import type { TranslationHits } from '../search/searchWorker';
+import { translationSortIndex } from '../bibleData';
 
 export type SearchCategoryKey =
   | 'bible'
@@ -44,15 +47,17 @@ export interface SearchCategory {
   truncated?: boolean;
   /**
    * Every match that exists, capped or not. Only the Bible group is capped, so
-   * only it says; it already holds every match before it trims, and counting
-   * them here saves a second full scan just to learn the number.
+   * only it says; the word lists know every match's count without reading the
+   * verses, so this costs nothing extra.
    */
   total?: number;
 }
 
 export interface SearchOptions {
-  /** Verse-result cap. -1 loads everything. */
+  /** Verses kept per translation. -1 loads everything. */
   limit?: number;
+  /** The reader's translation, whose verses are listed first. */
+  translation?: string;
   /**
    * Run the categories that are too expensive for type-ahead (commentaries
    * cursors ~89k rows). Set for an explicit Enter/Search press only.
@@ -168,7 +173,7 @@ export class UnifiedSearchService {
     // Every category is independent, so fetch them together rather than
     // serially — the slowest one sets the pace instead of their sum.
     const [verses, strongs, notes, journal, saved, characters, encyclopedia, topical, devotionals, commentaries] = await Promise.all([
-      this.searchVerses(match.all, options.limit),
+      this.searchVerses(normalizedQuery, match, options),
       this.searchStrongs(normalizedQuery),
       this.searchNotes(match.phrase),
       this.searchJournal(match.phrase),
@@ -198,37 +203,69 @@ export class UnifiedSearchService {
 
   // ── Bible ────────────────────────────────────────────────────────────────
 
+  /**
+   * The bar's words come from the word lists (lib/search), which find the
+   * same verses without reading them all. Advanced Search's patterns can't
+   * use a word list, so they read every verse, as does the bar when the
+   * worker can't answer.
+   *
+   * The limit is per translation, in Bible order, so each translation shows
+   * its first verses rather than all of them sharing one cut from Genesis.
+   */
   private async searchVerses(
-    match: TextMatcher,
-    limit: number = 250,
+    query: string,
+    match: Matchers,
+    options: SearchOptions,
   ): Promise<{ results: SearchResult[]; total: number }> {
+    const limit = options.limit ?? 250;
     try {
-      const dbResults = await this.searchIndex.scan(match);
+      const groups =
+        (!match.pattern && (await indexedVerseSearch({ query, limit, first: options.translation }))) ||
+        this.groupScan(await this.searchIndex.scan(match.all), limit, options.translation);
 
-      // Limit results (default 250, or all if limit is -1)
-      const resultLimit = limit === -1 ? dbResults.length : limit;
-
-      const results = dbResults.slice(0, resultLimit).map((result, index) => ({
-        type: 'verse' as const,
-        title: `${normalizeBookName(result.book)} ${result.chapter}:${result.verse}`,
-        // Full stored text, not result.snippet — the snippet is cut from raw
-        // text at scan time and can slice through a footnote. The tree cleans
-        // and trims it for display instead.
-        subtitle: result.text || result.snippet,
-        reference: `${normalizeBookName(result.book)} ${result.chapter}:${result.verse}`,
-        data: {
-          book: normalizeBookName(result.book),
-          chapter: result.chapter,
-          verse: result.verse,
-          translation: result.translation
-        },
-        score: 1.0 - (index / 100), // Simple relevance scoring
-      }));
-      return { results, total: dbResults.length };
+      const results: SearchResult[] = [];
+      for (const group of groups) {
+        group.verses.forEach((v, index) => {
+          const book = normalizeBookName(v.book);
+          results.push({
+            type: 'verse' as const,
+            title: `${book} ${v.chapter}:${v.verse}`,
+            // Full stored text: the tree cleans and trims it for display.
+            subtitle: v.text,
+            reference: `${book} ${v.chapter}:${v.verse}`,
+            data: { book, chapter: v.chapter, verse: v.verse, translation: group.translation },
+            score: 1.0 - index / 100,
+          });
+        });
+      }
+      return { results, total: groups.reduce((sum, g) => sum + g.total, 0) };
     } catch (error) {
       console.error('Error searching verses:', error);
       return { results: [], total: 0 };
     }
+  }
+
+  /** A full read's verses (already in Bible order), shaped like the word lists' answer. */
+  private groupScan(
+    rows: Awaited<ReturnType<IndexedDBSearchIndex['scan']>>,
+    limit: number,
+    first?: string,
+  ): TranslationHits[] {
+    const groups = new Map<string, TranslationHits>();
+    for (const row of rows) {
+      let group = groups.get(row.translation);
+      if (!group) groups.set(row.translation, (group = { translation: row.translation, total: 0, verses: [] }));
+      group.total++;
+      if (limit === -1 || group.verses.length < limit) {
+        group.verses.push({ book: row.book, chapter: row.chapter, verse: row.verse, text: row.text || row.snippet || '' });
+      }
+    }
+    const isFirst = (tid: string) => !!first && tid.toLowerCase() === first.toLowerCase();
+    return [...groups.values()].sort(
+      (a, b) =>
+        Number(isFirst(b.translation)) - Number(isFirst(a.translation)) ||
+        translationSortIndex(a.translation) - translationSortIndex(b.translation),
+    );
   }
 
   // ── Strong's / lemma / morphology ────────────────────────────────────────

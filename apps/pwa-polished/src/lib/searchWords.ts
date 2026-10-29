@@ -89,21 +89,44 @@ function singularsOf(word: string): string[] {
 }
 
 /**
- * The pattern one typed word stands for. Plain English words get their forms;
- * Greek, Hebrew and other scripts are matched anywhere, as they were before,
- * since their endings aren't English ones; anything else (numbers, lord's)
- * is matched as a whole word, exactly.
+ * What one typed word looks for. The matcher's patterns are made from this,
+ * and the search's word list (lib/search) looks words up by it, so the two
+ * can't disagree about what a word finds.
  */
-function wordPattern(token: string): string {
+export type WordLookup =
+  /** A plain English word: any of these, as a whole word. */
+  | { kind: 'forms'; word: string; forms: string[] }
+  /** Greek, Hebrew and other scripts: these letters anywhere, inside a word or across words. */
+  | { kind: 'inside'; word: string }
+  /** Numbers, lord's: exactly this, as whole words. `parts` are its words, without the punctuation between them. */
+  | { kind: 'whole'; word: string; parts: string[] };
+
+/**
+ * Plain English words get their forms; Greek, Hebrew and other scripts are
+ * matched anywhere, as they were before, since their endings aren't English
+ * ones; anything else (numbers, lord's) is matched as a whole word, exactly.
+ */
+function lookupOf(token: string): WordLookup {
   const word = token.toLowerCase().replace(/’/g, "'");
   if (/^[a-z]+$/.test(word)) {
     const forms = new Set(formsOf(word));
     for (const base of singularsOf(word)) for (const form of formsOf(base)) forms.add(form);
-    return `${BEFORE}(?:${[...forms].join('|')})${AFTER}`;
+    return { kind: 'forms', word, forms: [...forms] };
   }
-  if (/[^\x00-\x7F]/.test(word)) return escapeRegExp(word);
+  if (/[^\x00-\x7F]/.test(word)) return { kind: 'inside', word };
+  return { kind: 'whole', word, parts: word.split(new RegExp(SEPARATOR, 'u')).filter(Boolean) };
+}
+
+/** The pattern one typed word stands for. */
+function patternOf(lookup: WordLookup): string {
+  if (lookup.kind === 'forms') return `${BEFORE}(?:${lookup.forms.join('|')})${AFTER}`;
+  if (lookup.kind === 'inside') return escapeRegExp(lookup.word);
   // Some translations print a curly apostrophe, some a straight one.
-  return `${BEFORE}${escapeRegExp(word).replace(/'/g, "['’]")}${AFTER}`;
+  return `${BEFORE}${escapeRegExp(lookup.word).replace(/'/g, "['’]")}${AFTER}`;
+}
+
+function wordPattern(token: string): string {
+  return patternOf(lookupOf(token));
 }
 
 /** The query's words, without the punctuation round them ("he?" → he). */
@@ -113,6 +136,19 @@ function tokensOf(query: string): string[] {
     .split(/\s+/)
     .map((token) => token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
     .filter(Boolean);
+}
+
+/** Each word of the query as the matcher reads it; null when it is nothing but punctuation. */
+export function wordLookups(query: string): WordLookup[] | null {
+  const tokens = tokensOf(query);
+  return tokens.length ? tokens.map(lookupOf) : null;
+}
+
+/** The word's own pattern, or it and its stand-ins ("anxiety" or "anxious"). */
+function piecePattern(token: string, also?: Record<string, string[]>): string {
+  const own = wordPattern(token);
+  const extra = also?.[lookupOf(token).word];
+  return extra?.length ? `(?:${[own, ...extra.map(wordPattern)].join('|')})` : own;
 }
 
 function firstIndex(patterns: RegExp[], text: string): number {
@@ -129,8 +165,11 @@ function firstIndex(patterns: RegExp[], text: string): number {
  * order, which is how verses and devotionals have always matched; `phrase`
  * wants the words together in the order typed, which is how notes, the
  * journal, highlights and commentaries have.
+ *
+ * `also` gives a word stand-ins that count as finding it (anxiety → anxious),
+ * keyed by the word as typed, lower case.
  */
-export function wordMatcher(query: string, how: 'all' | 'phrase'): TextMatcher {
+export function wordMatcher(query: string, how: 'all' | 'phrase', also?: Record<string, string[]>): TextMatcher {
   const tokens = tokensOf(query);
   // Nothing but punctuation: look for it as typed.
   if (!tokens.length) {
@@ -141,7 +180,7 @@ export function wordMatcher(query: string, how: 'all' | 'phrase'): TextMatcher {
     };
   }
 
-  const pieces = tokens.map(wordPattern);
+  const pieces = tokens.map((token) => piecePattern(token, also));
   const patterns =
     how === 'all'
       ? pieces.map((piece) => new RegExp(piece, 'iu'))

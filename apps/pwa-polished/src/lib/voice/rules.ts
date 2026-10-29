@@ -18,6 +18,8 @@
  * Runs in the voice worker, next to Needle.
  */
 
+import { editDistance } from '../fuzzy';
+
 export interface ToolSpec {
   name: string;
   description: string;
@@ -143,18 +145,6 @@ const BOOK_NAMES = [...new Set(BOOKS.map((b) => b.replace(/^\d /, '').toLowerCas
 const BOOK_ALT = BOOK_NAMES.map((b) => b.replace(/ /g, String.raw`\s+`)).join('|');
 const BOOK_RE = new RegExp(String.raw`\b(${BOOK_ALT})\b`);
 const LONG_BOOKS = BOOK_NAMES.filter((b) => !b.includes(' ') && b.length >= 5);
-
-export function editDistance(a: string, b: string): number {
-  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const cur = [i];
-    for (let j = 1; j <= b.length; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-    prev = cur;
-  }
-  return prev[b.length];
-}
 
 /**
  * A book of the Bible is named, with or without a chapter, or close enough to
