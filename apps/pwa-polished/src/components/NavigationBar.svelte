@@ -24,7 +24,8 @@
     type SearchResult,
   } from "../lib/services/searchService";
   import { buildSearchTree } from "../lib/searchTree";
-  import { closeSpelling, warmSearchIndex } from "../lib/search/searchClient";
+  import { closeSpelling, suggestFor, warmSearchIndex } from "../lib/search/searchClient";
+  import type { Suggestion } from "../lib/search/searchWorker";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import { portal } from "../lib/portal";
@@ -118,6 +119,9 @@
     ArrowFatLinesRight,
     DotsSix,
     Microphone,
+    MapPin,
+    Tag,
+    BookOpen,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
@@ -860,6 +864,17 @@
     const target = event.target as HTMLInputElement;
     searchQuery = target.value;
 
+    // New words are a new question: the last answer goes, and suggestions for
+    // these take its place until Enter.
+    if (searchRan || isSearching) {
+      dropSearchInFlight();
+      searchResults = [];
+      searchRan = false;
+      correctedFrom = null;
+      didYouMean = null;
+    }
+    scheduleSuggestions();
+
     if (!searchQuery.trim()) {
       dropSearchInFlight();
       searchResults = [];
@@ -875,6 +890,82 @@
 
   /** Has a search run, so the list has results (or their absence) to show below the Go-to row? */
   let searchRan = false;
+
+  /** What the box might be heading for, shown while typing (lib/search). */
+  let suggestions: Suggestion[] = [];
+  /** Nothing started with what's typed, so the suggestions are close spellings. */
+  let suggestionsClose = false;
+  /** The suggestion the arrow keys are on; -1 for none, when Enter searches as typed. */
+  let activeSuggestion = -1;
+  let suggestTimer: ReturnType<typeof setTimeout> | null = null;
+  let suggestTicket = 0;
+
+  const SUGGESTION_KINDS = { person: "Person", place: "Place", topic: "Topic", book: "Book" } as const;
+
+  function dropSuggestions() {
+    if (suggestTimer) clearTimeout(suggestTimer);
+    suggestTimer = null;
+    suggestTicket++;
+    suggestions = [];
+    suggestionsClose = false;
+    activeSuggestion = -1;
+  }
+
+  /**
+   * After a short pause, at two letters or more. A reference has its Go-to
+   * row instead. Only for the words still in the box, and never over a
+   * search's results.
+   */
+  function scheduleSuggestions() {
+    dropSuggestions();
+    const text = searchQuery.trim();
+    const ref = readQueryAsRef(text);
+    if (text.replace(/[^\p{L}\p{N}]/gu, "").length < 2 || ref?.kind === "ref" || ref?.kind === "overflow" || closeQueryRef(text)) return;
+    const ticket = suggestTicket;
+    suggestTimer = setTimeout(async () => {
+      suggestTimer = null;
+      const got = await suggestFor(text);
+      if (ticket !== suggestTicket || !got || searchQuery.trim() !== text || searchRan) return;
+      suggestions = got.items;
+      suggestionsClose = got.close;
+      activeSuggestion = -1;
+      if (suggestions.length) showResults = true;
+    }, 200);
+  }
+
+  /**
+   * A word fills the box and is searched. A person, place or topic opens the
+   * way its search result does, and a book opens at its first chapter.
+   */
+  function pickSuggestion(picked: Suggestion) {
+    dropSuggestions();
+    if (picked.kind === "word") {
+      searchQuery = picked.label;
+      void performSearch();
+      return;
+    }
+    if (picked.kind === "book") {
+      jumpToQueryRef({ book: picked.book, chapter: 1, verse: 1 });
+      return;
+    }
+    const result: SearchResult =
+      picked.kind === "person"
+        ? { type: "character", title: picked.label, data: { personId: picked.id, name: picked.label }, score: 0 }
+        : picked.kind === "place"
+          ? { type: "encyclopedia", title: picked.label, data: { entryId: picked.id, isPlace: true, primaryName: picked.label }, score: 0 }
+          : { type: "topical", title: picked.label, data: { topicId: picked.id, primaryName: picked.label }, score: 0 };
+    const input = searchContainerRef?.querySelector(".search-input") as HTMLInputElement | null;
+    if (input && document.activeElement === input) input.blur();
+    void handleResultClick(result);
+  }
+
+  /** The typed part of a suggestion, for marking: ["shep", "herd"]. */
+  function typedPart(label: string): [string, string] {
+    const typed = searchQuery.trim().replace(/\s+/g, " ");
+    return label.toLowerCase().startsWith(typed.toLowerCase())
+      ? [label.slice(0, typed.length), label.slice(typed.length)]
+      : ["", label];
+  }
 
   /**
    * What the box reads as, the way a note reads a reference — "1 cor 5",
@@ -929,12 +1020,23 @@
   }
 
   function handleSearchKeydown(event: KeyboardEvent) {
+    // The arrow keys walk the suggestions, and past either end back to the box.
+    const listed = showResults && !searchRan ? suggestions.length : 0;
+    if (listed && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      if (event.key === "ArrowDown") activeSuggestion = activeSuggestion + 1 >= listed ? -1 : activeSuggestion + 1;
+      else activeSuggestion = activeSuggestion <= -1 ? listed - 1 : activeSuggestion - 1;
+      return;
+    }
     if (event.key === "Enter" && searchQuery.trim()) {
-      submitSearch();
+      const picked = listed && activeSuggestion >= 0 ? suggestions[activeSuggestion] : null;
+      if (picked) pickSuggestion(picked);
+      else submitSearch();
     } else if (event.key === "Escape") {
       // Handled here, so a pane behind the bar doesn't close as well.
       event.preventDefault();
       showResults = false;
+      activeSuggestion = -1;
       if (!searchQuery.trim()) {
         searchExpanded = false;
       }
@@ -969,6 +1071,7 @@
     const ticket = ++searchTicket;
     isSearching = true;
     didYouMean = null;
+    dropSuggestions();
     // Asked alongside the search, so it's ready when the results are. A
     // misspelled book has its own Go-to row, so it isn't asked about twice.
     const spelling = opts.exact || closeQueryRef(query) ? Promise.resolve(null) : closeSpelling(query);
@@ -1224,6 +1327,7 @@
 
   async function restoreSearch(origin: SearchOrigin) {
     dropSearchInFlight();
+    dropSuggestions();
     searchQuery = origin.query;
     searchResults = origin.results;
     resultsQuery = origin.resultsQuery ?? origin.query;
@@ -1378,6 +1482,7 @@
     searchRan = false;
     correctedFrom = null;
     didYouMean = null;
+    dropSuggestions();
   }
 
   function toggleSearchNode(key: string) {
@@ -1398,6 +1503,7 @@
     searchExpanded = false;
     correctedFrom = null;
     didYouMean = null;
+    dropSuggestions();
   }
 
   async function expandSearch() {
@@ -3231,7 +3337,7 @@
 
   </div>
 
-  {#if showResults && (queryRef || closeRef || searchRan)}
+  {#if showResults && (queryRef || closeRef || searchRan || suggestions.length)}
     <div
       class="search-results-dropdown"
       class:positioned={searchResultsPlaced}
@@ -3266,6 +3372,45 @@
             englishRef={false}
             onOpen={() => jumpToQueryRef(goTo)}
           />
+        </div>
+      {/if}
+
+      {#if !searchRan && suggestions.length}
+        <div class="suggestions" role="listbox" aria-label="Suggestions">
+          {#if suggestionsClose}
+            <div class="spelling-caption suggestions-caption">Nothing starts with “{searchQuery.trim()}”. Close spellings:</div>
+          {/if}
+          {#each suggestions as suggestion, i (suggestion.kind + "|" + suggestion.label)}
+            {@const [typed, rest] = typedPart(suggestion.label)}
+            <!-- Its press keeps focus in the box, so the keyboard stays up for a word. -->
+            <button
+              type="button"
+              class="suggestion-row"
+              class:active={i === activeSuggestion}
+              role="option"
+              aria-selected={i === activeSuggestion}
+              on:mousedown|preventDefault
+              on:click={() => pickSuggestion(suggestion)}
+            >
+              <span class="suggestion-icon">
+                {#if suggestion.kind === "word"}
+                  <MagnifyingGlass size={13} weight="bold" />
+                {:else if suggestion.kind === "person"}
+                  <User size={13} weight="bold" />
+                {:else if suggestion.kind === "place"}
+                  <MapPin size={13} weight="bold" />
+                {:else if suggestion.kind === "topic"}
+                  <Tag size={13} weight="bold" />
+                {:else}
+                  <BookOpen size={13} weight="bold" />
+                {/if}
+              </span>
+              <span class="suggestion-label"><strong>{typed}</strong>{rest}</span>
+              {#if suggestion.kind !== "word"}
+                <span class="suggestion-kind">{SUGGESTION_KINDS[suggestion.kind]}</span>
+              {/if}
+            </button>
+          {/each}
         </div>
       {/if}
 
@@ -5028,6 +5173,58 @@
     padding: 2px 8px 6px;
     color: #888;
     font-size: 12px;
+  }
+
+  .suggestions {
+    padding: 4px 0;
+  }
+
+  .suggestions-caption {
+    padding: 6px 14px 4px;
+  }
+
+  .suggestion-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 14px;
+    background: transparent;
+    border: none;
+    color: #ccc;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .suggestion-row:hover,
+  .suggestion-row.active {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .suggestion-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: #888;
+  }
+
+  .suggestion-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .suggestion-label strong {
+    color: #f0f0f0;
+    font-weight: 600;
+  }
+
+  .suggestion-kind {
+    flex-shrink: 0;
+    color: #777;
+    font-size: 11px;
   }
 
   .spelling-row {

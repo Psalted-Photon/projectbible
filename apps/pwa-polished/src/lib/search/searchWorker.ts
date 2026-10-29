@@ -13,7 +13,7 @@
 
 import { wordLookups, wordMatcher, type WordLookup } from '../searchWords';
 import { cleanVersePreviewText } from '../verseRendering';
-import { translationSortIndex } from '../bibleData';
+import { BIBLE_BOOKS, bookTitle, translationSortIndex } from '../bibleData';
 import { soundKey, typoDistance } from '../fuzzy';
 import {
   INDEX_FORMAT,
@@ -22,6 +22,7 @@ import {
   decodeWordIndex,
   encodeWordIndex,
   findWord,
+  firstWordFrom,
   foldWord,
   matchVerses,
   verseAt,
@@ -328,23 +329,37 @@ function isKnown(lookup: WordLookup & { kind: 'forms' }): boolean {
  * ties. Null when nothing is close enough to be a fair guess.
  */
 function closestSpelling(word: string): string | null {
+  return closeSpellings(word, 1)[0] ?? null;
+}
+
+/**
+ * The `n` closest real words to one, closest first, by closestSpelling's
+ * measure. A `partial` word is still being typed, so it is measured against
+ * the start of each word ("nebakan" against "nebucha…").
+ */
+function closeSpellings(word: string, n: number, partial = false): string[] {
   const key = soundKey(word);
   const most = word.length <= 4 ? 1 : word.length <= 7 ? 2 : 3;
-  let best: { word: string; rank: number; count: number } | null = null;
+  const found: { word: string; rank: number; count: number }[] = [];
   for (const c of spellingPool()) {
     // Sounding alike allows more letters to differ (the voice worker's rule).
-    const soundMost = Math.max(2, Math.round(c.word.length * 0.45));
-    if (Math.abs(c.word.length - word.length) > Math.max(most, soundMost)) continue;
-    const kd = typoDistance(key, c.key);
-    const d = typoDistance(word, c.word);
+    // A word half typed has fewer letters to judge by, so it allows a little more.
+    const soundMost = partial ? Math.max(2, Math.round(word.length * 0.6)) : Math.max(2, Math.round(c.word.length * 0.45));
+    if (partial ? c.word.length < word.length - most : Math.abs(c.word.length - word.length) > Math.max(most, soundMost)) continue;
+    const kd = partial ? typoDistance(key, c.key.slice(0, key.length)) : typoDistance(key, c.key);
+    const d = partial
+      ? Math.min(...[-1, 0, 1].map((k) => typoDistance(word, c.word.slice(0, word.length + k))))
+      : typoDistance(word, c.word);
     const close = d <= most;
     const sounds = key.length >= 3 && kd <= (key.length >= 5 ? 2 : 1) && d <= soundMost;
     const sameStart = c.word[0] === word[0];
     if (d === 0 || (!close && !sounds) || (!sameStart && d > 1)) continue;
-    const rank = (close ? 0 : 10) + d + kd + (sameStart ? 0 : 1);
-    if (!best || rank < best.rank || (rank === best.rank && c.count > best.count)) best = { word: c.word, rank, count: c.count };
+    found.push({ word: c.word, rank: (close ? 0 : 10) + d + kd + (sameStart ? 0 : 1), count: c.count });
   }
-  return best?.word ?? null;
+  return found
+    .sort((a, b) => a.rank - b.rank || b.count - a.count)
+    .slice(0, n)
+    .map((f) => f.word);
 }
 
 /**
@@ -365,6 +380,98 @@ async function didYouMean(query: string): Promise<string | null> {
     return raw.replace(core, better);
   });
   return changed ? fixed.join(' ') : null;
+}
+
+// ── Suggestions while typing ────────────────────────────────────────────────
+
+export type Suggestion =
+  | { kind: 'word'; label: string }
+  | { kind: 'person' | 'place' | 'topic'; label: string; id: string | number }
+  | { kind: 'book'; label: string; book: string };
+
+export interface Suggestions {
+  items: Suggestion[];
+  /** Nothing starts with what was typed, so these are close spellings of it. */
+  close: boolean;
+}
+
+const SUGGESTION_MAX = 8;
+
+/** Each book under the names it can be typed as: "1 corinthians", "corinthians", "psalms". */
+const BOOK_NAMES = BIBLE_BOOKS.map((b) => ({
+  book: b.name,
+  label: bookTitle(b.name),
+  names: [...new Set([b.name, bookTitle(b.name), b.name.replace(/^[123] /, '')].map((n) => n.toLowerCase()))],
+}));
+
+/** A word as shown: the list keeps a Greek final sigma as σ. */
+const shownWord = (word: string) => word.replace(/σ$/u, 'ς');
+
+/** Bible words starting with `prefix`, most-used first, across every translation. */
+function wordsStarting(prefix: string): string[] {
+  const count = new Map<string, number>();
+  for (const index of indexes.values()) {
+    for (let w = firstWordFrom(index, prefix); w < index.words.length && index.words[w].startsWith(prefix); w++) {
+      const word = index.words[w];
+      if (/^\d+$/.test(word)) continue;
+      count.set(word, (count.get(word) ?? 0) + index.counts[w]);
+    }
+  }
+  return [...count].sort((a, b) => b[1] - a[1]).map(([word]) => word);
+}
+
+/** People, places or topics whose names start with `prefix`, the most written about first. */
+function namesStarting(prefix: string, kind: NamedThing['kind']): NamedThing[] {
+  const out: NamedThing[] = [];
+  for (let i = firstNameFrom(prefix); i < names.length && names[i].key.startsWith(prefix); i++) {
+    if (names[i].thing.kind === kind) out.push(names[i].thing);
+  }
+  return out.sort((a, b) => b.weight - a.weight);
+}
+
+/**
+ * Up to eight suggestions for what is typed so far: Bible words that finish
+ * its last word, then people, places, topics and books whose names start with
+ * it. Each kind gets a few places, and places a kind can't fill go to the
+ * others in that order. When nothing starts with it, close spellings of its
+ * last word. Never waits for a build: it answers from what is ready.
+ */
+function suggest(text: string): Suggestions {
+  if (!syncing) void sync();
+  const typed = text.trim().replace(/\s+/g, ' ');
+  const whole = foldWord(typed);
+  const words = typed.split(' ');
+  const last = foldWord((words.pop() ?? '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''));
+  const before = words.length ? `${words.join(' ')} ` : '';
+  if (whole.replace(/[^\p{L}\p{N}]/gu, '').length < 2) return { items: [], close: false };
+
+  const lists: Suggestion[][] = [
+    last.length >= 2 ? wordsStarting(last).map((w) => ({ kind: 'word' as const, label: before + shownWord(w) })) : [],
+    ...(['person', 'place', 'topic'] as const).map((kind) =>
+      namesStarting(whole, kind).map((t) => ({ kind, label: t.label, id: t.id })),
+    ),
+    BOOK_NAMES.filter((b) => b.names.some((n) => n.startsWith(whole))).map((b) => ({ kind: 'book' as const, label: b.label, book: b.book })),
+  ];
+  const take = lists.map((list, i) => Math.min(list.length, [3, 2, 1, 1, 1][i]));
+  let room = SUGGESTION_MAX - take.reduce((a, b) => a + b, 0);
+  while (room > 0) {
+    let gave = false;
+    for (let i = 0; i < lists.length && room > 0; i++) {
+      if (take[i] < lists[i].length) {
+        take[i]++;
+        room--;
+        gave = true;
+      }
+    }
+    if (!gave) break;
+  }
+  const items = lists.flatMap((list, i) => list.slice(0, take[i]));
+  if (items.length || last.length < 3 || !/^[a-z]+$/.test(last)) return { items, close: false };
+
+  return {
+    items: closeSpellings(last, 5, true).map((w) => ({ kind: 'word' as const, label: before + w })),
+    close: true,
+  };
 }
 
 async function syncNow(): Promise<void> {
@@ -482,6 +589,10 @@ self.onmessage = async (e: MessageEvent<{ id: number; action: string; payload?: 
 
       case 'didYouMean':
         result = await didYouMean(String(payload?.query ?? ''));
+        break;
+
+      case 'suggest':
+        result = suggest(String(payload?.text ?? ''));
         break;
 
       default:

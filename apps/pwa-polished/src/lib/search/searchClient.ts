@@ -11,7 +11,7 @@
  * the old way instead. A worker that stopped isn't started again that session.
  */
 
-import type { TranslationHits, VerseQuery } from './searchWorker';
+import type { Suggestions, TranslationHits, VerseQuery } from './searchWorker';
 
 let worker: Worker | null = null;
 let broken = false;
@@ -89,6 +89,16 @@ export async function closeSpelling(query: string): Promise<string | null> {
   warmSearchIndex();
   try {
     return await call<string | null>('didYouMean', { query });
+  } catch {
+    return null;
+  }
+}
+
+/** Suggestions for what is typed so far (Bible words, people, places, topics, books), or null when the worker can't say. */
+export async function suggestFor(text: string): Promise<Suggestions | null> {
+  warmSearchIndex();
+  try {
+    return await call<Suggestions>('suggest', { text });
   } catch {
     return null;
   }
