@@ -24,7 +24,7 @@
     type SearchResult,
   } from "../lib/services/searchService";
   import { buildSearchTree } from "../lib/searchTree";
-  import { warmSearchIndex } from "../lib/search/searchClient";
+  import { closeSpelling, warmSearchIndex } from "../lib/search/searchClient";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import { portal } from "../lib/portal";
@@ -32,7 +32,7 @@
   import VerseRefRow from "./VerseRefRow.svelte";
   import RepeatVersesPanel from "./RepeatVersesPanel.svelte";
   import type { RepeatVersesScope } from "../lib/repeatVerses";
-  import { readQueryAsRef } from "../lib/bibleRefs";
+  import { closeQueryRef, readQueryAsRef } from "../lib/bibleRefs";
   import { booksInTranslation } from "../lib/translationBooks";
   import { defaultTranslationFor, translationForJump, testamentOf } from "../lib/testamentDefaults";
   import { showNotice } from "../stores/noticeStore";
@@ -865,7 +865,9 @@
       searchResults = [];
       showResults = false;
       searchRan = false;
-    } else if (readQueryAsRef(searchQuery)) {
+      correctedFrom = null;
+      didYouMean = null;
+    } else if (readQueryAsRef(searchQuery) || closeQueryRef(searchQuery)) {
       // Open the list for the Go-to row while it's being typed, before any search.
       showResults = true;
     }
@@ -879,6 +881,31 @@
    * "rom. 8:28". Drives the Go-to row at the top of the list.
    */
   $: queryRef = readQueryAsRef(searchQuery);
+
+  /** A reference with its book misspelled ("Phillipians 4:13"), offered as "Did you mean". */
+  $: closeRef = queryRef ? null : closeQueryRef(searchQuery);
+
+  /** The words the list's results were found for: what was typed, or a close spelling of it. */
+  let resultsQuery = "";
+  /** The typed words found nothing, so a close spelling's results are shown: the words as typed. */
+  let correctedFrom: string | null = null;
+  /** A close spelling, offered above the results the typed words did find. */
+  let didYouMean: string | null = null;
+
+  /** "Search for shepard instead": the typed words, as typed, with no spelling put right. */
+  function searchAsTyped() {
+    const typed = correctedFrom;
+    if (!typed) return;
+    correctedFrom = null;
+    void performSearch(false, { query: typed, exact: true });
+  }
+
+  /** "Did you mean shepherd?": the spelling goes in the box and is searched. */
+  function takeSpelling() {
+    if (!didYouMean) return;
+    searchQuery = didYouMean;
+    void performSearch();
+  }
 
   /** Enter and the glass: a reference goes straight there, anything else is searched. */
   function submitSearch() {
@@ -924,16 +951,27 @@
     isSearching = false;
   }
 
-  async function performSearch(loadAll: boolean = false) {
-    if (!searchQuery.trim()) {
+  /**
+   * Search the box's words, or `query` in their place (a close spelling, or
+   * the words as typed). `exact` searches them as given, with no close
+   * spelling looked for.
+   */
+  async function performSearch(loadAll: boolean = false, opts: { query?: string; exact?: boolean } = {}) {
+    const query = (opts.query ?? searchQuery).trim();
+    if (!query) {
       dropSearchInFlight();
       searchResults = [];
       showResults = false;
       return;
     }
+    if (opts.query === undefined) correctedFrom = null;
 
     const ticket = ++searchTicket;
     isSearching = true;
+    didYouMean = null;
+    // Asked alongside the search, so it's ready when the results are. A
+    // misspelled book has its own Go-to row, so it isn't asked about twice.
+    const spelling = opts.exact || closeQueryRef(query) ? Promise.resolve(null) : closeSpelling(query);
 
     // The list fills in as each category finishes; the spinner stays until
     // the last one has. The last search's results stay up until this one has
@@ -945,6 +983,7 @@
       if (!results.length && !final) return;
       if (fresh) {
         fresh = false;
+        resultsQuery = query;
         expandedSearchNodes = new Set();
         // Auto-scroll to show the search container. The list places itself and
         // follows the strip, so it needs no help here (placeUnderSearch).
@@ -975,13 +1014,25 @@
     try {
       const limit = loadAll ? -1 : 250;
       // Explicit search, so the expensive categories (commentaries) run too.
-      const results = await searchService.search(searchQuery, {
+      const results = await searchService.search(query, {
         limit,
         deep: true,
         translation: currentTranslation,
         onUpdate: (partial) => show(partial, false),
       });
       show(results, true);
+
+      // A word that found nothing: with nothing found at all, the close
+      // spelling's results are shown instead, saying so; otherwise it's offered.
+      const fix = await spelling;
+      if (ticket !== searchTicket || !fix || fix.toLowerCase() === query.toLowerCase()) return;
+      if (!results.length) {
+        correctedFrom = query;
+        await performSearch(loadAll, { query: fix, exact: true });
+        if (!searchResults.length) correctedFrom = null;
+      } else {
+        didYouMean = fix;
+      }
     } catch (error) {
       if (ticket !== searchTicket) return;
       console.error("Search error:", error);
@@ -994,9 +1045,11 @@
   }
 
   async function loadAllResults() {
+    // The same words again, whichever the list is showing.
+    const again = () => (correctedFrom ? performSearch(true, { query: resultsQuery, exact: true }) : performSearch(true));
     // A thousand or fewer loads quickly and scrolls fine, so it doesn't ask.
     if (totalResultCount <= 1000) {
-      await performSearch(true);
+      await again();
       return;
     }
     const message =
@@ -1005,7 +1058,7 @@
         : `Load all ${totalResultCount.toLocaleString()} results?`;
 
     if (await askConfirm(message, { confirmLabel: 'Load all' })) {
-      await performSearch(true);
+      await again();
     }
   }
 
@@ -1146,6 +1199,10 @@
     showingAll: boolean;
     expandedUi: boolean;
     scrollTop: number;
+    /** Left by an older version of the app without these, so each may be missing. */
+    resultsQuery?: string;
+    correctedFrom?: string | null;
+    didYouMean?: string | null;
   }
 
   function snapshotSearch(): SearchOrigin {
@@ -1159,6 +1216,9 @@
       showingAll,
       expandedUi: searchExpanded,
       scrollTop: searchResultsEl?.scrollTop ?? 0,
+      resultsQuery,
+      correctedFrom,
+      didYouMean,
     };
   }
 
@@ -1166,6 +1226,9 @@
     dropSearchInFlight();
     searchQuery = origin.query;
     searchResults = origin.results;
+    resultsQuery = origin.resultsQuery ?? origin.query;
+    correctedFrom = origin.correctedFrom ?? null;
+    didYouMean = origin.didYouMean ?? null;
     expandedSearchNodes = new Set(origin.expanded);
     totalResultCount = origin.total;
     displayedResultCount = origin.displayed;
@@ -1313,6 +1376,8 @@
     searchQuery = "";
     searchResults = [];
     searchRan = false;
+    correctedFrom = null;
+    didYouMean = null;
   }
 
   function toggleSearchNode(key: string) {
@@ -1331,6 +1396,8 @@
     showResults = false;
     searchRan = false;
     searchExpanded = false;
+    correctedFrom = null;
+    didYouMean = null;
   }
 
   async function expandSearch() {
@@ -3164,7 +3231,7 @@
 
   </div>
 
-  {#if showResults && (queryRef || searchRan)}
+  {#if showResults && (queryRef || closeRef || searchRan)}
     <div
       class="search-results-dropdown"
       class:positioned={searchResultsPlaced}
@@ -3187,9 +3254,32 @@
             onOpen={() => jumpToQueryRef(goTo)}
           />
         </div>
+      {:else if closeRef}
+        {@const goTo = closeRef}
+        <div class="goto-row">
+          <div class="spelling-caption">Did you mean</div>
+          <VerseRefRow
+            book={goTo.book}
+            chapter={goTo.chapter}
+            verse={goTo.verse}
+            label={goTo.label}
+            englishRef={false}
+            onOpen={() => jumpToQueryRef(goTo)}
+          />
+        </div>
       {/if}
 
       {#if searchRan}
+        {#if correctedFrom}
+          <div class="spelling-row">
+            Showing results for <strong>{resultsQuery}</strong> ·
+            <button class="load-all-link" on:click={searchAsTyped}>search for {correctedFrom} instead</button>
+          </div>
+        {:else if didYouMean}
+          <div class="spelling-row">
+            Did you mean <button class="load-all-link" on:click={takeSpelling}>{didYouMean}</button>?
+          </div>
+        {/if}
         {#if displayedResultCount > 0}
           <div class="search-stats">
             Showing {displayedResultCount}
@@ -3207,7 +3297,7 @@
           <SearchResultsTree
             nodes={searchTree}
             expanded={expandedSearchNodes}
-            query={searchQuery}
+            query={correctedFrom ? resultsQuery : searchQuery}
             onToggle={toggleSearchNode}
             onSelect={handleResultClick}
           />
@@ -4932,6 +5022,24 @@
     padding: 10px 14px;
     color: #888;
     font-size: 13px;
+  }
+
+  .spelling-caption {
+    padding: 2px 8px 6px;
+    color: #888;
+    font-size: 12px;
+  }
+
+  .spelling-row {
+    padding: 10px 14px;
+    border-bottom: 1px solid #3a3a3a;
+    color: #aaa;
+    font-size: 13px;
+  }
+
+  .spelling-row strong {
+    color: #e0e0e0;
+    font-weight: 600;
   }
 
   .no-search-results {

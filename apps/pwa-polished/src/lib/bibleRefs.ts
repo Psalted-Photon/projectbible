@@ -16,7 +16,8 @@
 
 import { VERSE_COUNTS } from '@projectbible/core';
 import { BOOK_MAP, parseRefString } from './parseRefString';
-import { getBookChapters, normalizeBookName } from './bibleData';
+import { BIBLE_BOOKS, getBookChapters, normalizeBookName } from './bibleData';
+import { soundKey, typoDistance } from './fuzzy';
 
 // ---------------------------------------------------------------------------
 // Book name resolution
@@ -592,4 +593,61 @@ export function readQueryAsRef(query: string): QueryRef | null {
   }
 
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// A misspelled book, for the search box's "Did you mean"
+// ---------------------------------------------------------------------------
+
+/** The book names a close spelling is measured against, without their numbers. */
+const CLOSE_BOOKS = [
+  ...BIBLE_BOOKS.map((b) => {
+    const numbered = b.name.match(/^([123]) (.+)$/);
+    return { book: b.name, number: numbered?.[1] ?? null, base: (numbered?.[2] ?? b.name).toLowerCase() };
+  }),
+  { book: 'Psalm', number: null, base: 'psalms' },
+  { book: 'Song of Solomon', number: null, base: 'song of songs' },
+];
+
+const ORDINAL_DIGITS: Record<string, string> = { first: '1', second: '2', third: '3', i: '1', ii: '2', iii: '3' };
+
+/** A number, or a numbered book's ordinal, then the name, then the chapter and verses. */
+const CLOSE_REF_RE = /^(?:([123])\s*|(first|second|third|iii|ii|i)\s+)?([a-z][a-z ]*?)\.?\s+(\d[\d:;,\s–-]*)$/i;
+
+/**
+ * A reference whose book is misspelled ("Phillipians 4:13", "Ecclesiates 3"),
+ * read as the one book it is closest to. Only when readQueryAsRef can't read
+ * it, and kept apart from it, because Voice Control reads its words with that
+ * one and must never be handed a guess.
+ */
+export function closeQueryRef(query: string): { kind: 'ref'; book: string; chapter: number; verse: number; label: string } | null {
+  const q = query.trim().replace(/[.!?]+$/, '');
+  if (readQueryAsRef(q)) return null;
+  const m = q.match(CLOSE_REF_RE);
+  if (!m) return null;
+  const number = m[1] ?? (m[2] ? ORDINAL_DIGITS[m[2].toLowerCase()] : null);
+  const typed = m[3].toLowerCase().replace(/\s+/g, ' ').trim();
+  if (typed.replace(/ /g, '').length < 4) return null;
+
+  const most = typed.length <= 5 ? 1 : typed.length <= 8 ? 2 : 3;
+  const key = soundKey(typed);
+  let best: { book: string; d: number; kd: number } | null = null;
+  let tied = false;
+  for (const c of CLOSE_BOOKS) {
+    // A number goes with the numbered books only, and the numbered books need one.
+    if (!!number !== !!c.number) continue;
+    const d = typoDistance(typed, c.base);
+    if (d === 0 || d > most) continue;
+    const kd = typoDistance(key, soundKey(c.base));
+    if (!best || d < best.d || (d === best.d && kd < best.kd)) {
+      tied = false;
+      best = { book: c.book.replace(/^[123] /, ''), d, kd };
+    } else if (d === best.d && kd === best.kd && c.book.replace(/^[123] /, '') !== best.book) {
+      tied = true;
+    }
+  }
+  if (!best || tied) return null;
+
+  const ref = readQueryAsRef(`${number ? `${number} ` : ''}${best.book} ${m[4]}`);
+  return ref?.kind === 'ref' ? { ...ref, kind: 'ref' } : null;
 }

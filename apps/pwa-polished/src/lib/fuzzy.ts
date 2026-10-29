@@ -17,6 +17,25 @@ export function editDistance(a: string, b: string): number {
   return prev[b.length];
 }
 
+/**
+ * editDistance for typing: two neighboring letters swapped ("recieve",
+ * "jhon") count as one slip, the way they were made, not as two changes.
+ */
+export function typoDistance(a: string, b: string): number {
+  let before = Array.from({ length: b.length + 1 }, () => 0);
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) cur[j] = Math.min(cur[j], before[j - 2] + 1);
+    }
+    before = prev;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
 /** How a name sounds, roughly: "mephibosheth" and "mefa boshes" both come out "mfps(t)". */
 export function soundKey(s: string): string {
   const k = s.replace(/[^a-z]/g, '')

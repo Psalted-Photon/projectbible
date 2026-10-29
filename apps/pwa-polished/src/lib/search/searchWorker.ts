@@ -14,12 +14,15 @@
 import { wordLookups, wordMatcher, type WordLookup } from '../searchWords';
 import { cleanVersePreviewText } from '../verseRendering';
 import { translationSortIndex } from '../bibleData';
+import { soundKey, typoDistance } from '../fuzzy';
 import {
   INDEX_FORMAT,
   buildWordIndex,
   compareVerses,
   decodeWordIndex,
   encodeWordIndex,
+  findWord,
+  foldWord,
   matchVerses,
   verseAt,
   type VerseRow,
@@ -226,9 +229,148 @@ async function forgetSavedExcept(keep: Set<string>): Promise<void> {
   }
 }
 
+// ── People, places and topics ───────────────────────────────────────────────
+// Their names, read with the word lists, for close spellings and suggestions.
+
+/** A person, place or topic, enough to name it and open it. */
+export interface NamedThing {
+  kind: 'person' | 'place' | 'topic';
+  /** As shown: "Abraham", "Jerusalem", "Care". */
+  label: string;
+  /** What opens it: the person's id, the place's encyclopedia entry, the topic's id. */
+  id: string | number;
+  /** How much the Bible has on it, in verses or references. */
+  weight: number;
+}
+
+/** Every name, lower case, in sorted order. */
+let names: { key: string; thing: NamedThing }[] = [];
+
+async function loadNames(db: IDBDatabase): Promise<void> {
+  const best = new Map<string, NamedThing>();
+  const add = (thing: NamedThing) => {
+    const key = `${thing.kind}|${foldWord(thing.label)}`;
+    const had = best.get(key);
+    if (!had || thing.weight > had.weight) best.set(key, thing);
+  };
+  for (const p of await getAll(db, 'people')) {
+    const name = String(p.name ?? '').trim();
+    if (name) add({ kind: 'person', label: name, id: p.id, weight: p.verseCount ?? 0 });
+  }
+  for (const p of await getAll(db, 'isbe_places')) {
+    const name = String(p.primaryName ?? '').trim();
+    if (name && p.entryId != null) add({ kind: 'place', label: name, id: p.entryId, weight: p.verseCount ?? 0 });
+  }
+  for (const t of await getAll(db, 'naves_topics')) {
+    const name = String(t.primaryName || t.title || '').trim();
+    if (name) add({ kind: 'topic', label: name, id: t.topicId, weight: t.refCount ?? 0 });
+  }
+  names = [...best.values()]
+    .map((thing) => ({ key: foldWord(thing.label), thing }))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+/** Where the first name at or after `prefix` sits in `names`. */
+function firstNameFrom(prefix: string): number {
+  let lo = 0;
+  let hi = names.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (names[mid].key < prefix) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+// ── Close spellings ─────────────────────────────────────────────────────────
+
+interface Spelling {
+  word: string;
+  /** How sure we can be people mean it: verses using it, or a name's weight. */
+  count: number;
+  /** How it sounds (lib/fuzzy). */
+  key: string;
+}
+
+/** Every plain English word in the Bible text and every one-word name, built when first asked for. */
+let spellings: Spelling[] | null = null;
+
+function spellingPool(): Spelling[] {
+  if (spellings) return spellings;
+  const count = new Map<string, number>();
+  for (const index of indexes.values()) {
+    for (let w = 0; w < index.words.length; w++) {
+      const word = index.words[w];
+      if (word.length >= 3 && /^[a-z]+$/.test(word)) count.set(word, (count.get(word) ?? 0) + index.counts[w]);
+    }
+  }
+  for (const { key, thing } of names) {
+    if (/^[a-z]{3,}$/.test(key) && !count.has(key)) count.set(key, thing.weight);
+  }
+  spellings = [...count].map(([word, n]) => ({ word, count: n, key: soundKey(word) }));
+  return spellings;
+}
+
+/** The typed word finds something: one of its forms is in a translation, or a name starts with it. */
+function isKnown(lookup: WordLookup & { kind: 'forms' }): boolean {
+  for (const index of indexes.values()) {
+    for (const form of lookup.forms) if (findWord(index, form) !== -1) return true;
+  }
+  const at = firstNameFrom(lookup.word);
+  return at < names.length && names[at].key.startsWith(lookup.word);
+}
+
+/**
+ * The real word closest to one that finds nothing. A word a slip or two away
+ * comes first ("shepard" → shepherd); only when there is none does one that
+ * merely sounds the same, so "nebakanezer" still reaches nebuchadnezzar. A
+ * word that starts differently must be a single slip away. Common words win
+ * ties. Null when nothing is close enough to be a fair guess.
+ */
+function closestSpelling(word: string): string | null {
+  const key = soundKey(word);
+  const most = word.length <= 4 ? 1 : word.length <= 7 ? 2 : 3;
+  let best: { word: string; rank: number; count: number } | null = null;
+  for (const c of spellingPool()) {
+    // Sounding alike allows more letters to differ (the voice worker's rule).
+    const soundMost = Math.max(2, Math.round(c.word.length * 0.45));
+    if (Math.abs(c.word.length - word.length) > Math.max(most, soundMost)) continue;
+    const kd = typoDistance(key, c.key);
+    const d = typoDistance(word, c.word);
+    const close = d <= most;
+    const sounds = key.length >= 3 && kd <= (key.length >= 5 ? 2 : 1) && d <= soundMost;
+    const sameStart = c.word[0] === word[0];
+    if (d === 0 || (!close && !sounds) || (!sameStart && d > 1)) continue;
+    const rank = (close ? 0 : 10) + d + kd + (sameStart ? 0 : 1);
+    if (!best || rank < best.rank || (rank === best.rank && c.count > best.count)) best = { word: c.word, rank, count: c.count };
+  }
+  return best?.word ?? null;
+}
+
+/**
+ * The query with each word that finds nothing swapped for its closest real
+ * word ("shepard" → shepherd), or null when every word finds something or
+ * nothing is close.
+ */
+async function didYouMean(query: string): Promise<string | null> {
+  await (syncing ?? sync());
+  let changed = false;
+  const fixed = query.trim().split(/\s+/).map((raw) => {
+    const core = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    const lookup = core ? wordLookups(core)?.[0] : undefined;
+    if (!lookup || lookup.kind !== 'forms' || lookup.word.length < 3 || isKnown(lookup)) return raw;
+    const better = closestSpelling(lookup.word);
+    if (!better) return raw;
+    changed = true;
+    return raw.replace(core, better);
+  });
+  return changed ? fixed.join(' ') : null;
+}
+
 async function syncNow(): Promise<void> {
   const db = await openAppDb();
   if (!db) throw new Error('The database could not be opened');
+  spellings = null;
   const wanted = await signatures(db);
   for (const tid of [...indexes.keys()]) if (!wanted.has(tid)) indexes.delete(tid);
   for (const [tid, signature] of wanted) {
@@ -244,6 +386,8 @@ async function syncNow(): Promise<void> {
     await save(index);
   }
   await forgetSavedExcept(new Set([...wanted.keys()].map(fileName)));
+  await loadNames(db);
+  spellings = null;
 }
 
 /** Bring every list up to date with the database. Runs one at a time. */
@@ -334,6 +478,10 @@ self.onmessage = async (e: MessageEvent<{ id: number; action: string; payload?: 
 
       case 'verses':
         result = await searchVerses(payload as VerseQuery);
+        break;
+
+      case 'didYouMean':
+        result = await didYouMean(String(payload?.query ?? ''));
         break;
 
       default:

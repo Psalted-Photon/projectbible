@@ -80,6 +80,20 @@ export async function indexedVerseSearch(q: VerseQuery): Promise<TranslationHits
   }
 }
 
+/**
+ * The query with each word that finds nothing swapped for the closest real
+ * word, name, place or topic ("shepard" → "shepherd"), or null when every word
+ * finds something, nothing is close, or the worker can't say.
+ */
+export async function closeSpelling(query: string): Promise<string | null> {
+  warmSearchIndex();
+  try {
+    return await call<string | null>('didYouMean', { query });
+  } catch {
+    return null;
+  }
+}
+
 if (typeof window !== 'undefined') {
   // A pack in or out: the lists catch up once the installs settle.
   let resyncTimer: ReturnType<typeof setTimeout> | null = null;
