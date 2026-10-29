@@ -3,8 +3,9 @@
  * voice/voiceControl.ts is the page's side of Voice Control's.
  *
  * The worker starts a little after launch, once the app has settled, and
- * builds the word lists in the background; a search before that starts it.
- * When a pack comes in or goes, it brings the lists up to date.
+ * reads the word lists it saved last time, building any that are missing or
+ * out of date in the background; a search before that starts it. When a pack
+ * comes in or goes, it brings the lists up to date.
  *
  * Anything going wrong here hands back null, and the search reads every verse
  * the old way instead. A worker that stopped isn't started again that session.

@@ -268,3 +268,87 @@ export function matchVerses(
   if (acc) for (let v = 0; v < n; v++) if (acc[v]) verses.push(v);
   return { verses, exact };
 }
+
+// ── Saving ──────────────────────────────────────────────────────────────────
+// One file per translation: a short header, then each part in turn, every
+// part starting on a four-byte boundary.
+
+const MAGIC = 0x50425749; // "PBWI"
+
+interface SavedHeader {
+  format: number;
+  translation: string;
+  signature: string;
+  books: string[];
+  oddIds: Record<number, string>;
+}
+
+export function encodeWordIndex(index: WordIndex): Blob {
+  const header: SavedHeader = {
+    format: INDEX_FORMAT,
+    translation: index.translation,
+    signature: index.signature,
+    books: index.books,
+    oddIds: index.oddIds,
+  };
+  const enc = new TextEncoder();
+  const parts: Uint8Array[] = [
+    enc.encode(JSON.stringify(header)),
+    enc.encode(index.words.join('\n')),
+    index.bookOf,
+    new Uint8Array(index.chapterOf.buffer, index.chapterOf.byteOffset, index.chapterOf.byteLength),
+    new Uint8Array(index.verseOf.buffer, index.verseOf.byteOffset, index.verseOf.byteLength),
+    new Uint8Array(index.counts.buffer, index.counts.byteOffset, index.counts.byteLength),
+    new Uint8Array(index.starts.buffer, index.starts.byteOffset, index.starts.byteLength),
+    index.postings,
+  ];
+  const pieces: BlobPart[] = [new Uint32Array([MAGIC, parts.length])];
+  for (const part of parts) {
+    pieces.push(new Uint32Array([part.byteLength]));
+    pieces.push(part as unknown as BlobPart);
+    const pad = (4 - (part.byteLength % 4)) % 4;
+    if (pad) pieces.push(new Uint8Array(pad));
+  }
+  return new Blob(pieces);
+}
+
+/** A saved list, or null when it is damaged or from another format. */
+export function decodeWordIndex(buffer: ArrayBuffer): WordIndex | null {
+  try {
+    const head = new Uint32Array(buffer, 0, 2);
+    if (head[0] !== MAGIC || head[1] !== 8) return null;
+    let at = 8;
+    const parts: ArrayBuffer[] = [];
+    for (let i = 0; i < 8; i++) {
+      const length = new Uint32Array(buffer, at, 1)[0];
+      at += 4;
+      if (at + length > buffer.byteLength) return null;
+      // A copy, so each typed array starts on its own aligned buffer.
+      parts.push(buffer.slice(at, at + length));
+      at += length + ((4 - (length % 4)) % 4);
+    }
+    const dec = new TextDecoder();
+    const header = JSON.parse(dec.decode(parts[0])) as SavedHeader;
+    if (header.format !== INDEX_FORMAT) return null;
+    const wordsText = dec.decode(parts[1]);
+    const index: WordIndex = {
+      translation: header.translation,
+      signature: header.signature,
+      books: header.books,
+      oddIds: header.oddIds ?? {},
+      words: wordsText ? wordsText.split('\n') : [],
+      bookOf: new Uint8Array(parts[2]),
+      chapterOf: new Uint16Array(parts[3]),
+      verseOf: new Uint16Array(parts[4]),
+      counts: new Uint32Array(parts[5]),
+      starts: new Uint32Array(parts[6]),
+      postings: new Uint8Array(parts[7]),
+    };
+    const n = index.bookOf.length;
+    if (index.chapterOf.length !== n || index.verseOf.length !== n) return null;
+    if (index.counts.length !== index.words.length || index.starts.length !== index.words.length + 1) return null;
+    return index;
+  } catch {
+    return null;
+  }
+}

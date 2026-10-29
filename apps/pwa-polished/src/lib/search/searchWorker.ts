@@ -18,6 +18,8 @@ import {
   INDEX_FORMAT,
   buildWordIndex,
   compareVerses,
+  decodeWordIndex,
+  encodeWordIndex,
   matchVerses,
   verseAt,
   type VerseRow,
@@ -151,6 +153,79 @@ async function signatures(db: IDBDatabase): Promise<Map<string, string>> {
   return out;
 }
 
+// ── Kept between launches ───────────────────────────────────────────────────
+// Each finished list is saved to the browser's file storage, the way the
+// voice files are kept, so a later launch reads it in a moment instead of
+// building it again. A saved list is used only while its signature still
+// matches the translation's; one that doesn't is built again and replaces it.
+
+const FOLDER = 'search-index';
+
+async function folder(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    return await root.getDirectoryHandle(FOLDER, { create: true });
+  } catch {
+    return null;
+  }
+}
+
+const fileName = (tid: string) => `${encodeURIComponent(tid)}.idx`;
+
+async function loadSaved(tid: string, signature: string): Promise<WordIndex | null> {
+  const dir = await folder();
+  if (!dir) return null;
+  try {
+    const file = await (await dir.getFileHandle(fileName(tid))).getFile();
+    const index = decodeWordIndex(await file.arrayBuffer());
+    return index && index.translation === tid && index.signature === signature ? index : null;
+  } catch {
+    return null;
+  }
+}
+
+async function save(index: WordIndex): Promise<void> {
+  const dir = await folder();
+  if (!dir) return;
+  const name = fileName(index.translation);
+  try {
+    const handle = await dir.getFileHandle(name, { create: true });
+    const blob = encodeWordIndex(index);
+    if (typeof (handle as any).createWritable === 'function') {
+      const writable = await (handle as any).createWritable();
+      await writable.write(blob);
+      await writable.close();
+    } else {
+      // Workers that only have the synchronous handle.
+      const access = await (handle as any).createSyncAccessHandle();
+      try {
+        access.truncate(0);
+        access.write(new Uint8Array(await blob.arrayBuffer()), { at: 0 });
+        access.flush();
+      } finally {
+        access.close();
+      }
+    }
+  } catch (error) {
+    // A half-written file must not be read back next launch.
+    console.warn('[Search] could not keep the word list for', index.translation, error);
+    await dir.removeEntry(name).catch(() => {});
+  }
+}
+
+/** Saved lists for translations no longer installed go too. */
+async function forgetSavedExcept(keep: Set<string>): Promise<void> {
+  const dir = await folder();
+  if (!dir) return;
+  try {
+    const names: string[] = [];
+    for await (const name of (dir as any).keys() as AsyncIterable<string>) names.push(name);
+    for (const name of names) if (!keep.has(name)) await dir.removeEntry(name).catch(() => {});
+  } catch {
+    // Nothing to tidy, or no way to.
+  }
+}
+
 async function syncNow(): Promise<void> {
   const db = await openAppDb();
   if (!db) throw new Error('The database could not be opened');
@@ -158,9 +233,17 @@ async function syncNow(): Promise<void> {
   for (const tid of [...indexes.keys()]) if (!wanted.has(tid)) indexes.delete(tid);
   for (const [tid, signature] of wanted) {
     if (indexes.get(tid)?.signature === signature) continue;
+    const saved = await loadSaved(tid, signature);
+    if (saved) {
+      indexes.set(tid, saved);
+      continue;
+    }
     const rows = (await getAll(db, 'verses', 'translationId', tid)) as VerseRow[];
-    indexes.set(tid, await buildWordIndex(tid, signature, rows, pause));
+    const index = await buildWordIndex(tid, signature, rows, pause);
+    indexes.set(tid, index);
+    await save(index);
   }
+  await forgetSavedExcept(new Set([...wanted.keys()].map(fileName)));
 }
 
 /** Bring every list up to date with the database. Runs one at a time. */
