@@ -71,6 +71,12 @@ export interface SearchOptions {
    * encyclopedia and topical titles, and Strong's.
    */
   pattern?: RegExp;
+  /**
+   * Called each time a category finishes, with every category found so far,
+   * in their usual order, so the list can fill in as they come. Commentaries
+   * read the most, so without it everything waits on them.
+   */
+  onUpdate?: (categories: SearchCategory[]) => void;
 }
 
 /** The two ways a category can want the words: anywhere in it, or together. */
@@ -171,34 +177,32 @@ export class UnifiedSearchService {
       : { all: wordMatcher(normalizedQuery, 'all'), phrase: wordMatcher(normalizedQuery, 'phrase'), pattern: false };
 
     // Every category is independent, so fetch them together rather than
-    // serially — the slowest one sets the pace instead of their sum.
-    const [verses, strongs, notes, journal, saved, characters, encyclopedia, topical, devotionals, commentaries] = await Promise.all([
-      this.searchVerses(normalizedQuery, match, options),
-      this.searchStrongs(normalizedQuery),
-      this.searchNotes(match.phrase),
-      this.searchJournal(match.phrase),
-      this.searchSaved(match.phrase),
-      this.searchCharacters(normalizedQuery),
-      this.searchEncyclopedia(normalizedQuery, !!options.deep),
-      this.searchTopical(normalizedQuery, !!options.deep),
-      this.searchDevotionals(normalizedQuery, match),
-      options.deep ? this.searchCommentaries(normalizedQuery, match) : Promise.resolve([]),
-    ]);
-
-    const categories: SearchCategory[] = [
-      { key: 'bible', name: 'Bible', count: verses.results.length, results: verses.results, total: verses.total },
-      { key: 'strongs', name: "Strong's", count: strongs.length, results: strongs },
-      { key: 'notes', name: 'Notes', count: notes.length, results: notes },
-      { key: 'journal', name: 'Journal', count: journal.length, results: journal },
-      { key: 'saved', name: 'Highlights', count: saved.length, results: saved },
-      { key: 'characters', name: 'Biblical Characters', count: characters.length, results: characters },
-      { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', count: encyclopedia.length, results: encyclopedia },
-      { key: 'topical', name: "Topical (Nave's)", count: topical.length, results: topical },
-      { key: 'devotionals', name: 'Devotionals', count: devotionals.length, results: devotionals },
-      { key: 'commentaries', name: 'Commentaries', count: commentaries.length, results: commentaries },
+    // serially — the slowest one sets the pace instead of their sum — and
+    // hand each one on as it lands.
+    const listOf = (run: Promise<SearchResult[]>) => run.then((results) => ({ results }));
+    const sources: { key: SearchCategoryKey; name: string; run: Promise<{ results: SearchResult[]; total?: number }> }[] = [
+      { key: 'bible', name: 'Bible', run: this.searchVerses(normalizedQuery, match, options) },
+      { key: 'strongs', name: "Strong's", run: listOf(this.searchStrongs(normalizedQuery)) },
+      { key: 'notes', name: 'Notes', run: listOf(this.searchNotes(match.phrase)) },
+      { key: 'journal', name: 'Journal', run: listOf(this.searchJournal(match.phrase)) },
+      { key: 'saved', name: 'Highlights', run: listOf(this.searchSaved(match.phrase)) },
+      { key: 'characters', name: 'Biblical Characters', run: listOf(this.searchCharacters(normalizedQuery)) },
+      { key: 'encyclopedia', name: 'Encyclopedia (ISBE)', run: listOf(this.searchEncyclopedia(normalizedQuery, !!options.deep)) },
+      { key: 'topical', name: "Topical (Nave's)", run: listOf(this.searchTopical(normalizedQuery, !!options.deep)) },
+      { key: 'devotionals', name: 'Devotionals', run: listOf(this.searchDevotionals(normalizedQuery, match)) },
+      { key: 'commentaries', name: 'Commentaries', run: listOf(options.deep ? this.searchCommentaries(normalizedQuery, match) : Promise.resolve([])) },
     ];
 
-    return categories.filter((c) => c.count > 0);
+    const found: (SearchCategory | null)[] = sources.map(() => null);
+    const soFar = () => found.filter((c): c is SearchCategory => !!c && c.count > 0);
+    await Promise.all(
+      sources.map(async ({ key, name, run }, i) => {
+        const { results, total } = await run.catch(() => ({ results: [] as SearchResult[], total: undefined }));
+        found[i] = { key, name, count: results.length, results, ...(total !== undefined ? { total } : {}) };
+        options.onUpdate?.(soFar());
+      }),
+    );
+    return soFar();
   }
 
   // ── Bible ────────────────────────────────────────────────────────────────

@@ -934,38 +934,54 @@
 
     const ticket = ++searchTicket;
     isSearching = true;
-    try {
-      const limit = loadAll ? -1 : 250;
-      // Explicit search, so the expensive categories (commentaries) run too.
-      const results = await searchService.search(searchQuery, { limit, deep: true, translation: currentTranslation });
+
+    // The list fills in as each category finishes; the spinner stays until
+    // the last one has. The last search's results stay up until this one has
+    // something to show, or has finished with nothing.
+    let fresh = true;
+    let openedBible = false;
+    const show = (results: SearchCategory[], final: boolean) => {
       if (ticket !== searchTicket) return;
+      if (!results.length && !final) return;
+      if (fresh) {
+        fresh = false;
+        expandedSearchNodes = new Set();
+        // Auto-scroll to show the search container. The list places itself and
+        // follows the strip, so it needs no help here (placeUnderSearch).
+        if (searchContainerRef) scrollToShowButton(searchContainerRef);
+      }
       searchResults = results;
 
       // Calculate displayed count from all categories
-      displayedResultCount = searchResults.reduce(
-        (sum, category) => sum + category.count,
-        0,
-      );
+      displayedResultCount = results.reduce((sum, category) => sum + category.count, 0);
       // "Load all" only applies to Bible results — that's the count that gets
-      // capped, and the group says how many there are in all. This used to be
-      // a second full scan of the verses, run after the first just to count
-      // them, which doubled the wait.
-      const bible = searchResults.find((c) => c.key === "bible");
+      // capped, and the group says how many there are in all.
+      const bible = results.find((c) => c.key === "bible");
       const bibleCount = bible?.count ?? 0;
       totalResultCount = bible?.total ?? bibleCount;
       showingAll = loadAll || bibleCount >= totalResultCount;
 
-      // Open the Bible group by default so the common case is one click closer.
-      expandedSearchNodes = new Set(bibleCount > 0 ? ["bible"] : []);
+      // Open the Bible group by default so the common case is one click closer:
+      // once, as it arrives, so a group closed since stays closed.
+      if (!openedBible && bibleCount > 0) {
+        openedBible = true;
+        expandedSearchNodes = new Set([...expandedSearchNodes, "bible"]);
+      }
 
       searchRan = true;
       showResults = true;
+    };
 
-      // Auto-scroll to show the search container. The list places itself and
-      // follows the strip, so it needs no help here (placeUnderSearch).
-      if (searchContainerRef) {
-        scrollToShowButton(searchContainerRef);
-      }
+    try {
+      const limit = loadAll ? -1 : 250;
+      // Explicit search, so the expensive categories (commentaries) run too.
+      const results = await searchService.search(searchQuery, {
+        limit,
+        deep: true,
+        translation: currentTranslation,
+        onUpdate: (partial) => show(partial, false),
+      });
+      show(results, true);
     } catch (error) {
       if (ticket !== searchTicket) return;
       console.error("Search error:", error);
@@ -3195,7 +3211,7 @@
             onToggle={toggleSearchNode}
             onSelect={handleResultClick}
           />
-        {:else}
+        {:else if !isSearching}
           <div class="no-search-results">
             No results found for "{searchQuery}"
           </div>
