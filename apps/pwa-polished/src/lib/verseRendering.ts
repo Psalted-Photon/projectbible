@@ -394,7 +394,7 @@ export function renderVerseHtml(text: string, spans?: { s: number; e: number }[]
     }
   }
 
-  const { html } = renderTextWithInlineNotes(processed, translationId === 'net');
+  const { html } = renderTextWithInlineNotes(processed, translationId?.toLowerCase() === 'net');
 
   return nestSentinels(html)
     // Poetic lines. A leading marker opens the verse rather than breaking it,
