@@ -2,7 +2,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import {
     WINDOW_TYPES_BY_GROUP,
-    initialContentFor,
+    fillWindow,
     openHarmonyView,
     openFamilyTree,
     type WindowChoice,
@@ -39,7 +39,7 @@
       windowStore.closeWindow(windowId);
       return;
     }
-    windowStore.setWindowContent(windowId, contentType, initialContentFor(contentType));
+    fillWindow(windowId, contentType);
   }
 </script>
 

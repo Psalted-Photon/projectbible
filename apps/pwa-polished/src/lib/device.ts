@@ -28,6 +28,16 @@ export function isPhoneOrTablet(): boolean {
   return isIOS() || /Android/i.test(navigator.userAgent);
 }
 
+/**
+ * A phone too narrow held upright for a wide picture: the screen's short side
+ * is under 600px. Normal phones and the Fold's cover screen; the Fold's inner
+ * screen and tablets are wider.
+ */
+export function isNarrowPhone(): boolean {
+  if (typeof screen === 'undefined' || !isPhoneOrTablet()) return false;
+  return Math.min(screen.width, screen.height) < 600;
+}
+
 export function isAndroid(): boolean {
   if (typeof navigator === 'undefined') return false;
   return /Android/i.test(navigator.userAgent);

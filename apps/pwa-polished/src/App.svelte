@@ -43,6 +43,7 @@
   import { devotionalTargetFromParams, devotionalTargetFromUrl, DEVOTIONAL_PARAMS } from "./lib/devotionals/deepLink";
   import { openDevotional, type DevotionalTarget } from "./stores/devotionalStore";
   import { isInstalledApp } from "./lib/device";
+  import { applyOrientationLock } from "./lib/orientation";
   import { showEruda } from "./lib/devOptions";
 
   let appReady = false;
@@ -50,25 +51,7 @@
   let sharedDevotional: DevotionalTarget | null = null;
   let showReadingPlanModal = false;
 
-  // ── Orientation lock ──────────────────────────────────────────────────────
-  async function applyOrientationLock() {
-    if (typeof screen === 'undefined' || !screen.orientation) return;
-    const { allowRotation } = getSettings();
-    try {
-      if (allowRotation) {
-        screen.orientation.unlock();
-      } else {
-        try {
-          await (screen.orientation as any).lock('portrait-primary');
-        } catch {
-          await (screen.orientation as any).lock('portrait');
-        }
-      }
-    } catch {
-      // Desktop/tablet browsers may not support orientation lock — ignore
-    }
-  }
-
+  // ── Orientation lock (lib/orientation.ts) ─────────────────────────────────
   function handleOrientationChange() {
     const root = document.querySelector('.app-root') as HTMLElement | null;
     if (root) {

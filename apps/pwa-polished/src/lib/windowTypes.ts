@@ -11,8 +11,9 @@
  */
 
 import { get, writable } from 'svelte/store';
-import { windowStore, MAX_WINDOWS, type WindowContentType } from './stores/windowStore';
+import { windowStore, MAX_WINDOWS, type DockEdge, type WindowContentType } from './stores/windowStore';
 import { dockEdge, DOCK_SIZE } from './dockEdge';
+import { isNarrowPhone } from './device';
 import { navigationStore, availableTranslations } from '../stores/navigationStore';
 import { defaultTranslationFor, translationForJump } from './testamentDefaults';
 import { libraryPrefsStore, resumeTarget } from '../stores/libraryPrefsStore';
@@ -117,6 +118,11 @@ export function initialContentFor(type: WindowContentChoice): Record<string, any
   if (type === 'notes') {
     return { view: 'browse' };
   }
+  if (type === 'connections') {
+    // A narrow phone is asked to turn sideways. The pane takes the request
+    // once and clears it, so a reload never asks again.
+    return isNarrowPhone() ? { askTurn: true } : {};
+  }
   if (type === 'isbe' || type === 'person' || type === 'naves' || type === 'strongs') {
     // Land back on what you were reading only if you closed this shelf a few
     // minutes ago — enough to undo a misfired close, not enough to hand you
@@ -154,6 +160,33 @@ export function showWindowLimitNotice() {
 }
 
 /**
+ * Connections on a narrow phone is always the bottom half, even when it opens
+ * with the phone sideways: it shows full screen then, and turning back upright
+ * returns it under the reader.
+ */
+function bottomOnPhone(type: WindowContentChoice): boolean {
+  return type === 'connections' && isNarrowPhone();
+}
+
+/** The edge a new window of this type comes in from. */
+export function dockEdgeFor(type: WindowContentChoice): DockEdge {
+  return bottomOnPhone(type) ? 'bottom' : dockEdge();
+}
+
+/** A window already open turning into this type moves there too. */
+function redockFor(windowId: string, type: WindowContentChoice) {
+  if (!bottomOnPhone(type)) return;
+  const win = get(windowStore).find((w) => w.id === windowId);
+  if (win && win.edge !== 'bottom') windowStore.setWindowEdge(windowId, 'bottom');
+}
+
+/** Fill a brand-new window with this type: the tile grid's choice. */
+export function fillWindow(windowId: string, type: WindowContentChoice) {
+  redockFor(windowId, type);
+  windowStore.setWindowContent(windowId, type, initialContentFor(type));
+}
+
+/**
  * Open a new window of this type where the phone expects one: under the text
  * in portrait, beside it in landscape. Harmonies isn't a window, so callers
  * send it to the set picker instead. `extra` is laid over how the type starts
@@ -163,7 +196,7 @@ export function openWindowOfType(type: WindowContentChoice, extra: Record<string
   // Worked out before the window exists: a commentary checks whether it is
   // the first one open, and the empty window doesn't count either way.
   const state = initialContentFor(type);
-  const id = windowStore.createWindow(dockEdge(), DOCK_SIZE);
+  const id = windowStore.createWindow(dockEdgeFor(type), DOCK_SIZE);
   if (!id) {
     showWindowLimitNotice();
     return false;
@@ -186,6 +219,7 @@ export const harmonyPickerRequest = writable(0);
 export function swapWindowContent(windowId: string, type: WindowContentChoice) {
   const win = get(windowStore).find((w) => w.id === windowId);
   if (!win || win.contentType === type) return;
+  redockFor(windowId, type);
   windowStore.replaceWindowContent(windowId, type as WindowContentType, initialContentFor(type));
 }
 

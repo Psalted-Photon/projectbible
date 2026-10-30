@@ -13,8 +13,8 @@
 
 import { get } from 'svelte/store';
 import { windowStore } from './stores/windowStore';
-import { dockEdge, DOCK_SIZE } from './dockEdge';
-import { showWindowLimitNotice } from './windowTypes';
+import { DOCK_SIZE } from './dockEdge';
+import { dockEdgeFor, initialContentFor, showWindowLimitNotice } from './windowTypes';
 
 /**
  * A chapter, or verses of one, sent to the window. The pane clears it once it
@@ -32,23 +32,26 @@ export interface ConnectionsTarget {
 /**
  * Show this chapter lit on the Connections window's Arcs tab, or just these
  * verses of it when some are given, opening the window if it isn't already up.
- * Returns false at the six-window cap, after saying so.
+ * A narrow phone is asked to turn sideways for it, by the one-time request
+ * initialContentFor makes, even when the window is already open. Returns false
+ * at the six-window cap, after saying so.
  */
 export function openConnectionsWindow(book: string, chapter: number, verses?: number[]): boolean {
   const target: ConnectionsTarget = { seq: Date.now(), book, chapter };
   if (verses?.length) target.verses = verses;
+  const ask = initialContentFor('connections');
 
   const existing = get(windowStore).find((w) => w.contentType === 'connections');
   if (existing) {
-    windowStore.updateContentState(existing.id, { target });
+    windowStore.updateContentState(existing.id, { target, ...ask });
     return true;
   }
 
-  const id = windowStore.createWindow(dockEdge(), DOCK_SIZE);
+  const id = windowStore.createWindow(dockEdgeFor('connections'), DOCK_SIZE);
   if (!id) {
     showWindowLimitNotice();
     return false;
   }
-  windowStore.setWindowContent(id, 'connections', { tab: 'arcs', target });
+  windowStore.setWindowContent(id, 'connections', { tab: 'arcs', target, ...ask });
   return true;
 }

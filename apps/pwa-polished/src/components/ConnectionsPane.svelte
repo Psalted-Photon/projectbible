@@ -134,7 +134,8 @@
     type ChordView,
   } from '../lib/connections/chord';
   import { download } from '../lib/backup/saveFile';
-  import { isIOS } from '../lib/device';
+  import { isIOS, isNarrowPhone } from '../lib/device';
+  import { holdOrientation } from '../lib/orientation';
   import { askConfirm } from '../stores/confirmStore';
 
   export let windowId: string | undefined = undefined;
@@ -1873,8 +1874,25 @@
   //
   // The pane lifted out of its window and put back, so the view and the card
   // come along and nothing reloads. Not remembered over a reload.
+  //
+  // A narrow phone held upright has no room for these pictures, so there full
+  // screen always means sideways. Asked for upright, it shows the turn card
+  // instead and lifts the portrait lock (lib/orientation.ts) so the turn can
+  // happen; once sideways the card gives way to full screen. Every way back,
+  // whether a verse, the exit button or turning upright, lets go of the lock,
+  // which with rotation off snaps the phone upright with this window in the
+  // bottom half.
 
   let fullscreen = false;
+  /** The turn card is up, asking for the phone to be turned. */
+  let askingTurn = false;
+  /** The phone in the card turns on full Motion; otherwise it stays still. */
+  let turnMoves = true;
+  /** Lets go of the orientation hold, while the card or sideways full screen has it. */
+  let heldTurn: (() => void) | null = null;
+
+  const landscape = window.matchMedia('(orientation: landscape)');
+  const isSideways = () => landscape.matches;
 
   /** Moved to <body> while full screen, as the Timeline does, so a fixed box covers the screen. */
   function portal(node: HTMLElement, on: boolean) {
@@ -1893,15 +1911,53 @@
   }
 
   async function setFullscreen(on: boolean) {
+    if (on && isNarrowPhone()) {
+      if (!heldTurn) heldTurn = holdOrientation();
+      if (!isSideways()) {
+        if (!askingTurn) {
+          turnMoves = motionLevel() === 'full';
+          askingTurn = true;
+        }
+        return;
+      }
+    }
+    askingTurn = false;
+    if (!on) {
+      heldTurn?.();
+      heldTurn = null;
+    }
     if (on === fullscreen) return;
     fullscreen = on;
     await tick();
     measure();
   }
 
-  $: if ((missing || error) && fullscreen) fullscreen = false;
+  $: if ((missing || error) && (fullscreen || askingTurn)) void setFullscreen(false);
 
-  /** Escape leaves full screen, unless a lookup card over it wants the key. */
+  /** Turned sideways, the card gives way to full screen; turned upright, full screen ends. */
+  function onTurn() {
+    if (!isNarrowPhone()) return;
+    if (isSideways()) {
+      if (askingTurn) void setFullscreen(true);
+    } else if (fullscreen) {
+      void setFullscreen(false);
+    }
+  }
+
+  /**
+   * The one-time request to turn, from openConnectionsWindow or
+   * initialContentFor. Cleared as it is taken, so a reload or a session
+   * restore never asks again. Already sideways, it goes straight to full
+   * screen; anywhere but a narrow phone it does nothing.
+   */
+  $: if (windowState?.contentState?.askTurn) takeTurnRequest();
+
+  function takeTurnRequest() {
+    remember({ askTurn: null });
+    if (isNarrowPhone()) void setFullscreen(true);
+  }
+
+  /** Escape leaves full screen or the turn card, unless a lookup card over it wants the key. */
   function onKeydownCapture(e: KeyboardEvent) {
     if (e.key === 'Escape' && imageOpen && !get(lookupStore)) {
       e.stopPropagation();
@@ -1912,7 +1968,7 @@
       card = null;
       return;
     }
-    if (!fullscreen || e.key !== 'Escape' || get(lookupStore)) return;
+    if (!(fullscreen || askingTurn) || e.key !== 'Escape' || get(lookupStore)) return;
     void setFullscreen(false);
   }
 
@@ -2028,7 +2084,9 @@
     window.addEventListener('packsUpdated', onPacks);
     window.addEventListener('keydown', onKeydownCapture, true);
     window.addEventListener('settingsUpdated', onSettingsUpdated);
+    landscape.addEventListener('change', onTurn);
     return () => {
+      landscape.removeEventListener('change', onTurn);
       window.removeEventListener('settingsUpdated', onSettingsUpdated);
       window.removeEventListener('packsUpdated', onPacks);
       window.removeEventListener('keydown', onKeydownCapture, true);
@@ -2045,6 +2103,8 @@
     pointers.clear();
     releaseGridImage();
     letGo();
+    // Closed while the turn card or sideways full screen was up.
+    heldTurn?.();
   });
 </script>
 
@@ -2074,6 +2134,22 @@
     </div>
   {:else}
     <div class="nav" class:pairs={tab === 'detail'}>
+      <div class="nav-row">
+      <!-- First in the row, so a narrow window clips the other end and never this. -->
+      <button
+        class="btn btn-icon"
+        class:on={fullscreen}
+        aria-pressed={fullscreen}
+        title={fullscreen ? 'Back to the window' : 'Full screen'}
+        aria-label={fullscreen ? 'Back to the window' : 'Full screen'}
+        on:click={() => setFullscreen(!fullscreen)}
+      >
+        {#if fullscreen}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 4 9 9 4 9"/><polyline points="20 9 15 9 15 4"/><polyline points="15 20 15 15 20 15"/><polyline points="4 15 9 15 9 20"/></svg>
+        {:else}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 9 4 4 9 4"/><polyline points="15 4 20 4 20 9"/><polyline points="20 15 20 20 15 20"/><polyline points="9 20 4 20 4 15"/></svg>
+        {/if}
+      </button>
       <div class="nav-title">Connections</div>
       {#if tab === 'arcs'}
         <select
@@ -2194,20 +2270,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/></svg>
         <span class="btn-label">{tab === 'detail' ? 'Whole' : 'Whole Bible'}</span>
       </button>
-      <button
-        class="btn btn-icon"
-        class:on={fullscreen}
-        aria-pressed={fullscreen}
-        title={fullscreen ? 'Back to the window' : 'Full screen'}
-        aria-label={fullscreen ? 'Back to the window' : 'Full screen'}
-        on:click={() => setFullscreen(!fullscreen)}
-      >
-        {#if fullscreen}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 4 9 9 4 9"/><polyline points="20 9 15 9 15 4"/><polyline points="15 20 15 15 20 15"/><polyline points="4 15 9 15 9 20"/></svg>
-        {:else}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 9 4 4 9 4"/><polyline points="15 4 20 4 20 9"/><polyline points="20 15 20 20 15 20"/><polyline points="9 20 4 20 4 15"/></svg>
-        {/if}
-      </button>
+      </div>
     </div>
 
     <div class="tabs" role="tablist" aria-label="Connections pictures">
@@ -2636,6 +2699,24 @@
     {/if}
   {/if}
 </div>
+
+{#if askingTurn}
+  <!-- Over the whole screen, so on <body> like full screen, in the reader's theme. -->
+  <div class="turn" style={themeStyle} role="dialog" aria-modal="true" aria-label="Turn your phone sideways" use:portal={true}>
+    <svg class="turn-phone" class:moves={turnMoves} viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <g class="turn-arrow">
+        <path d="M95.4 24.6A50 50 0 0 0 24.6 24.6"/>
+        <polyline points="33.5 23 24.6 24.6 26.2 15.7"/>
+      </g>
+      <g class="turn-body">
+        <rect x="41" y="28" width="38" height="64" rx="7"/>
+        <path d="M55 35h10"/>
+      </g>
+    </svg>
+    <p class="turn-text">Turn your phone sideways to see Connections</p>
+    <button class="btn" on:click={() => setFullscreen(false)}>Not now</button>
+  </div>
+{/if}
 </div>
 
 <style>
@@ -2682,10 +2763,6 @@
   .nav {
     flex: none;
     height: var(--nav-h);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 calc(8px + var(--grip-r)) 0 calc(8px + var(--grip-l));
     background: var(--bg);
     border-bottom: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
     position: relative;
@@ -2697,6 +2774,16 @@
     transform: scale(var(--bar-scale, 1));
     transform-origin: 0 0;
     margin-bottom: calc(var(--nav-h) * (var(--bar-scale, 1) - 1));
+    /* The narrow rules below measure the bar before it is scaled, not the
+       pane, so a larger Bar size reaches them sooner. */
+    container-type: inline-size;
+  }
+  .nav-row {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 calc(8px + var(--grip-r)) 0 calc(8px + var(--grip-l));
   }
   .nav-title { font-size: 16px; letter-spacing: .3px; flex: none; }
   .nav-spacer { flex: 1; min-width: 4px; }
@@ -2730,12 +2817,20 @@
     .nav .btn-label { display: none; }
     .nav .btn:not(.btn-icon) { padding: 0; width: 30px; justify-content: center; }
   }
-  @container (max-width: 330px) {
+  /* The title goes before the picker is squeezed to nothing. */
+  @container (max-width: 460px) {
     .nav-title { display: none; }
   }
   /* Two pickers want the title's room sooner. */
   @container (max-width: 560px) {
     .nav.pairs .nav-title { display: none; }
+  }
+  /* A phone's cover screen, or any phone at a large Bar size: everything a
+     little closer, so the whole row still fits. */
+  @container (max-width: 340px) {
+    .nav-row { gap: 4px; padding: 0 calc(6px + var(--grip-r)) 0 calc(6px + var(--grip-l)); }
+    .nav .btn, .nav .btn:not(.btn-icon) { width: 28px; min-width: 28px; }
+    .nav-spacer { min-width: 0; }
   }
 
   .pair-pick { flex: 0 1 auto; max-width: 130px; }
@@ -2985,6 +3080,42 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  /* ---------------- turn card ---------------- */
+  /* Over the whole app, as full screen is. */
+  .turn {
+    --focus: #a45be9;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: calc(24px + env(safe-area-inset-top, 0px)) 24px calc(24px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    text-align: center;
+  }
+  .turn-phone { width: 112px; height: 112px; flex: none; }
+  .turn-arrow { color: var(--muted); }
+  /* Turns sideways, holds, fades and comes back upright. Still unless Motion is full. */
+  .turn-phone.moves .turn-body {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: turn-phone 2.8s var(--ease-standard, ease-in-out) infinite;
+  }
+  @keyframes turn-phone {
+    0%, 20% { transform: rotate(0deg); opacity: 1; }
+    50%, 80% { transform: rotate(-90deg); opacity: 1; }
+    90% { transform: rotate(-90deg); opacity: 0; }
+    91% { transform: rotate(0deg); opacity: 0; }
+    100% { transform: rotate(0deg); opacity: 1; }
+  }
+  .turn-text { max-width: 280px; font-family: 'Milonga', cursive; font-size: 19px; line-height: 1.35; }
+  .turn .btn { height: 36px; padding: 0 18px; font-size: 14px; }
 
   /* ---------------- not installed ---------------- */
   .gate {
