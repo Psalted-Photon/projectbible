@@ -633,7 +633,14 @@
         dayNumber: day.dayNumber,
       });
     }
-    await ensureStartedReading(day);
+    // A failed save must not cost the jump: with the navigation behind it, the
+    // tap did nothing at all. Another copy of the app holding the database
+    // during an update is one way it fails.
+    try {
+      await ensureStartedReading(day);
+    } catch (err) {
+      console.error('[ReadingPlan] Could not record the start of reading:', err);
+    }
     navigateToChapter(chapter.book, chapter.chapter, getEffectiveChapters(day));
   }
 
@@ -696,7 +703,12 @@
 
   async function handlePassageClick(day: any, passage: HarmonyPassage, passageIndex: number) {
     if (!currentPlanId) return;
-    await ensureHarmonyDayStarted(day);
+    // Same as handleChapterClick: the jump goes ahead even if the save fails.
+    try {
+      await ensureHarmonyDayStarted(day);
+    } catch (err) {
+      console.error('[ReadingPlan] Could not record the start of reading:', err);
+    }
 
     readingSessionStore.setSession({
       planId: currentPlanId,

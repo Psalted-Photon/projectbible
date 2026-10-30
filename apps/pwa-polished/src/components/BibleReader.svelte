@@ -229,6 +229,7 @@
     clearVerseHighlightsFor,
     reapplyVerseHighlights,
     findVerseEl,
+    findChapterSection,
     slotFor,
     waitForTextToSettle,
     categoryColorFor,
@@ -2133,13 +2134,19 @@
       const target = rpTarget!;
       const goTo = scrollVerse ?? target.verse;
       tick().then(async () => {
-        // Only scroll when a verse was actually named. A chapter-level plan
-        // target lands you at the top of the chapter, where verse 1 is already
-        // in view — scrolling to it would push the chapter title off screen.
         if (goTo != null) {
           await scrollToTarget(target.book, target.chapter, goTo);
           // The scroll waits on webfonts, which on a cold cache is long enough
           // for another navigation to land. If one did, that one owns the page.
+          if (get(navigationStore).readingPlanActiveTarget?.at !== target.at) return;
+        } else if (!loading) {
+          // A chapter named with no verse lands with its title at the top, not
+          // on verse 1, which would push the title off screen. A fresh load
+          // does that by itself. A chapter already on the page has no load —
+          // the next chapter always is, below the one you landed on — so it is
+          // scrolled there here. Without this the plan's link to the next
+          // chapter painted its mark out of sight and left you where you were.
+          await scrollToChapterTitle(target.book, target.chapter);
           if (get(navigationStore).readingPlanActiveTarget?.at !== target.at) return;
         }
         await applyReadingPlanHighlight();
@@ -2446,6 +2453,41 @@
       const containerTop = readerElement.getBoundingClientRect().top;
       const drift = el.getBoundingClientRect().top - containerTop;
       if (Math.abs(drift - landingOffset(el)) > 4) scrollToVerseEl(el);
+    }, 360);
+  }
+
+  /**
+   * Bring a chapter already on the page to where a fresh load of it lands:
+   * its title at the height the first chapter on the page sits when scrolled
+   * all the way up. Waits and looks again the same way scrollToTarget does.
+   */
+  async function scrollToChapterTitle(book: string, chapter: number): Promise<void> {
+    if (!readerElement) return;
+    beginDeliberateNavigation();
+    await waitForTextToSettle();
+    // A load that started meanwhile lands its own chapter.
+    if (!readerElement || loading) return;
+    const section = findChapterSection(readerElement, book, chapter);
+    if (!section) return;
+    const place = () => {
+      const first = readerElement?.querySelector<HTMLElement>('[data-chapter-section]');
+      if (!readerElement || !first) return;
+      const containerTop = readerElement.getBoundingClientRect().top;
+      const landing = first.getBoundingClientRect().top - containerTop + readerElement.scrollTop;
+      navBarOffset = 0;
+      readerElement.scrollTop = Math.max(
+        0,
+        readerElement.scrollTop + section.getBoundingClientRect().top - containerTop - landing,
+      );
+      lastScrollTop = readerElement.scrollTop;
+    };
+    place();
+    const settledAt = readerElement.scrollTop;
+    window.setTimeout(() => {
+      if (!readerElement || !section.isConnected) return;
+      // Anything more than a pixel or two means the user is scrolling; theirs wins.
+      if (Math.abs(readerElement.scrollTop - settledAt) > 2) return;
+      place();
     }, 360);
   }
 
