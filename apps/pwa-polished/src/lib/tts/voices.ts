@@ -48,6 +48,14 @@ export interface TtsVoiceInfo {
    */
   styleFile?: string;
   /**
+   * Kokoro only, in place of styleFile: a voice mixed from others' style vectors,
+   * the way voice-lab.html blends them. Mixed once at download and stored as this
+   * voice's own vector, so speaking it costs nothing extra.
+   */
+  blend?: { styleFile: string; share: number }[];
+  /** Kokoro only: the model's pace, below 1 slower. Absent means 1. */
+  speed?: number;
+  /**
    * Kokoro only: which espeak language to phonemize with. US and UK voices need
    * different ones. Piper carries this inside its own config file instead.
    *
@@ -157,7 +165,21 @@ function kokoro(
 }
 
 /**
- * A curated eight rather than all fifty-seven Kokoro ships: enough range to
+ * A blend from voice-lab.html. Paste its recipe line as the shares and speed.
+ * The lab phonemizes with the heaviest voice's accent; here it is chosen freely.
+ */
+function blended(
+  id: string,
+  label: string,
+  phonemeVoice: 'en-us' | 'en-gb-x-rp',
+  blend: { styleFile: string; share: number }[],
+  speed: number
+): TtsVoiceInfo {
+  return { ...kokoro(id, label, phonemeVoice), styleFile: undefined, blend, speed };
+}
+
+/**
+ * A curated few rather than all fifty-seven Kokoro ships: enough range to
  * pick a voice you like without turning the Settings dropdown into a list.
  * Adding more is a matter of appending here.
  *
@@ -173,6 +195,19 @@ export const KOKORO_VOICES: TtsVoiceInfo[] = [
   kokoro('am_michael', 'Michael (US, male)', 'en-us'),
   kokoro('am_fenrir', 'Fenrir (US, male)', 'en-us'),
   kokoro('am_puck', 'Puck (US, male)', 'en-us'),
+  // 0.52 af_nicole + 0.41 bm_lewis + 0.07 am_onyx @ speed 0.90, with Lewis's
+  // British accent rather than the lab's pick of Nicole's.
+  blended(
+    'blend_jacob',
+    'Jacob (UK, male)',
+    'en-gb-x-rp',
+    [
+      { styleFile: 'af_nicole.bin', share: 0.52 },
+      { styleFile: 'bm_lewis.bin', share: 0.41 },
+      { styleFile: 'am_onyx.bin', share: 0.07 },
+    ],
+    0.9
+  ),
   kokoro('bf_emma', 'Emma (UK, female)', 'en-gb-x-rp'),
   kokoro('bm_george', 'George (UK, male)', 'en-gb-x-rp'),
 ];
@@ -246,11 +281,12 @@ const HF_VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main'
  */
 export function resolveVoiceSource(info: TtsVoiceInfo): TtsSource | null {
   if (voiceEngine(info) === 'kokoro') {
-    if (!info.styleFile) return null;
+    const parts = info.blend ?? (info.styleFile ? [{ styleFile: info.styleFile, share: 1 }] : []);
+    if (parts.length === 0) return null;
     return {
       engine: 'kokoro',
       modelUrl: KOKORO_MODEL_URL,
-      styleUrl: `${KOKORO_BASE}/voices/${info.styleFile}`,
+      styles: parts.map((p) => ({ url: `${KOKORO_BASE}/voices/${p.styleFile}`, share: p.share })),
     };
   }
   if (info.modelUrl && info.configUrl) {
@@ -279,8 +315,12 @@ export type TtsProgressCallback = (progress: TtsProgress) => void;
 
 /** Piper: one model file plus its own config, which carries the phoneme table. */
 export type PiperSource = { engine: 'piper'; modelUrl: string; configUrl: string };
-/** Kokoro: the shared model plus this voice's style vector. */
-export type KokoroSource = { engine: 'kokoro'; modelUrl: string; styleUrl: string };
+/** Kokoro: the shared model plus this voice's style vector, or the ones it is mixed from. */
+export type KokoroSource = {
+  engine: 'kokoro';
+  modelUrl: string;
+  styles: { url: string; share: number }[];
+};
 export type TtsSource = PiperSource | KokoroSource;
 
 export class TtsError extends Error {

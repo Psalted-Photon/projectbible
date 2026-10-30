@@ -98,16 +98,45 @@ export async function downloadVoice(
   source?: TtsSource,
   onProgress?: TtsProgressCallback
 ): Promise<void> {
-  const { modelUrl, styleUrl } = kokoroSource(voiceId, source);
+  const { modelUrl, styles: parts } = kokoroSource(voiceId, source);
 
   if (!(await hasSharedModel())) {
     const model = await fetchWithProgress(modelUrl, onProgress);
     await store.write(KOKORO_MODEL_FILE, model);
   }
 
-  const style = await fetchWithProgress(styleUrl, onProgress);
-  await store.write(styleName(voiceId), style);
+  if (parts.length === 1) {
+    await store.write(styleName(voiceId), await fetchWithProgress(parts[0].url, onProgress));
+  } else {
+    await store.write(styleName(voiceId), (await blendStyles(parts, onProgress)).buffer as ArrayBuffer);
+  }
   styles.delete(voiceId);
+}
+
+/**
+ * Weighted average of several style vectors, the same sum voice-lab.html plays,
+ * so a blend sounds here as it did there. Shares are scaled to add up to 1.
+ */
+async function blendStyles(
+  parts: { url: string; share: number }[],
+  onProgress?: TtsProgressCallback
+): Promise<Float32Array> {
+  const total = parts.reduce((sum, p) => sum + p.share, 0);
+  let out: Float32Array | null = null;
+  for (const [i, part] of parts.entries()) {
+    // Every vector is the same size, so one bar runs across all the files.
+    const file = await fetchWithProgress(part.url, (p) =>
+      onProgress?.({ loaded: i * p.total + p.loaded, total: parts.length * p.total })
+    );
+    const vec = new Float32Array(await file.arrayBuffer());
+    out ??= new Float32Array(vec.length);
+    if (vec.length !== out.length) {
+      throw new TtsError('SYNTH_FAILED', `Style vectors differ in size: ${part.url}`);
+    }
+    const weight = part.share / total;
+    for (let j = 0; j < out.length; j++) out[j] += vec[j] * weight;
+  }
+  return out!;
 }
 
 /** A Kokoro voice needs both halves before it can say anything. */
@@ -278,10 +307,11 @@ export async function synthesize(
   }
 
   const style = await getStyle(voiceId);
+  const speed = KOKORO_VOICES.find((v) => v.id === voiceId)?.speed ?? 1;
   const model = await getSession();
 
   try {
-    return encodeWav(concat(await render(pieces, style, model)), KOKORO_SAMPLE_RATE);
+    return encodeWav(concat(await render(pieces, style, speed, model)), KOKORO_SAMPLE_RATE);
   } catch (err) {
     // The graphics chip can return numbers that are not audio at all — see
     // GARBAGE_CEILING. Noise is worse than slow, so drop to the processor for
@@ -295,17 +325,18 @@ export async function synthesize(
     session = null;
     sessionBackend = null;
     const fallback = await getSession();
-    return encodeWav(concat(await render(pieces, style, fallback)), KOKORO_SAMPLE_RATE);
+    return encodeWav(concat(await render(pieces, style, speed, fallback)), KOKORO_SAMPLE_RATE);
   }
 }
 
 async function render(
   pieces: string[][],
   style: Float32Array,
+  speed: number,
   model: ort.InferenceSession
 ): Promise<Float32Array[]> {
   const out: Float32Array[] = [];
-  for (const piece of pieces) out.push(await speak(piece, style, model));
+  for (const piece of pieces) out.push(await speak(piece, style, speed, model));
   return out;
 }
 
@@ -313,6 +344,7 @@ async function render(
 async function speak(
   phonemes: string[],
   style: Float32Array,
+  speed: number,
   model: ort.InferenceSession
 ): Promise<Float32Array> {
   const { tokens } = phonemesToTokens(phonemes);
@@ -335,7 +367,7 @@ async function speak(
       1,
       STYLE_DIMS,
     ]),
-    speed: new ort.Tensor('float32', new Float32Array([1]), [1]),
+    speed: new ort.Tensor('float32', new Float32Array([speed]), [1]),
   });
 
   const samples = results.waveform.data as Float32Array;
