@@ -62,6 +62,8 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   // US or Metric for the ring's weights-and-measures pill. A preference about
   // the reader, not the device, so it follows the account.
   'measureUnits',
+  // Whether a breadcrumb tap clears the crumbs after it: a reading habit too.
+  'crumbTap',
   // Which devotional the Verse of the Day opens, morning/evening, and the
   // reminder times — the reminders themselves live on the server per account.
   'devotionals',

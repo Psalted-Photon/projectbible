@@ -172,6 +172,7 @@
   let showSoloMarking: boolean = true;
   let showOtQuotes: boolean = true;
   let selectionMenu: 'classic' | 'radial' = 'radial';
+  let crumbTap: 'auto' | 'manual' = 'auto';
   let measureUnits: 'us' | 'metric' = 'us';
   // Moved here from Profile → Settings. Empty means not set.
   let defaultOT = "";
@@ -283,6 +284,7 @@
       showSoloMarking,
       showOtQuotes,
       selectionMenu,
+      crumbTap,
       measureUnits,
       // "" rather than left out, so Not set reaches the account's other
       // devices too. The old single setting goes now that the pair is set.
@@ -626,6 +628,7 @@
     showSoloMarking = settings.showSoloMarking !== false;
     showOtQuotes = settings.showOtQuotes !== false;
     selectionMenu = settings.selectionMenu === 'classic' ? 'classic' : 'radial';
+    crumbTap = settings.crumbTap === 'manual' ? 'manual' : 'auto';
     measureUnits = settings.measureUnits === 'metric' ? 'metric' : 'us';
     defaultOT = settings.dailyDriverEnglishOT || "";
     defaultNT = settings.dailyDriverEnglishNT || "";
@@ -945,6 +948,7 @@
     showSoloMarking;
     showOtQuotes;
     selectionMenu;
+    crumbTap;
     measureUnits;
     defaultOT;
     defaultNT;
@@ -1236,6 +1240,16 @@
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={navBarPinned} />
         <span class="label-text">Keep the top bar visible (never hide on scroll)</span>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label>
+        <span class="label-text">When you tap a breadcrumb</span>
+        <select bind:value={crumbTap}>
+          <option value="auto">Go there and clear the ones after it (Auto)</option>
+          <option value="manual">Go there and keep the ones after it, faded (Manual)</option>
+        </select>
       </label>
     </div>
 

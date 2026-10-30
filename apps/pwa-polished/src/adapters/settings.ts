@@ -221,6 +221,9 @@ export interface UserSettings {
   // Which menu a tapped word opens. 'radial' is a ring around the word, so the
   // word itself stays readable; 'classic' is the older popup above or below it.
   selectionMenu?: 'classic' | 'radial'; // default 'radial'
+  // What tapping a breadcrumb does with the crumbs after it. 'auto' drops them,
+  // as a tap always used to; 'manual' keeps them, faded, to go forward again.
+  crumbTap?: 'auto' | 'manual'; // default 'auto' (synced)
   themedTitles?: boolean; // Theme-colored 3D shadow on reader titles/headings (default true)
   measureUnits?: 'us' | 'metric'; // What a tapped cubit or shekel is converted into (default 'us', synced)
   interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)

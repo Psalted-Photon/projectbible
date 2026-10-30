@@ -2457,8 +2457,11 @@
       event.stopPropagation();
       return;
     }
-    if (side === "back") goToCrumb(index + 1);
-    else myTrail.goToAhead(index);
+    // Auto (the default) is Go Here: the crumbs after it go, as a tap always
+    // used to. Manual keeps them, faded, to walk forward again.
+    const clearAfter = getSettings().crumbTap !== "manual";
+    if (side === "back") goToCrumb(index + 1, clearAfter);
+    else myTrail.goToAhead(index, clearAfter);
   }
 
   async function openCrumbMenu(side: CrumbSide, index: number, anchor: HTMLElement) {
@@ -2522,7 +2525,7 @@
     showResults = false;
   }
 
-  /** Go to the held crumb and drop every crumb after it — what a tap used to do. */
+  /** Go to the held crumb and drop every crumb after it — what a tap does on Auto. */
   function crumbMenuGo(): void {
     const m = crumbMenu;
     closeCrumbMenu();
