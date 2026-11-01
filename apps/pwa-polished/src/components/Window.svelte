@@ -537,12 +537,16 @@
     filter: invert(1) hue-rotate(180deg);
   }
 
-  /* Clips rather than pushing the close button off the end when a window is
-     dragged down near its 10% minimum. */
+  /* Four arrows with an arrow's width of empty space between each (17 x 7).
+     On a window too narrow for that the spaces close up first, so no arrow is
+     cut off until they've gone. Clips rather than pushing the close button off
+     the end when a window is dragged down near its 10% minimum. */
   .edge-buttons {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 1px;
+    max-width: calc(119px * var(--bar-scale, 1));
     min-width: 0;
     overflow: hidden;
   }
