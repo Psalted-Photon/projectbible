@@ -3,11 +3,18 @@
  * Build Biblical Art Pack (offline / images bundled)
  *
  * Reads the curated scene list (scripts/art-scenes-data.mjs). For each artwork it
- *   1. resolves a Wikimedia Commons filename (exact `file`, or `search` query),
- *   2. downloads the image at ~1600px (full) and ~400px (thumbnail),
+ *   1. looks up its exact Wikimedia Commons `file`,
+ *   2. downloads the image at 1920px (or the original, if smaller),
  *   3. embeds the raw bytes in the pack (art_images table, deduped by content id).
  * `art_scenes.works` references those images by id, so the app shows every
  * painting fully offline. All works are public domain.
+ *
+ * No thumbnails are bundled: the app makes its own small previews from the
+ * full image (lib/artThumbs.ts), so works carry no `thumbId`.
+ *
+ * Strict: if any painting fails to resolve or download, nothing is written and
+ * the build exits with an error, so a scene can never drop out of the pack
+ * unnoticed.
  *
  * Output: packs/consolidated/art.sqlite + art-images-NN.sqlite
  * Usage: node scripts/build-art-pack.mjs
@@ -25,8 +32,9 @@ const repoRoot = join(__dirname, '..');
 const PACKS_DIR = join(repoRoot, 'packs', 'consolidated');
 const API = 'https://commons.wikimedia.org/w/api.php';
 const UA = 'ProjectBible-art-pack/1.0 (offline Bible study app; build script)';
-const FULL_WIDTH = 1600;
-const THUMB_WIDTH = 400;
+// Commons serves only its standard thumbnail widths (… 500, 960, 1280, 1920):
+// any other request is rounded up, or refused outright for a direct thumb URL.
+const FULL_WIDTH = 1920;
 
 if (!existsSync(PACKS_DIR)) mkdirSync(PACKS_DIR, { recursive: true });
 
@@ -55,28 +63,10 @@ async function apiJson(url) {
 
 const infoFromII = (ii) => ({
   fullUrl: ii.thumburl,
-  thumbUrl: ii.thumburl.replace(/\/\d+px-/, `/${THUMB_WIDTH}px-`),
   sourceUrl: ii.descriptionurl,
   license: (ii.extmetadata?.LicenseShortName?.value || 'Public domain').replace(/<[^>]+>/g, '').trim(),
   mime: ii.mime || 'image/jpeg',
 });
-
-/** Resolve a search query in ONE call → { filename, fullUrl, thumbUrl, sourceUrl, license, mime } or null. */
-async function searchResolve(query) {
-  const url =
-    `${API}?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=8` +
-    `&gsrsearch=${encodeURIComponent(query)}&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=${FULL_WIDTH}`;
-  const data = await apiJson(url);
-  if (!data) return null;
-  const pages = Object.values(data.query?.pages || {}).sort((a, b) => (a.index ?? 99) - (b.index ?? 99));
-  const raster = pages
-    .map((p) => p.imageinfo?.[0])
-    .filter((ii) => ii && (ii.mime === 'image/jpeg' || ii.mime === 'image/png') && (ii.width || 0) >= 700);
-  if (raster.length === 0) return null;
-  const chosen = raster.find((ii) => (ii.width || 0) >= 1200) || raster.slice().sort((a, b) => (b.width || 0) - (a.width || 0))[0];
-  const filename = decodeURIComponent(chosen.descriptionurl.split('/wiki/File:')[1] || '').replace(/_/g, ' ');
-  return { filename, ...infoFromII(chosen) };
-}
 
 /** imageinfo for an exact filename → info or null. */
 async function imageInfo(filename) {
@@ -88,13 +78,6 @@ async function imageInfo(filename) {
   const page = Object.values(data.query?.pages || {})[0];
   if (!page || page.missing !== undefined || !page.imageinfo?.[0]) return null;
   return { filename, ...infoFromII(page.imageinfo[0]) };
-}
-
-/** Resolve a work (exact file or search) to image info, or null. */
-async function resolveWork(w) {
-  if (w.file) return await imageInfo(w.file);
-  if (w.search) return await searchResolve(w.search);
-  return null;
 }
 
 async function download(url) {
@@ -119,29 +102,23 @@ console.log(`Building biblical art pack from ${ART_SCENES.length} scenes...\n`);
 
 const images = new Map(); // imageId → { mime, data:Buffer }
 const sceneRows = [];
+const failures = [];
 let totalBytes = 0;
-let skipped = 0;
 
 for (const scene of ART_SCENES) {
   const works = [];
   for (const w of scene.works) {
-    const info = await resolveWork(w);
-    if (!info || !info.filename) {
-      console.warn(`  ⚠  unresolved: "${w.file || w.search}" (${scene.id})`);
-      skipped++;
-      continue;
-    }
+    if (!w.file) { failures.push(`no file: "${w.title}" (${scene.id})`); continue; }
+    const info = await imageInfo(w.file);
+    if (!info) { failures.push(`unresolved: "${w.file}" (${scene.id})`); continue; }
     const filename = info.filename;
     const imageId = id16(filename + ':full');
-    const thumbId = id16(filename + ':thumb');
     if (!images.has(imageId)) {
       const full = await download(info.fullUrl);
       await sleep(150);
-      const thumb = await download(info.thumbUrl);
-      if (!full) { console.warn(`  ⚠  download failed: "${filename}"`); skipped++; continue; }
+      if (!full) { failures.push(`download failed: "${filename}" (${scene.id})`); continue; }
       images.set(imageId, { mime: info.mime, data: full });
       totalBytes += full.length;
-      if (thumb) { images.set(thumbId, { mime: info.mime, data: thumb }); totalBytes += thumb.length; }
     }
 
     works.push({
@@ -149,16 +126,21 @@ for (const scene of ART_SCENES) {
       artist: w.artist,
       year: w.year,
       imageId,
-      thumbId: images.has(thumbId) ? thumbId : imageId,
       sourceUrl: info.sourceUrl,
       license: info.license,
       description: w.description,
     });
   }
 
-  if (works.length === 0) { console.warn(`  ⚠  skipping scene "${scene.id}" (no works)`); continue; }
   sceneRows.push({ ...scene, works });
-  console.log(`  ✓  ${scene.title.padEnd(34)} ${works.length} work(s)`);
+  const mark = works.length === scene.works.length ? '✓' : '✗';
+  console.log(`  ${mark}  ${scene.title.padEnd(34)} ${works.length} of ${scene.works.length} work(s)`);
+}
+
+if (failures.length) {
+  console.error(`\n❌ ${failures.length} painting(s) failed; nothing was written:`);
+  for (const f of failures) console.error(`   ${f}`);
+  process.exit(1);
 }
 
 // ── Write the pack ──────────────────────────────────────────────────────────
@@ -175,8 +157,7 @@ const { scenesPath, shardPaths } = writeArtPackFiles({
 const mb = (totalBytes / (1024 * 1024)).toFixed(1);
 console.log(
   `
-✅ art pack built: ${sceneRows.length} scenes, ${images.size} images, ${mb} MB of art` +
-    (skipped ? `, ${skipped} skipped` : '')
+✅ art pack built: ${sceneRows.length} scenes, ${images.size} images, ${mb} MB of art, 0 skipped`
 );
 console.log(`   Scenes: ${scenesPath}`);
 console.log(`   Shards: ${shardPaths.length}`);
