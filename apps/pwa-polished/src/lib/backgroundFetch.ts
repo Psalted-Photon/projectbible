@@ -82,7 +82,16 @@ const RUN_KEY = '/__pack-run/current';
 /** A run that keeps failing stops being picked back up after this many launches. */
 const MAX_RESUMES = 3;
 
-let active: { reg: BgFetchRegistration; files: Map<string, RunFile> } | null = null;
+/**
+ * How long a download may go without a single byte before it is given up on
+ * and the run downloads the usual way. Desktop Chrome starts a background
+ * download paused once the page has had a download already, behind a
+ * "download multiple files?" prompt that is easy to miss, and a paused
+ * download sends no progress at all -- the update sat at 0% for good.
+ */
+const STALL_MS = 20_000;
+
+let active: { reg: BgFetchRegistration; files: Map<string, RunFile>; startedAt: number } | null = null;
 
 export function backgroundFetchSupported(): boolean {
   return (
@@ -209,7 +218,7 @@ export async function startBackgroundDownload(
         downloadTotal: total,
       },
     );
-    active = { reg, files: new Map(files.map((f) => [f.id, f])) };
+    active = { reg, files: new Map(files.map((f) => [f.id, f])), startedAt: Date.now() };
     console.log(`[BackgroundFetch] Started ${fetchId}: ${files.length} files, ${total} bytes`);
     return true;
   } catch (error) {
@@ -234,6 +243,30 @@ function settled(reg: BgFetchRegistration): { done: Promise<void>; stop: () => v
   return { done, stop: () => reg.removeEventListener('progress', check) };
 }
 
+/** Resolves if the download still has no bytes STALL_MS after it started. */
+function stalled(reg: BgFetchRegistration, startedAt: number): { done: Promise<void>; stop: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const done = new Promise<void>((resolve) => {
+    const check = () => {
+      if (reg.downloaded > 0 || reg.result) return;
+      const left = startedAt + STALL_MS - Date.now();
+      if (left <= 0) resolve();
+      else timer = setTimeout(check, left);
+    };
+    check();
+  });
+  return { done, stop: () => clearTimeout(timer) };
+}
+
+/**
+ * Give up on a download that never got going. Unlike Cancel on the
+ * notification, the run itself carries on, one file at a time.
+ */
+async function abandon(reg: BgFetchRegistration): Promise<void> {
+  if (active?.reg === reg) active = null;
+  await reg.abort().catch(() => false);
+}
+
 /**
  * This pack's file from the background download, once it has arrived. Null
  * when there is none to give -- no download running, the file isn't in it,
@@ -251,7 +284,7 @@ export async function backgroundResponse(
   if (!active) return null;
   const file = active.files.get(packId);
   if (!file) return null;
-  const { reg } = active;
+  const { reg, startedAt } = active;
   if (reg.failureReason === 'aborted') throw new InstallCancelled();
 
   let record: BgFetchRecord | undefined;
@@ -266,6 +299,7 @@ export async function backgroundResponse(
   report();
   reg.addEventListener('progress', report);
   const over = settled(reg);
+  const quiet = stalled(reg, startedAt);
   try {
     const response = await Promise.race([
       record.responseReady,
@@ -274,7 +308,13 @@ export async function backgroundResponse(
       over.done
         .then(() => new Promise((resolve) => setTimeout(resolve, 5000)))
         .then(() => null),
+      quiet.done.then(() => 'stalled' as const),
     ]);
+    if (response === 'stalled') {
+      console.warn(`[BackgroundFetch] Nothing arrived in ${STALL_MS / 1000}s (paused by the browser?); downloading the usual way`);
+      await abandon(reg);
+      return null;
+    }
     if (reg.failureReason === 'aborted') throw new InstallCancelled();
     return response;
   } catch (error) {
@@ -283,6 +323,7 @@ export async function backgroundResponse(
   } finally {
     reg.removeEventListener('progress', report);
     over.stop();
+    quiet.stop();
   }
 }
 
@@ -320,7 +361,8 @@ export async function takeUnfinishedRun(): Promise<PackRun | null> {
     await writeRun({ ...stored, resumes: stored.resumes + 1 });
     const manager = await backgroundFetchManager();
     const reg = await manager?.get(stored.fetchId);
-    if (reg) active = { reg, files: new Map(stored.files.map((f) => [f.id, f])) };
+    // Timed from now: a download left paused last time gets the same grace.
+    if (reg) active = { reg, files: new Map(stored.files.map((f) => [f.id, f])), startedAt: Date.now() };
   } catch (error) {
     console.warn('[BackgroundFetch] Could not reattach the download:', error);
   }
