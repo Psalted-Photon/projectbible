@@ -111,7 +111,7 @@
   import AuthorPill from "./AuthorPill.svelte";
   import HighlightModal from "./HighlightModal.svelte";
   import ShareModal from "./ShareModal.svelte";
-  import type { ShareRef } from "../lib/shareText";
+  import type { PickedPassage, ShareRef } from "../lib/shareText";
   import { IndexedDBUserDataStore } from "../adapters/UserDataStore";
   import { subscribeToHighlightRemoteChanges } from "../adapters/SyncedHighlightAdapter";
   import { subscribeToUserDataRemoteChanges } from "../adapters/SyncedUserDataStore";
@@ -327,6 +327,14 @@
   }
 
   export let windowId: string | undefined = undefined;
+
+  /**
+   * By Heart's simple reader: given this, the reader only picks a passage. The
+   * ring holds Select and Extend, Select hands the passage here, and the
+   * markers and smart features stay off. Fixed for the life of the reader.
+   */
+  export let onPick: ((picked: PickedPassage) => void) | undefined = undefined;
+  const pickOnly = !!onPick;
 
   /**
    * Which navbar this reader wears, for the harmony view.
@@ -667,7 +675,7 @@
   // Book intro panel state
   let bookIntroPanelOpen = false;
   $: showReadAloud =
-    FEATURES.ttsReadAloud && (!isOriginalLanguage(currentTranslation) || canSpeakOriginal(currentTranslation));
+    !pickOnly && FEATURES.ttsReadAloud && (!isOriginalLanguage(currentTranslation) || canSpeakOriginal(currentTranslation));
   let bookIntroPanelBook = "";
 
   function openBookIntroPanel(book: string) {
@@ -1137,13 +1145,13 @@
   }
 
   // Annotation toggles (reactive from store)
-  $: showReferences = (windowId
+  $: showReferences = !pickOnly && ((windowId
     ? (windowState?.contentState?.showReferences ?? $navigationStore.showReferences)
-    : $navigationStore.showReferences) ?? false;
+    : $navigationStore.showReferences) ?? false);
   $: selectedCommentaryAuthors = windowId
     ? (windowState?.contentState?.selectedCommentaryAuthors ?? [])
     : ($navigationStore.selectedCommentaryAuthors ?? []);
-  $: showCommentaries = selectedCommentaryAuthors.length > 0;
+  $: showCommentaries = !pickOnly && selectedCommentaryAuthors.length > 0;
 
   // All commentary entries for the current chapter (cached; re-filtered when authors change)
   let allCommentaryEntries: CommentaryEntry[] = [];
@@ -1941,6 +1949,13 @@
     // needs an optional pack — this index ships in the bundle.
     showOtQuotes = settings.showOtQuotes !== false;
     selectionMenu = settings.selectionMenu === "classic" ? "classic" : "radial";
+    if (pickOnly) {
+      showArt = false;
+      showRedLetter = false;
+      showPlaceMarkers = false;
+      showSoloMarking = false;
+      showOtQuotes = false;
+    }
     measureUnits = settings.measureUnits === "metric" ? "metric" : "us";
     if (showPlaceMarkers && !placePhrasesLoaded) {
       void loadPlacePhrases().then(() => { placePhrasesLoaded = true; });
@@ -3337,6 +3352,7 @@
   }
 
   async function loadAndApplyHighlights(book: string, chapter: number) {
+    if (pickOnly) return;
     try {
       const [vHl, wHl] = await Promise.all([
         userDataStore.getChapterHighlights(book, chapter),
@@ -3389,6 +3405,7 @@
   }
 
   async function loadVerseNotes(book: string, chapter: number) {
+    if (pickOnly) return;
     try {
       const notes = await userDataStore.getChapterNotes(book, chapter);
       // Rebuild this chapter's keys rather than only adding: a note deleted on
@@ -5578,6 +5595,7 @@
       extendArmed,
       canSpeak: selectionCanSpeak,
       verseLocked: !!verseSel,
+      pickOnly,
     };
   }
 
@@ -5715,7 +5733,7 @@
   }
 
   function showToastAt(x: number, y: number, opts: { lookup?: boolean } = {}) {
-    const { lookup = true } = opts;
+    const { lookup = !pickOnly } = opts;
     ({ book: selBook, chapter: selChapter } = selectionChapter());
     // Clear any hover highlight — full unwrap required (see clearHoverHighlight)
     clearHoverHighlight();
@@ -5735,7 +5753,7 @@
 
     // Decided once per opening and held for the life of the menu, so a label
     // resolving later can't swap the whole UI out from under a finger.
-    radialActive = selectionMenu === "radial" && !!toastAnchor && radialFits(toastAnchor);
+    radialActive = !!toastAnchor && (pickOnly || (selectionMenu === "radial" && radialFits(toastAnchor)));
 
     if (radialActive && toastAnchor) {
       // Make room first, then place against where the word is about to be — the
@@ -5829,6 +5847,7 @@
   // when new plans arrive. A newer repaint cancels an older one's late paint,
   // so a fast switch never paints the wrong chapter.
   async function repaintRepeats(groups: RepeatGroup[], placeMarkers: boolean) {
+    if (pickOnly) return;
     const token = ++crossRepeatToken;
     await tick();
     if (!readerElement) return;
@@ -6197,6 +6216,47 @@
       .trim();
   }
 
+  /** The passage a selection takes away, for Share and Select, and its address. */
+  function selectionPassage(text: string): { passage: string; ref: ShareRef } | null {
+    // Which verses the selection touches. A phrase dragged across a verse
+    // boundary has one segment per verse, the same shape Highlight reads.
+    const verses =
+      selectionMode === 'word' && selectedSegments.length > 0
+        ? selectedSegments.map(s => s.verse)
+        : selectedVerseNumber !== null
+          ? [selectedVerseNumber]
+          : [];
+    if (verses.length === 0) return null;
+
+    const startVerse = Math.min(...verses);
+    const endVerse = Math.max(...verses);
+
+    if (verseSel) {
+      // Untouched, the verses go out whole; extended or cut, exactly as
+      // selected. Runs either side of a skipped verse are joined by " … ".
+      const runs = segmentRuns(selectedSegments);
+      const untouched = verseSelUntouched(verseSel);
+      const passage = runs
+        .map(run =>
+          untouched
+            ? verseTextRange(selBook, selChapter, run[0].verse, run[run.length - 1].verse)
+            : segmentsText(run),
+        )
+        .filter(Boolean)
+        .join(' … ');
+      if (!passage) return null;
+      return { passage, ref: { book: selBook, chapter: selChapter, startVerse, endVerse, verses } };
+    }
+
+    // A one-word quote is not something anyone sends, so a single tapped
+    // word widens to its verse. A phrase was deliberately chosen, so it is
+    // shared as chosen.
+    const isPhrase = selectionMode === 'word' && selectedWordCount > 1;
+    const passage = isPhrase ? text : verseTextRange(selBook, selChapter, startVerse, endVerse);
+    if (!passage) return null;
+    return { passage, ref: { book: selBook, chapter: selChapter, startVerse, endVerse } };
+  }
+
   async function handleToastAction(event: CustomEvent) {
     const { action, text } = event.detail;
     // Capture before any async gap — reactive var may be overwritten by a
@@ -6520,56 +6580,18 @@
         break;
       }
       case "share": {
-        // Which verses the selection touches. A phrase dragged across a verse
-        // boundary has one segment per verse, the same shape Highlight reads.
-        const shareVerses =
-          selectionMode === 'word' && selectedSegments.length > 0
-            ? selectedSegments.map(s => s.verse)
-            : selectedVerseNumber !== null
-              ? [selectedVerseNumber]
-              : [];
-        if (shareVerses.length === 0) break;
-
-        const startVerse = Math.min(...shareVerses);
-        const endVerse = Math.max(...shareVerses);
-
-        if (verseSel) {
-          // Untouched, the verses go out whole; extended or cut, exactly as
-          // selected. Runs either side of a skipped verse are joined by " … ".
-          const runs = segmentRuns(selectedSegments);
-          const untouched = verseSelUntouched(verseSel);
-          shareModalPassage = runs
-            .map(run =>
-              untouched
-                ? verseTextRange(selBook, selChapter, run[0].verse, run[run.length - 1].verse)
-                : segmentsText(run),
-            )
-            .filter(Boolean)
-            .join(' … ');
-          if (!shareModalPassage) break;
-          shareModalRef = {
-            book: selBook,
-            chapter: selChapter,
-            startVerse,
-            endVerse,
-            verses: shareVerses,
-          };
-          shareModalOpen = true;
-          showToast = false;
-          break;
-        }
-
-        // A one-word quote is not something anyone sends, so a single tapped
-        // word widens to its verse. A phrase was deliberately chosen, so it is
-        // shared as chosen.
-        const isPhrase = selectionMode === 'word' && selectedWordCount > 1;
-        shareModalPassage = isPhrase
-          ? text
-          : verseTextRange(selBook, selChapter, startVerse, endVerse);
-        if (!shareModalPassage) break;
-
-        shareModalRef = { book: selBook, chapter: selChapter, startVerse, endVerse };
+        const taken = selectionPassage(text);
+        if (!taken) break;
+        shareModalPassage = taken.passage;
+        shareModalRef = taken.ref;
         shareModalOpen = true;
+        showToast = false;
+        break;
+      }
+      case "select": {
+        const taken = selectionPassage(text);
+        if (!taken) break;
+        onPick?.({ ...taken, translation: currentTranslation });
         showToast = false;
         break;
       }
@@ -7067,6 +7089,7 @@
       {extendArmed}
       canSpeak={selectionCanSpeak}
       verseLocked={!!verseSel}
+      {pickOnly}
       book={selBook}
       chapter={selChapter}
       verse={selectedVerseNumber}
@@ -7328,12 +7351,14 @@
   class="bible-reader"
   class:drag-selecting={dragSelecting}
   class:edge-dragging={isDragging}
+  class:pick-only={pickOnly}
   bind:this={readerElement}
   bind:clientWidth={readerClientWidth}
 >
   <NavigationBar
     {windowId}
     {navMode}
+    {pickOnly}
     style="transform: translateY({navBarOffset}px); transition: transform 0.25s ease;"
   />
 
@@ -7366,7 +7391,7 @@
       </div>
     {:else}
       {#each chapters as chapterData (`${currentTranslation}-${chapterData.book}-${chapterData.chapter}`)}
-        {@const chPlanCtxs = computeAllPlanContexts(chapterData.book, chapterData.chapter, $readingSessionStore)}
+        {@const chPlanCtxs = pickOnly ? [] : computeAllPlanContexts(chapterData.book, chapterData.chapter, $readingSessionStore)}
         {@const chHarmCtxs = chPlanCtxs.filter((c) => c.type === 'harmony')}
         {@const chStdCtxs = chPlanCtxs.filter((c) => c.type === 'standard')}
         <!-- Material only this Gospel carries. Asked once per rendered chapter
@@ -7385,8 +7410,10 @@
             {:else}
               <h1 style="--title-shadow:{getBookColor(chapterData.book)}">{chapterData.book} {chapterData.chapter}</h1>
             {/if}
-            <ReaderConnectionsStrip book={chapterData.book} chapter={chapterData.chapter} />
-            {#if chapterData.chapter === 1}
+            {#if !pickOnly}
+              <ReaderConnectionsStrip book={chapterData.book} chapter={chapterData.chapter} />
+            {/if}
+            {#if chapterData.chapter === 1 && !pickOnly}
               <div class="intro-row">
               <button
                 class="book-intro-btn"
@@ -7424,7 +7451,7 @@
               {/each}
               </div>
             {/if}
-            {#if chapterData.chapter > 1}
+            {#if chapterData.chapter > 1 && !pickOnly}
               <!-- Chapter 1 has the Introduction button under its title. Every
                    chapter after it gets this quieter (i) beside the talking
                    head, so the introduction is never a scroll back to the top. -->
@@ -7740,6 +7767,11 @@
     border-radius: 7px;
     padding: 5px 10px;
     cursor: pointer;
+  }
+
+  /* Footnotes and cross-references: the simple reader has no markers. */
+  .bible-reader.pick-only :global(.inline-note) {
+    display: none;
   }
 
   .bible-reader {

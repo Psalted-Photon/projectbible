@@ -19,8 +19,30 @@ export interface NeedleAnswer {
   error?: string;
 }
 
+/** One word as Whistle heard it, in seconds from the start of the clip or stream. */
+export interface TimedWord {
+  word: string;
+  start: number;
+  end: number;
+  probability: number;
+}
+
 export interface Transcript {
   text: string;
+  /** Only when word times were asked for. */
+  words?: TimedWord[];
+}
+
+/** What one feed of a live stream hears. */
+export interface StreamReply {
+  /** The words two passes in a row agreed on, new with this reply. */
+  text?: string;
+  words?: TimedWord[];
+  /** What came after those, which can still change. */
+  pending?: string;
+  /** Seconds of audio so far. */
+  received?: number;
+  pass_ms?: number;
 }
 
 export class NeedleEngine {
@@ -121,17 +143,41 @@ export class NeedleEngine {
   }
 
   /** 16 kHz mono float PCM → its words. keywords: names to favor, one per line. */
-  transcribe(pcm: Float32Array, keywords: string | null = null): Transcript {
+  transcribe(pcm: Float32Array, keywords: string | null = null, wordTimes = false): Transcript {
     const pp = this.pcm(pcm);
     const pl = this.str('en');
     const pk = this.str(keywords && keywords.trim() ? keywords : null);
     try {
-      if (this.m._needle_transcribe(pp, pcm.length, pl, pk, 0, this.out, this.outCap) < 0) throw this.fail('Transcribing');
+      if (this.m._needle_transcribe(pp, pcm.length, pl, pk, wordTimes ? 1 : 0, this.out, this.outCap) < 0) throw this.fail('Transcribing');
       return this.reply<Transcript>();
     } finally {
       this.m._free(pp);
       if (pl) this.m._free(pl);
       if (pk) this.m._free(pk);
     }
+  }
+
+  /**
+   * More audio for a live stream, about a second at a time. Whistle goes over
+   * what it holds again and settles the words two passes in a row agree on.
+   */
+  streamFeed(pcm: Float32Array, keywords: string | null = null): StreamReply {
+    const pp = this.pcm(pcm);
+    const pl = this.str('en');
+    const pk = this.str(keywords && keywords.trim() ? keywords : null);
+    try {
+      if (this.m._needle_stream_transcribe_process(pp, pcm.length, pl, pk, this.out, this.outCap) < 0) throw this.fail('Hearing');
+      return this.reply<StreamReply>();
+    } finally {
+      this.m._free(pp);
+      if (pl) this.m._free(pl);
+      if (pk) this.m._free(pk);
+    }
+  }
+
+  /** Ends the stream: whatever was still pending settles. The next feed starts a new one. */
+  streamStop(): StreamReply {
+    if (this.m._needle_stream_transcribe_stop(this.out, this.outCap) < 0) throw this.fail('Hearing');
+    return this.reply<StreamReply>();
   }
 }

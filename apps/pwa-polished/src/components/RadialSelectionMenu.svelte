@@ -13,6 +13,7 @@
   import ShareNetwork from 'phosphor-svelte/lib/ShareNetwork';
   import Translate from 'phosphor-svelte/lib/Translate';
   import Rainbow from 'phosphor-svelte/lib/Rainbow';
+  import CheckCircle from 'phosphor-svelte/lib/CheckCircle';
   import {
     BADGE,
     ringRadius,
@@ -51,6 +52,8 @@
   export let canSpeak = false;
   /** A verse-number selection: no Word/Verse seat, no one-word buttons. */
   export let verseLocked = false;
+  /** By Heart's simple reader: Select and Extend, and no original-language pill. */
+  export let pickOnly = false;
 
   /** The verse the tap landed in — the reference pill above the word. */
   export let book = '';
@@ -101,6 +104,7 @@
     speak: SpeakerHigh,
     translation: Translate,
     connections: Rainbow,
+    select: CheckCircle,
   };
 
   // The sweep runs in list order, which seatAngles already returns as one
@@ -124,7 +128,7 @@
   // So a change that moves seats waits for the sweep to finish; a change that
   // only rewrites labels (Define → Bio → Info) is adopted straight away,
   // because nothing has to move for it.
-  $: live = radialItems({ mode, wordCount, isPlace, isPerson, moreInfo, extendArmed, canSpeak, verseLocked });
+  $: live = radialItems({ mode, wordCount, isPlace, isPerson, moreInfo, extendArmed, canSpeak, verseLocked, pickOnly });
 
   let shown: RadialItem[] = [];
   let settled = reduceMotion;
@@ -179,8 +183,8 @@
   }
   $: number = strongs ? displayId(strongs) : '';
   /** A Strong's number makes the pill a link to its entry. A measure doesn't. */
-  $: strongsLink = !measure && !!strongs;
-  $: originLabel = measure || [headword, number, meaning].filter(Boolean).join(' · ');
+  $: strongsLink = !pickOnly && !measure && !!strongs;
+  $: originLabel = pickOnly ? '' : measure || [headword, number, meaning].filter(Boolean).join(' · ');
 
   function openStrongs() {
     dispatch('action', { action: 'strongs', text: selectedText });

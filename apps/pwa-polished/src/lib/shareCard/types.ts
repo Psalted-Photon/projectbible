@@ -109,4 +109,6 @@ export interface RenderedCard {
   boxes: WordBox[];
   /** The biggest textSize at which this passage still fits on this card as styled. */
   largestTextSize: number;
+  /** The size the words were drawn at, in card pixels. */
+  fontSize: number;
 }

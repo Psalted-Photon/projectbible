@@ -115,6 +115,11 @@ const SOUNDALIKES = [
   'lamb:444 lam:0',
 ].map((g) => g.split(' ').map((p): [string, number] => [p.split(':')[0], Number(p.split(':')[1])]));
 
+/** Both words are in one sound-alike group: "peace" and "piece". */
+export function soundsAlike(a: string, b: string): boolean {
+  return SOUNDALIKES.some((g) => g.some(([x]) => x === a) && g.some(([x]) => x === b));
+}
+
 /** The word a heard word most likely is in the Bible. */
 export function bibleWord(heard: unknown): string {
   const w = String(heard ?? '').toLowerCase().trim();

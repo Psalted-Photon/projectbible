@@ -141,6 +141,8 @@
 
   export let windowId: string | undefined = undefined;
   export const visible: boolean = true;
+  /** By Heart's simple reader: only the location and the translation. */
+  export let pickOnly = false;
 
   /**
    * The trail this bar draws and moves: its own reader's — the main reader's,
@@ -2947,6 +2949,7 @@
 
       </div>
 
+      {#if !pickOnly}
       <!-- Only offered while away: it opens where you are now in a fresh
            window of its own, as its home, beside this reader and its trail. -->
       {#if $canGoBack}
@@ -3028,6 +3031,7 @@
           {/each}
         </svg></span>
       </button>
+      {/if}
 
       <!-- ── The harmony controls ───────────────────────────────────────────
            Both live at the end of the first pill rather than out in the right

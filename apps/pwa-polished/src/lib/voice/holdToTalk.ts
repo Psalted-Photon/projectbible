@@ -180,6 +180,18 @@ export function micReadyToRecord(then: () => void): boolean {
   return !stop;
 }
 
+/**
+ * By Heart's mic, which needs Voice Control downloaded as well: true when it
+ * can open now. Otherwise the card for what's missing opens, and after the ask
+ * card's Continue `then` opens it.
+ */
+export function micReadyToListen(then: () => void): boolean {
+  watchVoiceReady();
+  const stop = blocker();
+  if (stop) openCard(stop, 'talk', stop === 'ask' ? then : null);
+  return !stop;
+}
+
 /** A recording's mic didn't open: the card for why, if there is one. True when a card opened. */
 export function recordMicFailed(err: unknown): boolean {
   if (isBlocked(err)) {

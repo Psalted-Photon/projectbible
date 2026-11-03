@@ -116,8 +116,16 @@ export class VoiceTake {
   /**
    * Opens the mic (asking for it the first time) and keeps what it hears from
    * then on. `onLevel` gets the loudness, 0–1, for a meter; `onFull` is called at 30 s.
+   *
+   * With `onAudio`, what it hears goes there as it comes, at the rate given,
+   * and none of it is kept, so there is no 30 s limit and finish() has nothing
+   * to return: the caller closes it with cancel().
    */
-  async start(opts: { onLevel?: (level: number) => void; onFull?: () => void } = {}): Promise<void> {
+  async start(opts: {
+    onLevel?: (level: number) => void;
+    onFull?: () => void;
+    onAudio?: (pcm: Float32Array, rate: number) => void;
+  } = {}): Promise<void> {
     this.live = true;
     const s = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -154,8 +162,12 @@ export class VoiceTake {
     node.port.onmessage = (e) => {
       if (!this.live) return;
       const f = e.data as Float32Array;
-      this.parts.push(f);
-      this.len += f.length;
+      if (opts.onAudio) {
+        opts.onAudio(f, this.rate);
+      } else {
+        this.parts.push(f);
+        this.len += f.length;
+      }
       let sum = 0;
       for (let i = 0; i < f.length; i++) sum += f[i] * f[i];
       opts.onLevel?.(Math.min(1, Math.sqrt(sum / f.length) * 6));

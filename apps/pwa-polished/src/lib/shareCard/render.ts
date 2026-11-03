@@ -303,7 +303,7 @@ export async function renderCard(
   if (qr) drawQr(ctx, qr, qrX, qrY, qrSize);
 
   drawMark(ctx, icon, W / 2, markBaseline, markSize, style.textColor);
-  return { boxes, largestTextSize: Math.floor(largest / unit) };
+  return { boxes, largestTextSize: Math.floor(largest / unit), fontSize: fitted.fontSize };
 }
 
 function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number): string {

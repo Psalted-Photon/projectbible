@@ -84,6 +84,9 @@ export function outerRadius(lineHeight: number, count: number): number {
  * of the right-hand gap, which is where the Word/Verse pair goes.
  */
 export function seatAngles(count: number): number[] {
+  // The short ring: one straight above the word, one straight below.
+  if (count === 2) return [270, 90];
+
   const top = Math.ceil(count / 2);
   const bottom = count - top;
 
@@ -167,6 +170,8 @@ export interface RadialItemOpts {
    * comes in.
    */
   verseLocked?: boolean;
+  /** By Heart's simple reader: the short ring, Select and Extend. */
+  pickOnly?: boolean;
 }
 
 /**
@@ -182,6 +187,19 @@ export interface RadialItemOpts {
  * Share sits beside Notes on a sky blue deep enough to read apart from it.
  */
 export function radialItems(o: RadialItemOpts): RadialItem[] {
+  if (o.pickOnly) {
+    return [
+      { kind: 'action', id: 'select', label: 'Select', icon: 'select', accent: '#34d399' },
+      {
+        kind: 'action',
+        id: 'extend',
+        label: o.extendArmed ? 'Tap…' : 'Extend',
+        icon: 'extend',
+        accent: o.extendArmed ? '#667eea' : '#9ca3af',
+      },
+    ];
+  }
+
   if (o.verseLocked) {
     return [
       { kind: 'action', id: 'highlight', label: 'Highlight', icon: 'highlight', accent: '#fde047' },

@@ -29,6 +29,13 @@ export interface ShareRef {
   verses?: number[];
 }
 
+/** A passage picked in the simple reader, in the translation it was read in. */
+export interface PickedPassage {
+  passage: string;
+  ref: ShareRef;
+  translation: string;
+}
+
 /** "3, 5", "3-4, 7": the verses in runs. Null when they run unbroken. */
 function verseList(verses: number[] | undefined): string | null {
   if (!verses || verses.length < 2) return null;
