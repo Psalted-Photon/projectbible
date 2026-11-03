@@ -70,8 +70,12 @@
     if (token !== drawToken || !canvas) return;
     boxes = done.boxes;
     fontCardPx = done.fontSize;
-    canvas.width = target.width;
-    canvas.height = target.height;
+    // Through a local: setting a property on `canvas` itself counts as changing
+    // it, which starts another draw, and with nothing left to load the draws
+    // chain without ever letting the page paint or take a tap.
+    const shown = canvas;
+    shown.width = target.width;
+    shown.height = target.height;
     softBlur = -1;
     alpha = [];
     paintAll();
