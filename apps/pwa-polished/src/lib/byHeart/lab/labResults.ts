@@ -21,6 +21,8 @@ export interface RunResult {
   title: string;
   method: string;
   favor: number;
+  /** Where the blur slider was, as a share of the text size. */
+  blur: number;
   passage: string;
   stats: RunStats;
   /** A wrong-word run: the wrong word got through. Null otherwise. */
@@ -93,7 +95,11 @@ function empty(): LabResults {
 function restore(): LabResults {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...empty(), ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<LabResults>;
+      // Runs from before the word check stayed with the screen don't count any more.
+      return { ...empty(), ...saved, runs: (saved.runs ?? []).filter((run) => run.stats?.freshStarts != null) };
+    }
   } catch {
     /* no storage, or an unreadable value: start over */
   }
@@ -147,16 +153,17 @@ function deviceLine(): string {
 function runLines(r: RunResult): string[] {
   const s = r.stats;
   const lines = [
-    `${r.title} · ${r.method} · favor ${r.favor} · ${r.passage}: ${s.shown}/${s.total} shown, ${s.tapped} tapped`,
+    `${r.title} · ${r.method} · favor ${r.favor} · blur ${r.blur.toFixed(2)} · ${r.passage}: ${s.shown}/${s.total} shown, ${s.tapped} tapped`,
     `  lag ms: median ${ms(s.lagMedian)} · 90% ${ms(s.lagP90)} · max ${ms(s.lagMax)} (${s.timed} words timed, ${s.early} early)`,
-    `  passes: ${s.passes} · median ${ms(s.passMedian)} ms · max ${ms(s.passMax)} · first ${ms(s.passFirst)} → last ${ms(s.passLast)} · round trip ${ms(s.roundMedian)}`,
+    `  passes: ${s.passes} · median ${ms(s.passMedian)} ms · max ${ms(s.passMax)} · first ${ms(s.passFirst)} → last ${ms(s.passLast)} · round trip ${ms(s.roundMedian)} · fresh starts ${s.freshStarts}`,
     `  shown at once ${s.atOnce} · after settling ${s.settled} · shown but never settled ${s.overran}`,
     `  small words dropped ${s.dropped.length}/${s.smallWords}${s.dropped.length ? ` (${s.dropped.join(', ')})` : ''}`,
   ];
   if (r.falsePass != null) lines.push(`  wrong word got through: ${r.falsePass ? 'YES' : 'no'}`);
   if (s.alike.length) lines.push(`  passed as sound-alikes: ${s.alike.join(', ')}`);
-  if (s.wrong.length) lines.push(`  heard but wrong: ${s.wrong.slice(0, 12).join(', ')}`);
+  if (s.wrong.length) lines.push(`  heard but wrong: ${s.wrong.join(', ')}`);
   lines.push(`  heard: ${s.heard}`);
+  if (s.lastGuess) lines.push(`  last guess: ${s.lastGuess}`);
   return lines;
 }
 

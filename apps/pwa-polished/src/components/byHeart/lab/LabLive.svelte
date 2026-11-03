@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
    * The lab's main test: reading verses out loud while the words uncover. A
-   * list of set runs answers how fast it can reveal, how many upcoming words to
-   * favor, how often small words drop and what repeated words do. Word timings
-   * show up in every run's lag. A word it won't take can be tapped to move on.
+   * list of set runs, all at ¼ second, answers how many upcoming words to favor,
+   * whether a wrong word is held back, what repeated words do and whether a long
+   * passage holds up. Word timings show up in every run's lag. A word it won't
+   * take can be tapped to move on.
    */
   import { onDestroy, onMount } from 'svelte';
   import { Check, Microphone, Stop } from 'phosphor-svelte';
@@ -37,29 +38,37 @@
 
   const JOHN: RunSpec['at'] = ['John', 3, 16, 16];
   const PSALM: RunSpec['at'] = ['Psalm', 23, 1, 1];
+  const ISAIAH: RunSpec['at'] = ['Isaiah', 6, 3, 3];
   const WRONG = 'Read the verse, but say “leopard” instead of “shepherd”. Then tap Stop.';
+  const STUCK = 'If it stops clearing, go back and say the word it stopped on.';
 
   const RUNS: RunSpec[] = [
-    { id: 'hop1000', title: 'Live, 1 second', method: 'stream', hopMs: 1000, favor: 3, at: JOHN },
-    { id: 'hop500', title: 'Live, ½ second', method: 'stream', hopMs: 500, favor: 3, at: JOHN },
     { id: 'hop250', title: 'Live, ¼ second', method: 'stream', hopMs: 250, favor: 3, at: JOHN },
-    { id: 'pauses', title: 'Bursts at pauses', method: 'pauses', hopMs: 0, favor: 3, at: JOHN },
-    { id: 'favor0', title: 'Favor none', method: 'stream', hopMs: 500, favor: 0, at: JOHN },
-    { id: 'favor1', title: 'Favor 1', method: 'stream', hopMs: 500, favor: 1, at: JOHN },
-    { id: 'favor5', title: 'Favor 5', method: 'stream', hopMs: 500, favor: 5, at: JOHN },
-    { id: 'wrong1', title: 'Wrong word, favor 1', method: 'stream', hopMs: 500, favor: 1, at: PSALM, say: WRONG, wrongWord: 'shepherd' },
-    { id: 'wrong3', title: 'Wrong word, favor 3', method: 'stream', hopMs: 500, favor: 3, at: PSALM, say: WRONG, wrongWord: 'shepherd' },
-    { id: 'wrong5', title: 'Wrong word, favor 5', method: 'stream', hopMs: 500, favor: 5, at: PSALM, say: WRONG, wrongWord: 'shepherd' },
+    { id: 'favor0', title: 'Favor none', method: 'stream', hopMs: 250, favor: 0, at: JOHN },
+    { id: 'favor1', title: 'Favor 1', method: 'stream', hopMs: 250, favor: 1, at: JOHN },
+    { id: 'favor5', title: 'Favor 5', method: 'stream', hopMs: 250, favor: 5, at: JOHN },
+    { id: 'wrong1', title: 'Wrong word, favor 1', method: 'stream', hopMs: 250, favor: 1, at: PSALM, say: WRONG, wrongWord: 'shepherd' },
+    { id: 'wrong3', title: 'Wrong word, favor 3', method: 'stream', hopMs: 250, favor: 3, at: PSALM, say: WRONG, wrongWord: 'shepherd' },
+    { id: 'wrong5', title: 'Wrong word, favor 5', method: 'stream', hopMs: 250, favor: 5, at: PSALM, say: WRONG, wrongWord: 'shepherd' },
     {
       id: 'holy',
-      title: 'Holy, holy, holy',
+      title: 'Holy, with pauses',
       method: 'stream',
-      hopMs: 500,
+      hopMs: 250,
       favor: 3,
-      at: ['Isaiah', 6, 3, 3],
-      say: 'Pause for two seconds after each “holy”. Each one should uncover only once you have said it.',
+      at: ISAIAH,
+      say: `Pause for two seconds after each “holy”. Each one should uncover only once you have said it. ${STUCK}`,
     },
-    { id: 'long', title: 'Psalm 23, all of it', method: 'stream', hopMs: 500, favor: 3, at: ['Psalm', 23, 0, 0] },
+    {
+      id: 'holyPace',
+      title: 'Holy, normal pace',
+      method: 'stream',
+      hopMs: 250,
+      favor: 3,
+      at: ISAIAH,
+      say: `Read it straight through. ${STUCK}`,
+    },
+    { id: 'long', title: 'Psalm 23, all of it', method: 'stream', hopMs: 250, favor: 3, at: ['Psalm', 23, 0, 0] },
   ];
 
   const style: CardStyle = restoreLastStyle();
@@ -73,12 +82,12 @@
   let trouble = '';
   let last: RunStats | null = null;
   let useMine = false;
-  let cover: 'pill' | 'wordblur' = 'pill';
+  let cover: 'pill' | 'wordblur' = 'wordblur';
   /** Light enough to read the verse through. */
   let blur = 0.12;
 
   // The free run's own choices.
-  let freeHop = 500;
+  let freeHop = 250;
   let freeFavor = 3;
   let freeMethod: HearingMethod = 'stream';
 
@@ -128,6 +137,7 @@
       method,
       hopMs,
       keywords: () => upcomingWords(p.words, thisRun.cursor, favor),
+      progress: () => thisRun.cursor,
       onLevel: (l) => (level = l),
       onUpdate: (u) => {
         thisRun.update(u);
@@ -171,7 +181,7 @@
     hearing = null;
     allowSleep('by-heart-lab');
     run = r;
-    last = r.stats(h.startedAt);
+    last = r.stats(h.startedAt, h.freshStarts);
     save(r, last);
     phase = 'idle';
   }
@@ -185,6 +195,7 @@
       title,
       method: method === 'pauses' ? 'bursts' : `live every ${hopMs} ms`,
       favor,
+      blur,
       passage: `${passage?.reference} (${passage?.label})`,
       stats,
       falsePass: wrongAt >= 0 ? stats.shown > wrongAt && stats.tapped === 0 : null,
@@ -325,7 +336,7 @@
       <option value="wordblur">Word blur</option>
     </select>
   </label>
-  <label class="grow">Blur
+  <label class="grow">Blur {blur.toFixed(2)}
     <input type="range" min="0.05" max="1" step="0.01" bind:value={blur} />
   </label>
 </div>
@@ -340,5 +351,6 @@
     <div>Small words dropped: {last.dropped.length} of {last.smallWords}{last.dropped.length ? ` (${last.dropped.join(', ')})` : ''}</div>
     {#if last.alike.length}<div>Passed as sound-alikes: {last.alike.join(', ')}</div>{/if}
     {#if last.early}<div>{last.early} shown before they were said</div>{/if}
+    {#if last.freshStarts}<div>Fresh starts: {last.freshStarts}</div>{/if}
   </div>
 {/if}

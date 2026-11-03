@@ -11,6 +11,10 @@
  * - pauses: nothing until the speaker pauses, then that whole stretch at once.
  *   The fallback if live hearing can't keep up.
  *
+ * Whistle can fall into a loop on repeated words ("holy, holy, holy" and then
+ * only more holies) and stop hearing what comes next, so speech with no word
+ * clearing for a few seconds starts it on a fresh stream.
+ *
  * Audio is only held until Whistle has heard it. Nothing is saved.
  */
 
@@ -34,6 +38,8 @@ export interface HeardUpdate {
   fedMs: number;
   /** The last reply of this take. */
   final: boolean;
+  /** This stream is over, so whatever wasn't settled by now is gone. */
+  ended: boolean;
   /** The reply as it came, for the lab's results. */
   raw: unknown;
 }
@@ -44,6 +50,8 @@ export interface HearingOptions {
   hopMs: number;
   /** Asked before each feed, so they follow the word the user is on. */
   keywords: () => string | null;
+  /** How many words are done, to notice when none are clearing. */
+  progress: () => number;
   onUpdate: (update: HeardUpdate) => void;
   onLevel?: (level: number) => void;
 }
@@ -53,6 +61,10 @@ const RATE = 16000;
 const SPEECH_LEVEL = 0.02;
 /** This much quiet after speech is a pause. */
 const PAUSE_MS = 350;
+/** This much speech with no word clearing starts a fresh stream, at the next gap between words. */
+const STUCK_MS = 3000;
+/** Or at this much, if no gap comes. */
+const STUCK_MOST_MS = 4500;
 
 // ── The worker ──────────────────────────────────────────────────────────────
 
@@ -152,6 +164,8 @@ function wordsOf(reply: { text?: string; words?: TimedWord[] } | null): TimedWor
 export class LiveHearing {
   /** When the mic's first audio started, on performance.now()'s clock. */
   startedAt = 0;
+  /** How many times it started on a fresh stream. */
+  freshStarts = 0;
 
   private take: VoiceTake | null = null;
   private down: To16k | null = null;
@@ -164,6 +178,11 @@ export class LiveHearing {
   private closed = false;
   private spoke = false;
   private quietMs = 0;
+  private lastProgress = -1;
+  private stuckMs = 0;
+  private freshDue = false;
+  /** Where the stream now running starts, in seconds from when the mic opened. */
+  private streamFrom = 0;
 
   constructor(private o: HearingOptions) {}
 
@@ -183,22 +202,64 @@ export class LiveHearing {
     this.held.push(piece);
     this.heldLen += piece.length;
     this.samples += piece.length;
+    let sum = 0;
+    for (let i = 0; i < piece.length; i++) sum += piece[i] * piece[i];
+    const loud = Math.sqrt(sum / (piece.length || 1)) > SPEECH_LEVEL;
+    const pieceMs = (piece.length / RATE) * 1000;
     if (this.o.method === 'stream') {
+      this.watchStuck(pieceMs, loud);
       if (!this.busy && this.heldLen >= (RATE * this.o.hopMs) / 1000) this.send(this.feed());
       return;
     }
-    let sum = 0;
-    for (let i = 0; i < piece.length; i++) sum += piece[i] * piece[i];
-    if (Math.sqrt(sum / (piece.length || 1)) > SPEECH_LEVEL) {
+    if (loud) {
       this.spoke = true;
       this.quietMs = 0;
     } else {
-      this.quietMs += (piece.length / RATE) * 1000;
+      this.quietMs += pieceMs;
     }
     if (this.spoke && this.quietMs >= PAUSE_MS && !this.busy) {
       this.spoke = false;
       this.send(this.clip(false));
     }
+  }
+
+  /** Only speech counts, so stopping to think never starts a fresh stream. */
+  private watchStuck(ms: number, loud: boolean): void {
+    const progress = this.o.progress();
+    if (progress !== this.lastProgress) {
+      this.lastProgress = progress;
+      this.stuckMs = 0;
+      return;
+    }
+    if (loud) this.stuckMs += ms;
+    if (this.stuckMs >= (loud ? STUCK_MOST_MS : STUCK_MS)) {
+      this.stuckMs = 0;
+      this.freshDue = true;
+    }
+  }
+
+  /** Word times in the mic's own time, from the stream's. */
+  private inMicTime(words: TimedWord[]): TimedWord[] {
+    return words.map((w) => ({ ...w, start: w.start + this.streamFrom, end: w.end + this.streamFrom }));
+  }
+
+  /** Ends this stream, hearing what it still held. The next feed starts a new one. */
+  private async startFresh(): Promise<void> {
+    this.freshDue = false;
+    const sent = performance.now();
+    const reply = await call<StreamReply>('stop');
+    this.freshStarts++;
+    this.o.onUpdate({
+      settled: this.inMicTime(wordsOf(reply)),
+      pending: '',
+      passMs: reply.pass_ms ?? null,
+      roundMs: performance.now() - sent,
+      fedMs: 0,
+      final: false,
+      ended: true,
+      raw: reply,
+    });
+    this.streamFrom = this.heldFrom / RATE;
   }
 
   private send(job: Promise<void>): void {
@@ -225,17 +286,19 @@ export class LiveHearing {
   }
 
   private async feed(): Promise<void> {
+    if (this.freshDue) await this.startFresh();
     const { pcm } = this.takeHeld();
     const fedMs = (pcm.length / RATE) * 1000;
     const sent = performance.now();
     const reply = await call<StreamReply>('feed', { pcm, keywords: this.o.keywords() }, [pcm.buffer as ArrayBuffer]);
     this.o.onUpdate({
-      settled: wordsOf(reply),
+      settled: this.inMicTime(wordsOf(reply)),
       pending: reply.pending ?? '',
       passMs: reply.pass_ms ?? null,
       roundMs: performance.now() - sent,
       fedMs,
       final: false,
+      ended: false,
       raw: reply,
     });
   }
@@ -252,6 +315,7 @@ export class LiveHearing {
       roundMs: performance.now() - sent,
       fedMs,
       final,
+      ended: final,
       raw: reply,
     });
   }
@@ -271,12 +335,13 @@ export class LiveHearing {
     const sent = performance.now();
     const reply = await call<StreamReply>('stop').catch(() => null);
     this.o.onUpdate({
-      settled: wordsOf(reply),
+      settled: this.inMicTime(wordsOf(reply)),
       pending: '',
       passMs: reply?.pass_ms ?? null,
       roundMs: performance.now() - sent,
       fedMs: 0,
       final: true,
+      ended: true,
       raw: reply,
     });
   }

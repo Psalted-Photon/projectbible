@@ -6,9 +6,11 @@
  * because the recognizer can only guess which one was meant. If it drops a
  * small word and the next word is right, the small word is let go.
  *
- * walkWords goes through everything heard so far from the start, every time.
- * Words are never counted twice however often they are heard again, so "holy,
- * holy, holy" takes three holies, not one heard three times over.
+ * walkWords carries on from the last heard word that passed, never from the
+ * start again. A word on screen stays passed even if the guess that passed it
+ * changes ("psalm" settling as "song"), so the check stays on the word the user
+ * is on, and no heard word counts twice, so "holy, holy, holy" takes three
+ * holies, not one heard three times over.
  */
 
 import { editDistance, soundKey } from '../fuzzy';
@@ -23,6 +25,12 @@ const SMALL = new Set(`a an the and or but of to in on at by for from with as is
 
 /** How many small words in a row may be let go. */
 const MAX_DROPPED = 2;
+
+/** What Whistle has written for a word, that nothing in sameWord would catch. */
+const HEARD_AS = new Map<string, string[]>([
+  ['a', ['air', 'aye', 'ah', 'uh']],
+  ['psalm', ['palm']],
+]);
 
 const NUMBERS: Record<string, string> = {
   '0': 'zero',
@@ -60,11 +68,16 @@ export const isSmallWord = (plain: string): boolean => SMALL.has(plain);
 /** Both plain already. 'exact', 'alike' for one that sounds the same or nearly is, or null. */
 function sameWord(heard: string, word: string): 'exact' | 'alike' | null {
   if (heard === word) return 'exact';
-  if (soundsAlike(heard, word)) return 'alike';
+  if (soundsAlike(heard, word) || HEARD_AS.get(word)?.includes(heard)) return 'alike';
   const apart = editDistance(heard, word);
   if (apart <= 2 && word.length >= 3 && soundKey(heard) === soundKey(word)) return 'alike';
+  // An opening vowel it didn't catch: "Turnal" for "eternal".
+  if (apart <= 2 && word.length >= 5 && /^[aeiou]/.test(word) && soundKey(heard) === soundKey(word.slice(1))) return 'alike';
   return apart <= 1 && word.length >= 6 ? 'alike' : null;
 }
+
+/** Whether a heard word counts as this word of the verse. */
+export const heardAs = (heard: string, word: string): boolean => sameWord(plainWord(heard), plainWord(word)) != null;
 
 /** How many heard words from `at` spell out one word ("for ever", "well pleased"), or 0. */
 function spellsOut(heard: string[], at: number, word: string): number {
@@ -77,26 +90,55 @@ function spellsOut(heard: string[], at: number, word: string): number {
   return 0;
 }
 
+/** Where a walk got to, for the next one to carry on from. */
+export interface WalkAt {
+  /** How many words from the start are done. */
+  cursor: number;
+  /** The first heard word not used yet. */
+  next: number;
+  /** The heard word before it, plain, to find the place again if a guess changes length. */
+  lastHeard: string;
+}
+
 export interface Walk {
   /** How many words from the start are done. */
   cursor: number;
-  /** How each done word got passed. */
+  /** How each word done on this walk got passed. */
   how: WordPass[];
-  /** Which heard word passed each done word, -1 when none did. */
+  /** Which heard word passed each of them, -1 when none did. */
   by: number[];
-  /** Heard words that weren't the word the user was on. */
-  wrong: { heard: string; on: number }[];
+  /** Heard words that weren't the word the user was on, and where they were heard. */
+  wrong: { heard: string; on: number; at: number }[];
+  /** Hand this to the next walk. */
+  place: WalkAt;
 }
 
 /**
- * Everything heard so far, against the words. `tapped` holds the words the
- * user passed by hand ("I said it"), which take nothing heard.
+ * Where to carry on in what is heard now. A guess can come back a word longer
+ * or shorter ("for ever and" as "forever and ever"), so the place is found again
+ * by the word before it. With too few words the guess just got shorter: the
+ * place stays, so the words that come back aren't counted twice.
  */
-export function walkWords(words: string[], heard: string[], tapped?: ReadonlySet<number>): Walk {
+function pickUp(from: WalkAt, got: string[]): number {
+  if (!from.lastHeard || from.next > got.length || got[from.next - 1] === from.lastHeard) return from.next;
+  for (const off of [1, -1, 2, -2, 3, -3]) {
+    if (got[from.next - 1 + off] === from.lastHeard) return from.next + off;
+  }
+  return from.next;
+}
+
+/**
+ * What is heard now against the words, carrying on from the last walk. `tapped`
+ * holds the words the user passed by hand ("I said it"), which take nothing
+ * heard. Heard words since the last pass are checked again each time, so a tap
+ * catches up on whatever was said after the stuck word.
+ */
+export function walkWords(words: string[], heard: string[], tapped?: ReadonlySet<number>, from?: WalkAt): Walk {
   const want = words.map(plainWord);
   const got = heard.map(plainWord);
   const n = want.length;
-  const walk: Walk = { cursor: 0, how: [], by: [], wrong: [] };
+  let next = from ? pickUp(from, got) : 0;
+  const walk: Omit<Walk, 'place'> = { cursor: from?.cursor ?? 0, how: [], by: [], wrong: [] };
   // Passed without hearing anything: tapped by hand, or a lone dash nobody can say.
   const passFree = () => {
     while (walk.cursor < n && (tapped?.has(walk.cursor) || !want[walk.cursor])) {
@@ -109,11 +151,12 @@ export function walkWords(words: string[], heard: string[], tapped?: ReadonlySet
     walk.how[walk.cursor] = how;
     walk.by[walk.cursor] = by;
     walk.cursor++;
+    if (by >= 0) next = by + 1;
     passFree();
   };
   passFree();
 
-  for (let i = 0; i < got.length && walk.cursor < n; i++) {
+  for (let i = next; i < got.length && walk.cursor < n; i++) {
     const w = got[i];
     if (!w) continue;
     const on = want[walk.cursor];
@@ -146,9 +189,9 @@ export function walkWords(words: string[], heard: string[], tapped?: ReadonlySet
       if (walk.cursor < n) pass(sameWord(w, want[walk.cursor]) ?? 'alike', i);
       continue;
     }
-    walk.wrong.push({ heard: heard[i], on: walk.cursor });
+    walk.wrong.push({ heard: heard[i], on: walk.cursor, at: i });
   }
-  return walk;
+  return { ...walk, place: { cursor: walk.cursor, next, lastHeard: got[next - 1] ?? from?.lastHeard ?? '' } };
 }
 
 /** The next words for the recognizer to favor, one per line, or null for none. */

@@ -5,7 +5,7 @@
 
 import type { HeardUpdate } from '../hearing';
 import type { TimedWord } from '../../voice/engine';
-import { isSmallWord, plainWord, splitWords, walkWords } from '../wordMatch';
+import { heardAs, isSmallWord, plainWord, splitWords, walkWords, type WalkAt, type WordPass } from '../wordMatch';
 
 export interface RunStats {
   total: number;
@@ -32,9 +32,13 @@ export interface RunStats {
   dropped: string[];
   alike: string[];
   wrong: string[];
-  /** Shown from a guess that never settled. */
+  /** Shown from a guess that never settled as that word. */
   overran: number;
+  /** How many times it started on a fresh stream because no word was clearing. */
+  freshStarts: number;
   heard: string;
+  /** The last thing it was still unsure of. */
+  lastGuess: string;
   sample: string;
 }
 
@@ -53,9 +57,17 @@ export class LiveRun {
   /** The last thing heard that wasn't the word the user is on. */
   wrongNow: string | null = null;
 
+  private place: WalkAt | undefined;
   private tapped = new Set<number>();
   private shownAt: number[] = [];
   private fromPending: boolean[] = [];
+  /** For each word done: how it passed, which heard word passed it (-1 none), and what that word was. */
+  private how: WordPass[] = [];
+  private by: number[] = [];
+  private passedAs: string[] = [];
+  /** Settled words that weren't the word the user was on, by where they were heard. */
+  private wrong = new Map<number, { heard: string; on: number }>();
+  private lastGuess = '';
   private passMs: number[] = [];
   private roundMs: number[] = [];
   private sample = '';
@@ -70,6 +82,9 @@ export class LiveRun {
   update(u: HeardUpdate, at = performance.now()): void {
     this.settled.push(...u.settled);
     this.pending = u.pending;
+    if (u.pending) this.lastGuess = u.pending;
+    // What was still a guess can't come back now, so the place can't be past what settled.
+    if (u.ended && this.place) this.place.next = Math.min(this.place.next, this.settled.length);
     if (u.passMs != null) this.passMs.push(u.passMs);
     if (u.fedMs > 0) this.roundMs.push(u.roundMs);
     if (!this.sample && u.settled.length) this.sample = JSON.stringify(u.raw).slice(0, 320);
@@ -84,31 +99,54 @@ export class LiveRun {
 
   private advance(at: number): void {
     const said = this.settled.length;
-    const walk = walkWords(this.words, [...this.settled.map((w) => w.word), ...splitWords(this.pending)], this.tapped);
+    const heard = [...this.settled.map((w) => w.word), ...splitWords(this.pending)];
+    const walk = walkWords(this.words, heard, this.tapped, this.place);
     for (let i = this.cursor; i < walk.cursor; i++) {
       this.shownAt[i] = at;
       this.fromPending[i] = walk.by[i] >= said;
+      this.how[i] = walk.how[i];
+      this.by[i] = walk.by[i];
+      this.passedAs[i] = heard[walk.by[i]] ?? '';
     }
-    this.cursor = Math.max(this.cursor, walk.cursor);
+    this.cursor = walk.cursor;
+    this.place = walk.place;
+    for (const w of walk.wrong) {
+      if (w.at < said && !this.wrong.has(w.at)) this.wrong.set(w.at, w);
+    }
     const last = walk.wrong[walk.wrong.length - 1];
     this.wrongNow = last && last.on === this.cursor ? last.heard.trim() : null;
   }
 
+  /** The settled word that said this word: where it passed, or close by if the words shifted as they settled. */
+  private settledWord(i: number): TimedWord | null {
+    for (const off of [0, 1, -1, 2, -2, 3, -3]) {
+      const word = this.settled[this.by[i] + off];
+      if (word && heardAs(word.word, this.words[i])) return word;
+    }
+    return null;
+  }
+
   /** What the whole read comes to, after the last reply. */
-  stats(startedAt: number): RunStats {
-    const walk = walkWords(this.words, this.settled.map((w) => w.word), this.tapped);
+  stats(startedAt: number, freshStarts = 0): RunStats {
     const lags: number[] = [];
     let early = 0;
-    for (let i = 0; i < Math.min(walk.cursor, this.cursor); i++) {
-      const word = this.settled[walk.by[i]];
-      if (!word || !Number.isFinite(word.end)) continue;
+    let overran = 0;
+    for (let i = 0; i < this.cursor; i++) {
+      if (this.by[i] < 0) continue;
+      const word = this.settledWord(i);
+      if (!word) {
+        if (this.fromPending[i]) overran++;
+        continue;
+      }
+      if (!Number.isFinite(word.end)) continue;
       const lag = this.shownAt[i] - (startedAt + word.end * 1000);
       lags.push(lag);
       if (lag < -50) early++;
     }
     const plain = this.words.map(plainWord);
-    const dropped = walk.how.flatMap((how, i) => (how === 'dropped' ? [plain[i]] : []));
-    const alike = walk.how.flatMap((how, i) => (how === 'alike' ? [`${this.settled[walk.by[i]]?.word.trim()}→${plain[i]}`] : []));
+    const dropped = this.how.flatMap((how, i) => (how === 'dropped' ? [plain[i]] : []));
+    const alike = this.how.flatMap((how, i) => (how === 'alike' ? [`${this.passedAs[i].trim()}→${plain[i]}`] : []));
+    const used = new Set(this.by);
     return {
       total: this.words.length,
       shown: this.cursor,
@@ -129,9 +167,11 @@ export class LiveRun {
       smallWords: plain.filter((w, i) => i < this.cursor && isSmallWord(w)).length,
       dropped,
       alike,
-      wrong: walk.wrong.map((w) => `${w.heard.trim()} (on ${plain[w.on]})`),
-      overran: Math.max(0, this.cursor - walk.cursor),
+      wrong: [...this.wrong].filter(([at]) => !used.has(at)).map(([, w]) => `${w.heard.trim()} (on ${plain[w.on]})`),
+      overran,
+      freshStarts,
       heard: this.settled.map((w) => w.word.trim()).join(' '),
+      lastGuess: this.lastGuess.trim(),
       sample: this.sample,
     };
   }
