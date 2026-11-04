@@ -78,8 +78,10 @@ const STARTER_TRANSLATION = 'NET';
  *       verse 1 of the next book ("Written to the Romans…" over 1 Corinthians).
  *   5 — the 17 verses NET leaves out (Matthew 17:21 …) have a note that says
  *       why and quotes the KJV, not one that read "[[EMPTY]]".
+ *   6 — 40 NET verses lose a stray "*" after an OT quotation (Acts 4:26 ended
+ *       "his Christ: *.’"), and 13 lose a space before their punctuation.
  */
-const STARTER_REVISION = 5;
+const STARTER_REVISION = 6;
 const STARTER_REVISION_KEY = 'hexapla-starter-revision';
 
 /**

@@ -121,6 +121,47 @@ function unmarkFootnoteReferences(content) {
 }
 
 /**
+ * Typing slips in the eBible NET USFM, which the reader would show as written.
+ *
+ * A stray "*" follows the close of an OT quotation in 40 New Testament verses:
+ * mostly "\qt**", but Acts 3:25, Acts 4:26 and 2 Corinthians 6:16 have
+ * "\qt*: *.’" and Ephesians 6:2 has "\qt*,,*”". 13 verses have a space before
+ * their punctuation ("Turn , turn", "the Christ ? This"), and 1 Peter 2:6 reads
+ * "Look,I". All were checked against the publisher's labs.bible.org text.
+ *
+ * A space before punctuation is only a slip after a plain word or a closed \w.
+ * After any other marker it is the marker's own required space ("\sc .”").
+ * Footnotes are left as they are.
+ */
+const NOTE_SPLIT = /(\\f [\s\S]*?\\f\*)/;
+const STRAY_STAR = /\\qt\*(: \*|,,\*|\*)/g;
+const SPACED_PUNCTUATION = /(\S+) +([,;:?!.])(?=[\s’”]|$)/g;
+let slipsRepaired = 0;
+
+function repairTypingSlips(content) {
+  return content
+    .split(NOTE_SPLIT)
+    .map((part, i) => {
+      if (i % 2) return part;
+      return part
+        .replace(STRAY_STAR, (_, stray) => {
+          slipsRepaired++;
+          return `${BS}qt*${stray === ',,*' ? ',' : ''}`;
+        })
+        .replace(SPACED_PUNCTUATION, (all, before, mark) => {
+          if (before.includes(BS) && !before.endsWith(`${BS}w*`)) return all;
+          slipsRepaired++;
+          return before + mark;
+        })
+        .replace('Look,I lay', () => {
+          slipsRepaired++;
+          return 'Look, I lay';
+        });
+    })
+    .join('');
+}
+
+/**
  * The NET leaves out 16 verses the oldest manuscripts lack (Matthew 17:21 ...),
  * and numbers 2 Corinthians 13:14 as 13:13. The eBible USFM keeps each as an
  * empty verse whose only footnote reads "[[EMPTY]]", where the NET's own note
@@ -198,7 +239,7 @@ export function readBooks(parseOptions = {}, { quiet = false } = {}) {
     }
 
     const content = unmarkFootnoteReferences(
-      repairDoubledQuotes(readFileSync(join(USFM_DIR, file), 'utf8'))
+      repairTypingSlips(repairDoubledQuotes(readFileSync(join(USFM_DIR, file), 'utf8')))
     );
     const verses = processVerses(parseUSFM(content, { ...NET_OPTIONS, ...parseOptions })).map((v) => ({
       chapter: v.chapter,
@@ -264,16 +305,23 @@ function buildPack(books) {
     .prepare(
       `SELECT
          SUM(text LIKE '%' || char(16) || '%') AS paragraphs,
-         SUM(text LIKE '%' || char(17) || '%') AS poetry
+         SUM(text LIKE '%' || char(17) || '%') AS poetry,
+         SUM(text LIKE '%*%') AS stars
        FROM verses`
     )
     .get();
 
   db.close();
 
+  if (structure.stars) {
+    console.error(`❌ ${structure.stars} verses still carry a stray "*"`);
+    process.exit(1);
+  }
+
   console.log(`\n✓ ${total.toLocaleString()} verses`);
   console.log(`✓ ${repairsApplied} verses restored from the source-defect table`);
   console.log(`✓ ${doubledRepaired} doubled quotations written once`);
+  console.log(`✓ ${slipsRepaired} typing slips repaired`);
   console.log(`✓ ${emptyNotesFilled} empty notes on left-out verses filled in`);
   console.log(`✓ ${Number(structure.paragraphs).toLocaleString()} verses open a paragraph`);
   console.log(`✓ ${Number(structure.poetry).toLocaleString()} verses carry a poetic line`);
