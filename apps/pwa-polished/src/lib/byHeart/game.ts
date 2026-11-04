@@ -11,11 +11,27 @@
 import { writable } from 'svelte/store';
 import { getSettings, updateSettings } from '../../adapters/settings';
 
-/** The game on screen. Null is none, and nothing of it is loaded. */
-export const byHeartGame = writable<{ verseId: string } | null>(null);
+/** How a verse is played. */
+export type GameMode = 'focus';
 
-export function openGame(verseId: string): void {
-  byHeartGame.set({ verseId });
+/** One verse, played one way. */
+export interface GameStep {
+  verseId: string;
+  mode: GameMode;
+}
+
+/** What is on the game screen: the steps it runs through, and which one it is on. */
+export interface GameSession {
+  id: number;
+  steps: GameStep[];
+  at: number;
+}
+
+/** The game on screen. Null is none, and nothing of it is loaded. */
+export const byHeartGame = writable<GameSession | null>(null);
+
+export function openGame(verseId: string, mode: GameMode = 'focus'): void {
+  byHeartGame.set({ id: Date.now(), steps: [{ verseId, mode }], at: 0 });
 }
 
 export function closeGame(): void {
@@ -29,15 +45,22 @@ export const RUN_KEY = 'projectbible_byheart_run';
 
 export interface GameRun {
   verseId: string;
+  mode: GameMode;
   /** How many words are done. */
   cursor: number;
+  /** The reference is still to be said. */
+  refStart: boolean;
+  refEnd: boolean;
+  /** What took a hint so far, and which of those were asked for with Show me. */
+  hints: number[];
+  shownMe: number[];
 }
 
-/** The saved place in this verse, if the last game was on it. */
-export function readRun(verseId: string): GameRun | null {
+/** The saved place in this verse, if the last game was on it and played this way. */
+export function readRun(verseId: string, mode: GameMode): GameRun | null {
   try {
     const run = JSON.parse(localStorage.getItem(RUN_KEY) ?? 'null') as GameRun | null;
-    return run?.verseId === verseId && Number.isInteger(run.cursor) && run.cursor >= 0 ? run : null;
+    return run?.verseId === verseId && run.mode === mode && Number.isInteger(run.cursor) && run.cursor >= 0 ? run : null;
   } catch {
     return null;
   }
@@ -70,10 +93,16 @@ export type GameCover = 'wordblur' | 'box';
  */
 export const DEFAULT_BLUR = 0.29;
 export const BLUR_RANGE = { min: 0, max: 0.6 };
+/** Under this a word can be read, so saying it counts as a hint. */
+export const BLUR_LINE = 0.12;
+
+/** Whether the reference has to be said, and when. */
+export type SpokenRefMode = 'off' | 'start' | 'end' | 'both';
 
 export interface GamePrefs {
   blur: number;
   cover: GameCover;
+  reference: SpokenRefMode;
 }
 
 export function gamePrefs(): GamePrefs {
@@ -84,9 +113,10 @@ export function gamePrefs(): GamePrefs {
         ? Math.max(BLUR_RANGE.min, Math.min(BLUR_RANGE.max, saved.blur))
         : DEFAULT_BLUR,
     cover: saved?.cover === 'box' ? 'box' : 'wordblur',
+    reference: saved?.reference ?? 'off',
   };
 }
 
-export function setGamePrefs(prefs: GamePrefs): void {
-  updateSettings({ byHeartGame: prefs });
+export function setGamePrefs(prefs: Partial<GamePrefs>): void {
+  updateSettings({ byHeartGame: { ...getSettings().byHeartGame, ...prefs } });
 }

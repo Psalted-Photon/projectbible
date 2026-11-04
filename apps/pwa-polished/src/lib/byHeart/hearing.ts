@@ -54,6 +54,8 @@ export interface HearingOptions {
   progress: () => number;
   onUpdate: (update: HeardUpdate) => void;
   onLevel?: (level: number) => void;
+  /** What the mic hears, at 16 kHz, for someone who asked to keep their own voice. */
+  onPcm?: (pcm: Float32Array) => void;
 }
 
 const RATE = 16000;
@@ -65,6 +67,12 @@ const PAUSE_MS = 350;
 const STUCK_MS = 3000;
 /** Or at this much, if no gap comes. */
 const STUCK_MOST_MS = 4500;
+/** A word with less than this share of the take's loudest speech was a breath or nothing. */
+const SPOKEN_SHARE = 0.3;
+/** How much of a word's time has to be that loud. */
+const SPOKEN_TIME = 0.4;
+/** Whistle's own confidence, below which a word isn't shown as heard. */
+const SPOKEN_CONFIDENCE = 0.4;
 
 // ── The worker ──────────────────────────────────────────────────────────────
 
@@ -183,6 +191,9 @@ export class LiveHearing {
   private freshDue = false;
   /** Where the stream now running starts, in seconds from when the mic opened. */
   private streamFrom = 0;
+  /** Each piece's loudness and when it ended, to tell speech from what Whistle imagined. */
+  private levels: { at: number; rms: number }[] = [];
+  private loudest = 0;
 
   constructor(private o: HearingOptions) {}
 
@@ -202,9 +213,13 @@ export class LiveHearing {
     this.held.push(piece);
     this.heldLen += piece.length;
     this.samples += piece.length;
+    this.o.onPcm?.(piece);
     let sum = 0;
     for (let i = 0; i < piece.length; i++) sum += piece[i] * piece[i];
-    const loud = Math.sqrt(sum / (piece.length || 1)) > SPEECH_LEVEL;
+    const rms = Math.sqrt(sum / (piece.length || 1));
+    this.levels.push({ at: this.samples / RATE, rms });
+    this.loudest = Math.max(this.loudest, rms);
+    const loud = rms > SPEECH_LEVEL;
     const pieceMs = (piece.length / RATE) * 1000;
     if (this.o.method === 'stream') {
       this.watchStuck(pieceMs, loud);
@@ -236,6 +251,26 @@ export class LiveHearing {
       this.stuckMs = 0;
       this.freshDue = true;
     }
+  }
+
+  /**
+   * Whether someone was speaking when this word was heard, for telling a real
+   * word from what Whistle imagines in silence or a breath ("Thank you.", "Poop?").
+   * It goes by how loud the mic was, so it can't be a list of phrases to catch.
+   */
+  wasSpoken(word: TimedWord): boolean {
+    if (!Number.isFinite(word.start) || !Number.isFinite(word.end)) return false;
+    if (word.probability < SPOKEN_CONFIDENCE) return false;
+    const floor = Math.max(SPEECH_LEVEL, this.loudest * SPOKEN_SHARE);
+    let all = 0;
+    let loud = 0;
+    for (const level of this.levels) {
+      if (level.at < word.start) continue;
+      if (level.at > word.end + 0.07) break;
+      all++;
+      if (level.rms >= floor) loud++;
+    }
+    return all > 0 && loud / all >= SPOKEN_TIME;
   }
 
   /** Word times in the mic's own time, from the stream's. */

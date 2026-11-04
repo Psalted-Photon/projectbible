@@ -19,6 +19,7 @@
   import VoiceLayer from "./components/VoiceLayer.svelte";
   import { byHeartLabOpen } from "./lib/byHeart/lab/labOpen";
   import { byHeartGame } from "./lib/byHeart/game";
+  import { userProfileStore } from "./stores/userProfileStore";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
@@ -376,7 +377,8 @@
   });
 
   $: readingPlanModalStore.set(showReadingPlanModal);
-  $: gameVerse = $byHeartGame?.verseId ?? null;
+  // By Heart is for signed-in accounts, and a game is no exception.
+  $: gameSession = $userProfileStore.isSignedIn ? $byHeartGame : null;
 
   // Calculate main content area based on open panels
   $: leftPanels = $windowStore.filter((w) => w.edge === "left");
@@ -511,10 +513,10 @@
     {/if}
 
     <!-- A By Heart game, over everything. Loaded only when one opens. -->
-    {#if gameVerse}
+    {#if gameSession}
       {#await import('./components/byHeart/ByHeartGame.svelte') then game}
-        {#key gameVerse}
-          <svelte:component this={game.default} verseId={gameVerse} />
+        {#key gameSession.id}
+          <svelte:component this={game.default} session={gameSession} />
         {/key}
       {/await}
     {/if}

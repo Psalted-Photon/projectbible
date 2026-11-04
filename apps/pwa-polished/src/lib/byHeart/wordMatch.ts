@@ -131,9 +131,16 @@ function pickUp(from: WalkAt, got: string[]): number {
  * What is heard now against the words, carrying on from the last walk. `tapped`
  * holds the words the user passed by hand ("I said it"), which take nothing
  * heard. Heard words since the last pass are checked again each time, so a tap
- * catches up on whatever was said after the stuck word.
+ * catches up on whatever was said after the stuck word. `alsoAs` is the
+ * mishearings this verse has been told to accept, by plain word.
  */
-export function walkWords(words: string[], heard: string[], tapped?: ReadonlySet<number>, from?: WalkAt): Walk {
+export function walkWords(
+  words: string[],
+  heard: string[],
+  tapped?: ReadonlySet<number>,
+  from?: WalkAt,
+  alsoAs?: Record<string, string[]>,
+): Walk {
   const want = words.map(plainWord);
   const got = heard.map(plainWord);
   const n = want.length;
@@ -160,7 +167,7 @@ export function walkWords(words: string[], heard: string[], tapped?: ReadonlySet
     const w = got[i];
     if (!w) continue;
     const on = want[walk.cursor];
-    const same = sameWord(w, on);
+    const same = sameWord(w, on) ?? (alsoAs?.[on]?.includes(w) ? 'alike' : null);
     if (same) {
       pass(same, i);
       continue;

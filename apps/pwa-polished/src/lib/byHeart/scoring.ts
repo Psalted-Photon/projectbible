@@ -10,6 +10,11 @@ const STOPS: { at: number; rgb: [number, number, number] }[] = [
   { at: 100, rgb: [34, 197, 94] },
 ];
 
+/** A round's score: what was said without help, out of everything there was to say. */
+export function scoreOf(items: number, hints: number): number {
+  return items > 0 ? Math.round((100 * Math.max(0, items - hints)) / items) : 100;
+}
+
 /** The color of a score, blended between the two stops it falls between. */
 export function scoreColor(score: number): string {
   const s = Math.max(0, Math.min(100, score));

@@ -194,9 +194,10 @@ export interface UserSettings {
   notesTheme?: EditorThemeSettings;   // Notes writing surface (sticky notes follow it)
   journalTheme?: EditorThemeSettings; // Journal writing surface
   cardLooks?: SavedCardLook[]; // Share-card looks saved by name (synced)
-  // How By Heart's games cover words: how blurry, or black boxes. A taste, so it
-  // follows the account. See lib/byHeart/game.ts.
-  byHeartGame?: { blur?: number; cover?: 'wordblur' | 'box' };
+  // How By Heart's games are played: how blurry the covers are or black boxes,
+  // and whether the reference is said. Tastes, so they follow the account. See
+  // lib/byHeart/game.ts.
+  byHeartGame?: { blur?: number; cover?: 'wordblur' | 'box'; reference?: 'off' | 'start' | 'end' | 'both' };
   highlightNames?: Record<string, string>; // Names given to Highlights categories, by category key (synced)
   // The Connections window's sets and saved views (synced). Kept loose here and
   // checked by lib/connections/sets.ts on read, like cardLooks.

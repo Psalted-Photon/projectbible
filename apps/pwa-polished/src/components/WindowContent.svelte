@@ -79,7 +79,15 @@
     <JournalWriter initialDate={panel.contentState?.date} />
   {/if}
 {:else if panel.contentType === 'byheart'}
-  <ByHeartPane windowId={panel.id} picked={panel.contentState?.picked ?? null} />
+  {#if !$userProfileStore.isSignedIn}
+    <div class="auth-wall">
+      <div class="auth-wall-icon"><PanelIcon name="byheart" size={44} plain /></div>
+      <p class="auth-wall-text">Sign in to memorize verses and keep your scores and schedule synced across all your devices.</p>
+      <button class="auth-wall-btn" on:click={() => profileModalStore.open()}>Sign in to continue <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
+    </div>
+  {:else}
+    <ByHeartPane windowId={panel.id} picked={panel.contentState?.picked ?? null} />
+  {/if}
 {:else if panel.contentType === 'art'}
   <ArtPane
     sceneId={panel.contentState?.sceneId}
@@ -148,8 +156,8 @@
     opacity: 0.7;
   }
 
-  /* Signed out, the journal window shows this in place of the writer — the
-     same wall the Notes window uses. */
+  /* Signed out, the journal and By Heart windows show this in place of their
+     content — the same wall the Notes window uses. */
   .auth-wall {
     height: 100%;
     display: flex;

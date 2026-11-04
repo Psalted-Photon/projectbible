@@ -8,7 +8,8 @@
    * word; a black box is a box. Both are painted on the canvas itself, so a long
    * passage costs no more than a short one. `blur` is a share of the text size,
    * so one number means the same at every size. The first `revealed` words are
-   * clear, and each one clears at once as it is reached.
+   * clear, and each one clears at once as it is reached. `shown` are clear as well
+   * wherever they are, and `peek` is clear for as long as it is set.
    */
   import { onDestroy } from 'svelte';
   import { CARD_SIZES, getGradient, gradientCss, renderCard, type CardContent, type CardImage, type CardStyle, type Emphasis, type WordBox } from '../../lib/shareCard';
@@ -24,7 +25,10 @@
   export let revealed = 0;
   /** Covers the reference too, for when it has to be said. */
   export let coverReference = false;
+  export let shown: ReadonlySet<number> = new Set();
+  export let peek: number | 'reference' | null = null;
   export let onTapWord: ((index: number) => void) | undefined = undefined;
+  export let onTapReference: (() => void) | undefined = undefined;
 
   let canvas: HTMLCanvasElement | null = null;
   let innerWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
@@ -75,7 +79,10 @@
   /** Which zones are painted covered right now. */
   let covered: boolean[] = [];
 
-  const coveredAt = (i: number) => (i >= wordCount ? coverReference : i >= revealed);
+  function coveredAt(i: number): boolean {
+    if (i >= wordCount) return coverReference && peek !== 'reference';
+    return i >= revealed && !shown.has(i) && peek !== i;
+  }
 
   function buildSoft() {
     if (!sharp) return;
@@ -144,7 +151,7 @@
       paintZone(ctx, i);
     });
   }
-  $: revealed, coverReference, zones, paintChanges();
+  $: revealed, coverReference, shown, peek, zones, paintChanges();
 
   // The slider: every covered word again from a new blurred copy, once a frame.
   let blurFrame = 0;
@@ -180,12 +187,14 @@
   // ── Taps ───────────────────────────────────────────────────────────────────
 
   function tapped(e: MouseEvent) {
-    if (!onTapWord || !canvas) return;
+    if (!canvas) return;
     const r = canvas.getBoundingClientRect();
     const x = ((e.clientX - r.left) / r.width) * W;
     const y = ((e.clientY - r.top) / r.height) * H;
-    const hit = zones.slice(0, wordCount).find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
-    if (hit) onTapWord(hit.index);
+    const at = zones.findIndex((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
+    if (at < 0) return;
+    if (at >= wordCount) onTapReference?.();
+    else onTapWord?.(zones[at].index);
   }
 </script>
 

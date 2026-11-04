@@ -15,7 +15,7 @@ import { get } from 'svelte/store';
 import { paneStore, type PaneState } from '../stores/paneStore';
 import { parallelStore, type ParallelLayout } from '../stores/parallelStore';
 import { familyTreeStore } from '../stores/familyTreeStore';
-import { byHeartGame, openGame } from './byHeart/game';
+import { byHeartGame, type GameSession } from './byHeart/game';
 import { windowStore } from './stores/windowStore';
 import { openHarmonyView } from './windowTypes';
 import { readingState, readingPosition, readingSource, startReading } from './tts/readingEngine';
@@ -38,8 +38,8 @@ interface Snapshot {
   panes: Array<Pick<PaneState, 'type' | 'position' | 'width' | 'height'>>;
   tree: { focusId: string | null; tribe: string | null } | null;
   harmony: HarmonySnapshot | null;
-  /** The verse a By Heart game was on. The place in it is saved by the game. */
-  byHeart?: string | null;
+  /** The By Heart game that was up. The place in it is saved by the game. */
+  byHeart?: GameSession | null;
   reading: { translation: string; book: string; chapter: number; verse: number | null } | null;
 }
 
@@ -75,7 +75,7 @@ export function saveSession(): void {
         .map(({ type, position, width, height }) => ({ type, position, width, height })),
       tree: tree.isOpen ? { focusId: tree.focusId, tribe: tree.tribe } : null,
       harmony: captureHarmony(),
-      byHeart: get(byHeartGame)?.verseId ?? null,
+      byHeart: get(byHeartGame),
       // Only scripture comes back. Plain text has no Bible position to reopen
       // at, and a commentary or devotional is not picked up again on its own.
       reading:
@@ -158,7 +158,7 @@ export function restoreSession(): void {
     }
   }
 
-  if (snap.byHeart) openGame(snap.byHeart);
+  if (snap.byHeart) byHeartGame.set(snap.byHeart);
 
   const r = snap.reading;
   if (r) {
