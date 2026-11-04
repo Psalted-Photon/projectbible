@@ -61,18 +61,20 @@
   export let highlight: RegExp | null = null;
   /** The mark's background; the search results' orange when not given. */
   export let markColor: string | null = null;
+  /** Preview in this translation rather than the reader's. */
+  export let translation = '';
 
   $: color = getBookColor(book);
-  $: translation = $navigationStore.translation;
+  $: shownIn = translation || $navigationStore.translation;
   let text = '';
-  $: load(translation, book, chapter, verse, englishRef);
+  $: load(shownIn, book, chapter, verse, englishRef);
 
   async function load(t: string, b: string, c: number, v: number, english: boolean) {
     text = '';
     if (!t) return;
     const got = await previewFor(t, b, c, v, english);
     // Only if the row still shows the same verse it asked for.
-    if (t === translation && b === book && c === chapter && v === verse) text = got;
+    if (t === shownIn && b === book && c === chapter && v === verse) text = got;
   }
 </script>
 
@@ -86,7 +88,7 @@
   {#if text}
     <span class="ref-row-text" dir="auto">{@html renderVersePreviewHtml(text, { highlight, maxLength: 150 })}</span>
   {/if}
-  <CompanionLine shown={translation} {book} {chapter} {verse} {englishRef} maxLength={150} />
+  <CompanionLine shown={shownIn} {book} {chapter} {verse} {englishRef} maxLength={150} />
 </button>
 
 <style>

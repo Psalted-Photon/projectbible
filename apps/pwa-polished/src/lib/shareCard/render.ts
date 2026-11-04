@@ -280,6 +280,8 @@ export async function renderCard(
   const refText = `\u2014 ${content.reference} (${content.translationLabel})`;
   const refY = top + fitted.lines.length * fitted.lineHeight + refGap + refHeight / 2;
   ctx.fillText(refText, centred ? W / 2 : padX, refY);
+  const refWidth = ctx.measureText(refText).width;
+  const referenceBox = { x: centred ? W / 2 - refWidth / 2 : padX, y: refY - refHeight / 2, w: refWidth, h: refHeight };
   if (content.source) {
     ctx.globalAlpha = 0.58;
     ctx.font = `${sourceSize}px ${DEFAULT_STACK}`;
@@ -303,7 +305,7 @@ export async function renderCard(
   if (qr) drawQr(ctx, qr, qrX, qrY, qrSize);
 
   drawMark(ctx, icon, W / 2, markBaseline, markSize, style.textColor);
-  return { boxes, largestTextSize: Math.floor(largest / unit), fontSize: fitted.fontSize };
+  return { boxes, largestTextSize: Math.floor(largest / unit), fontSize: fitted.fontSize, referenceBox };
 }
 
 function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number): string {

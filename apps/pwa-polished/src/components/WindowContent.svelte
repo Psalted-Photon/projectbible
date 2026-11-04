@@ -79,7 +79,7 @@
     <JournalWriter initialDate={panel.contentState?.date} />
   {/if}
 {:else if panel.contentType === 'byheart'}
-  <ByHeartPane />
+  <ByHeartPane windowId={panel.id} picked={panel.contentState?.picked ?? null} />
 {:else if panel.contentType === 'art'}
   <ArtPane
     sceneId={panel.contentState?.sceneId}

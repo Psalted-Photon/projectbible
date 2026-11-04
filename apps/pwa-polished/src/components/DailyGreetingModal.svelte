@@ -3,50 +3,23 @@
   import { welcomePending } from '../stores/welcomeStore';
   import { localDateStr } from '../stores/clockStore';
   import { navigationStore } from '../stores/navigationStore';
-  import { IndexedDBTextStore } from '../lib/adapters';
   import { get } from 'svelte/store';
-  import verseOfDay from '../data/verse-of-the-day.json';
   import { renderVerseHtml } from '../lib/verseRendering';
-  import { getBookChapters, translationLabel } from '../lib/bibleData';
-  import { testamentOf } from '../lib/testamentDefaults';
-  import { booksInTranslation } from '../lib/translationBooks';
-  import { englishRefIn } from '../lib/versification';
+  import { translationLabel } from '../lib/bibleData';
+  import { openByHeart } from '../lib/byHeart/open';
+  import { parseVotdRef, readVotdVerse, votdRefOn, type VerseSpan } from '../lib/verseOfTheDay';
   import { Sun, ArrowRight, SunHorizon, MoonStars, CalendarBlank } from 'phosphor-svelte';
   import { isDevotionalsInstalled, type DevotionalSlot } from '../lib/devotionals/devotionalsData';
   import { currentSlotStore, todayMonthDay, ONE_A_DAY_WORKS } from '../lib/devotionals/slot';
   import { devotionalSettings, openDevotional } from '../stores/devotionalStore';
 
-  const textStore = new IndexedDBTextStore();
-
-  // Parse "Book Ch:V" or "Book Ch:V1-V2" → structured object. A one-chapter
-  // book may give verses alone ("Jude 24-25"), which means chapter 1.
-  function parseRef(ref: string) {
-    const m = ref.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?$/);
-    if (m) {
-      return {
-        book: m[1],
-        chapter: parseInt(m[2], 10),
-        startVerse: parseInt(m[3], 10),
-        endVerse: m[4] ? parseInt(m[4], 10) : parseInt(m[3], 10),
-      };
-    }
-    const one = ref.match(/^(.+?)\s+(\d+)(?:-(\d+))?$/);
-    if (!one || getBookChapters(one[1]) !== 1) return null;
-    return {
-      book: one[1],
-      chapter: 1,
-      startVerse: parseInt(one[2], 10),
-      endVerse: one[3] ? parseInt(one[3], 10) : parseInt(one[2], 10),
-    };
-  }
-
-  interface VerseSpan { chapter: number; startVerse: number; endVerse: number }
-
   // State (re-evaluated each time modal opens)
   let todayStr = '';
   let verseRef = '';
-  let parsed: ReturnType<typeof parseRef> = null;
+  let parsed: ReturnType<typeof parseVotdRef> = null;
   let verseText = '';
+  /** The same words with no marks, for By Heart. */
+  let versePlain = '';
   /** Where the verse sits in the reader's translation (LXX Psalms differ). */
   let verseAt: VerseSpan | null = null;
   let verseTranslation = '';
@@ -57,9 +30,10 @@
   $: if ($dailyGreetingOpen) {
     todayStr = localDateStr(new Date());
     const mmdd = todayStr.slice(5); // "MM-DD"
-    verseRef = (verseOfDay as Record<string, string>)[mmdd] ?? '';
-    parsed = parseRef(verseRef);
+    verseRef = votdRefOn(mmdd);
+    parsed = parseVotdRef(verseRef);
     verseText = '';
+    versePlain = '';
     verseAt = null;
     verseTranslation = '';
     unavailable = '';
@@ -74,53 +48,19 @@
     });
   }
 
-  // Always the reader's translation, never another one borrowed in its place:
-  // when it hasn't got the verse, the card says so.
+  // Always the reader's translation: when it hasn't got the verse, the card says so.
   async function loadVerseText() {
     if (!parsed) { textLoading = false; return; }
-    const p = parsed;
     const translation = get(navigationStore).translation;
-    const label = translationLabel(translation);
-
-    const books = await booksInTranslation(translation);
-    if (books && !books.has(p.book)) {
-      const testament = testamentOf(p.book);
-      const hasTestament = [...books].some((b) => testamentOf(b) === testament);
-      unavailable = hasTestament
-        ? `Not available in ${label}.`
-        : `Not available in ${label}, which has the ${testament === 'NT' ? 'Old' : 'New'} Testament only.`;
-      textLoading = false;
-      return;
-    }
-
-    // The list's references use English verse numbers. The Hebrew, the
-    // Septuagint and a few English packs number some verses differently
-    // (Malachi 4:1 is Hebrew 3:19); lib/versification finds where the
-    // translation keeps them, and a verse it can't place says so rather than
-    // showing a different one.
-    const ref = (verse: number) => ({ book: p.book, chapter: p.chapter, verse });
-    const first = englishRefIn(translation, ref(p.startVerse));
-    const last = p.endVerse === p.startVerse ? first : englishRefIn(translation, ref(p.endVerse));
-    const at: VerseSpan | null =
-      first && last && first.chapter === last.chapter && last.verse >= first.verse
-        ? { chapter: first.chapter, startVerse: first.verse, endVerse: last.verse }
-        : null;
-    if (!at) {
-      unavailable = `Not available in ${label}, which numbers the verses of this chapter differently.`;
-      textLoading = false;
-      return;
-    }
-
-    const parts: string[] = [];
-    for (let v = at.startVerse; v <= at.endVerse; v++) {
-      const t = await textStore.getVerse(translation, p.book, at.chapter, v);
-      if (t) parts.push(t);
-    }
-    verseText = parts.join(' ');
-    if (verseText) {
-      verseAt = at;
+    const verse = await readVotdVerse(parsed, translation);
+    if ('unavailable' in verse) {
+      unavailable = verse.unavailable;
+    } else {
+      verseText = verse.text;
+      versePlain = verse.plain;
+      verseAt = verse.at;
       verseTranslation = translation;
-    } else unavailable = `Not available in ${label}.`;
+    }
     textLoading = false;
   }
 
@@ -164,6 +104,17 @@
     navigationStore.pushHistory(current);
     // navigateToVerse (not navigateTo) so the verse gets the category-colored fade highlight
     navigationStore.navigateToVerse(current.translation, parsed.book, verseAt.chapter, verseAt.startVerse);
+    close();
+  }
+
+  /** Keep this verse in By Heart: on to its card, in the By Heart window. */
+  function learnIt() {
+    if (!parsed || !verseAt) return;
+    openByHeart({
+      passage: versePlain,
+      ref: { book: parsed.book, chapter: verseAt.chapter, startVerse: verseAt.startVerse, endVerse: verseAt.endVerse },
+      translation: verseTranslation,
+    });
     close();
   }
 
@@ -232,6 +183,7 @@
           <button class="dg-btn-primary" on:click={goToVerse}>
             Read in context <ArrowRight size={14} weight="bold" />
           </button>
+          <button class="dg-btn-secondary" on:click={learnIt}>Learn by heart</button>
         {/if}
         <button class="dg-btn-secondary" on:click={close}>Dismiss</button>
       </div>

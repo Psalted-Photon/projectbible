@@ -1,3 +1,25 @@
+<script lang="ts" context="module">
+  import type { CardImage as PanelImage, CardStyle as PanelStyle, Emphasis as PanelEmphasis } from '../lib/shareCard';
+  import type { SavedPainting } from '../lib/byHeart/verse';
+
+  /** A card already designed, to carry on from. */
+  export interface InitialCard {
+    style: PanelStyle;
+    emphasis: Record<number, PanelEmphasis>;
+    photo: PanelImage | null;
+    painting: PanelImage | null;
+    paintingId: string | null;
+  }
+
+  /** The card as it stands, for keeping. A photo comes with its framing, and stays on this device. */
+  export interface CardDesign {
+    style: PanelStyle;
+    emphasis: Record<number, PanelEmphasis>;
+    painting: SavedPainting | null;
+    photo: { image: Blob; zoom: number; panX: number; panY: number } | null;
+  }
+</script>
+
 <script lang="ts">
   /**
    * The Card side of the Share sheet: a live preview of the image card, the
@@ -63,14 +85,19 @@
   export let qrUrl = '';
   /** A small line under the reference, e.g. "Spurgeon · Morning and Evening · January 1". */
   export let source = '';
+  /** A card to carry on from, rather than the last look used. */
+  export let initial: InitialCard | undefined = undefined;
+  /** With both of these, a button beside Share and Save keeps the card: By Heart's. */
+  export let saveLabel = '';
+  export let onSave: ((design: CardDesign) => void | Promise<void>) | undefined = undefined;
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
-  let style: CardStyle = restoreLastStyle();
-  let photo: CardImage | null = null;
-  let painting: CardImage | null = null;
-  let paintingId: string | null = null;
-  let emphasis: Record<number, Emphasis> = {};
+  let style: CardStyle = initial?.style ?? restoreLastStyle();
+  let photo: CardImage | null = initial?.photo ?? null;
+  let painting: CardImage | null = initial?.painting ?? null;
+  let paintingId: string | null = initial?.paintingId ?? null;
+  let emphasis: Record<number, Emphasis> = initial?.emphasis ?? {};
 
   $: image = style.background === 'photo' ? photo : style.background === 'painting' ? painting : null;
   $: hasEmphasis = Object.keys(emphasis).length > 0;
@@ -471,6 +498,42 @@
     resetFeedbackSoon();
   }
 
+  let keeping = false;
+
+  /** A photo is kept at the size it was shrunk to on the way in. */
+  function photoBlob(img: CardImage): Promise<Blob | null> {
+    return new Promise((resolve) => (img.source as HTMLCanvasElement).toBlob(resolve, 'image/jpeg', 0.9));
+  }
+
+  async function handleKeep() {
+    if (!onSave || keeping) return;
+    keeping = true;
+    try {
+      const pic = style.background === 'photo' && photo ? await photoBlob(photo) : null;
+      await onSave({
+        // A photo that couldn't be kept leaves the card on its background color.
+        style: style.background === 'photo' && !pic ? { ...style, background: 'solid' } : style,
+        emphasis,
+        painting:
+          style.background === 'painting' && painting && paintingId
+            ? {
+                imageId: paintingId,
+                credit: painting.credit ?? '',
+                zoom: painting.zoom,
+                panX: painting.panX,
+                panY: painting.panY,
+              }
+            : null,
+        photo: pic && photo ? { image: pic, zoom: photo.zoom, panX: photo.panX, panY: photo.panY } : null,
+      });
+    } catch (err) {
+      console.error('[ShareCard] keeping the card failed', err);
+      showNotice("Couldn't save the card.", 'error');
+    } finally {
+      keeping = false;
+    }
+  }
+
   async function handleCopy() {
     if (!canvas) return;
     try {
@@ -702,6 +765,9 @@
     {#if canShareFiles}
       <button class="sc-btn sc-btn-share" disabled={!file} on:click={handleShare}>Share…</button>
     {/if}
+    {#if saveLabel && onSave}
+      <button class="sc-btn sc-btn-keep" disabled={keeping} on:click={handleKeep}>{saveLabel}</button>
+    {/if}
   </div>
 </div>
 
@@ -730,6 +796,19 @@
     transition: opacity 0.15s;
   }
   .sc-drawing { opacity: 0.75; }
+
+  /* Colors shown as themselves: the theme's invert would turn them into their
+     opposites. A card is not reader chrome, and what leaves the app is true. */
+  :global(body.light-theme .themed) .sc-canvas,
+  :global(body.sepia-theme .themed) .sc-canvas,
+  :global(body.light-theme .themed) .sc-dot,
+  :global(body.sepia-theme .themed) .sc-dot,
+  :global(body.light-theme .themed) .sc-swatch,
+  :global(body.sepia-theme .themed) .sc-swatch,
+  :global(body.light-theme .themed) .sc-gradient,
+  :global(body.sepia-theme .themed) .sc-gradient {
+    filter: invert(1) hue-rotate(180deg);
+  }
 
   .sc-canvas {
     display: block;
@@ -962,6 +1041,7 @@
   .sc-actions {
     flex: none;
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     margin-top: 12px;
     justify-content: flex-end;
@@ -998,4 +1078,10 @@
     max-width: 160px;
   }
   .sc-btn-share:hover:not(:disabled) { background: #2563eb; }
+
+  .sc-btn-keep {
+    background: #f472b6;
+    color: #111;
+  }
+  .sc-btn-keep:hover:not(:disabled) { background: #ec4899; }
 </style>

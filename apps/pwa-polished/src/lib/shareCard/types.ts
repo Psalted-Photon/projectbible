@@ -111,4 +111,6 @@ export interface RenderedCard {
   largestTextSize: number;
   /** The size the words were drawn at, in card pixels. */
   fontSize: number;
+  /** Where the reference line was drawn, in card pixels. */
+  referenceBox: { x: number; y: number; w: number; h: number };
 }

@@ -9,7 +9,7 @@ import { IndexedDBTextStore } from '../../adapters';
 import { DEFAULT_TRANSLATION, translationLabel } from '../../bibleData';
 import { cardWords } from '../../shareCard';
 import { isOriginalLanguage } from '../../translationKind';
-import { cleanVersePreviewText, extractHeading } from '../../verseRendering';
+import { plainVerse } from '../../verseOfTheDay';
 
 export interface LabPassage {
   passage: string;
@@ -20,9 +20,6 @@ export interface LabPassage {
 }
 
 const textStore = new IndexedDBTextStore();
-
-/** A stored verse as the words on a card. */
-const plainVerse = (text: string | null | undefined) => cleanVersePreviewText(extractHeading(text ?? '').textWithoutHeading);
 
 export function labTranslation(): string {
   const t = get(navigationStore).translation || DEFAULT_TRANSLATION;
