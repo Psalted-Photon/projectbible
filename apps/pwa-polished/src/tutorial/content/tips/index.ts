@@ -19,6 +19,7 @@ import { LIBRARY_TIPS } from './library';
 import { ART_TIPS } from './art';
 import { MODAL_TIPS } from './modals';
 import { VOICE_TIPS } from './voice';
+import { BY_HEART_TIPS } from './byHeart';
 
 export const ALL_TIPS: Tip[] = [
   ...POPUP_TIPS,
@@ -26,6 +27,7 @@ export const ALL_TIPS: Tip[] = [
   ...SELECTION_TIPS,
   // The mic button and recording pill float over the panes and the reader.
   ...VOICE_TIPS,
+  ...BY_HEART_TIPS,
   ...PANE_TIPS,
   ...WINDOW_TIPS,
   ...COMMENTARY_TIPS,

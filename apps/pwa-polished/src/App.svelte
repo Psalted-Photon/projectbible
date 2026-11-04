@@ -17,7 +17,6 @@
   import FloatingTtsPlayer from "./components/FloatingTtsPlayer.svelte";
   import FloatingBiblePlayer from "./components/FloatingBiblePlayer.svelte";
   import VoiceLayer from "./components/VoiceLayer.svelte";
-  import { byHeartLabOpen } from "./lib/byHeart/lab/labOpen";
   import { byHeartGame } from "./lib/byHeart/game";
   import { userProfileStore } from "./stores/userProfileStore";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
@@ -503,13 +502,6 @@
          which still open on top of it. -->
     {#if $parallelStore.active}
       <ParallelView />
-    {/if}
-
-    <!-- By Heart's lab, from Dev Options. Loaded only when it opens. -->
-    {#if $byHeartLabOpen}
-      {#await import('./components/byHeart/lab/ByHeartLab.svelte') then lab}
-        <svelte:component this={lab.default} />
-      {/await}
     {/if}
 
     <!-- A By Heart game, over everything. Loaded only when one opens. -->

@@ -64,7 +64,6 @@ export function createGameMic(o: GameHearing): GameMicControl {
   function open(): void {
     if (take || o.canOpen?.() === false) return;
     const t = new LiveHearing({
-      method: 'stream',
       hopMs: HOP_MS,
       keywords: o.keywords,
       progress: o.progress,

@@ -16,10 +16,11 @@ import { shouldApplyRemoteChange } from '../lib/sync/conflictResolver';
 import { reconcileDeletedRows } from '../lib/sync/reconcileDeletes';
 import type { SyncOperation } from '../lib/sync/types';
 import { generateId, openDB, writeTransaction } from './db';
-import type { DBByHeartPhoto, DBByHeartVerse } from './db';
+import type { DBByHeartPhoto, DBByHeartRecital, DBByHeartVerse } from './db';
 
 const STORE = 'by_heart_verses';
 const PHOTOS = 'by_heart_photos';
+const RECITALS = 'by_heart_voice';
 
 const changeListeners = new Set<() => void>();
 
@@ -184,6 +185,7 @@ export class SyncedByHeartStore {
   private async removeHere(id: string): Promise<void> {
     await writeTransaction(STORE, (store) => store.delete(id));
     await writeTransaction(PHOTOS, (store) => store.delete(id));
+    await writeTransaction(RECITALS, (store) => store.delete(id));
   }
 
   // ── The photo behind a card, on this device only ──────────────────────────
@@ -198,6 +200,34 @@ export class SyncedByHeartStore {
 
   async clearPhoto(id: string): Promise<void> {
     await writeTransaction(PHOTOS, (store) => store.delete(id));
+  }
+
+  // ── Your Own Voice, on this device only ───────────────────────────────────
+
+  async recitals(): Promise<DBByHeartRecital[]> {
+    return allOf<DBByHeartRecital>(await openDB(), RECITALS);
+  }
+
+  async getRecital(id: string): Promise<DBByHeartRecital | null> {
+    return (await oneOf<DBByHeartRecital>(await openDB(), RECITALS, id)) ?? null;
+  }
+
+  /** Keeps this one if it is the verse's best so far, or level with it. */
+  async keepRecital(recital: DBByHeartRecital): Promise<void> {
+    const best = await this.getRecital(recital.id);
+    if (best && best.score > recital.score) return;
+    await writeTransaction(RECITALS, (store) => store.put(recital));
+    notifyByHeartChange();
+  }
+
+  async removeRecital(id: string): Promise<void> {
+    await writeTransaction(RECITALS, (store) => store.delete(id));
+    notifyByHeartChange();
+  }
+
+  async clearRecitals(): Promise<void> {
+    await writeTransaction(RECITALS, (store) => store.clear());
+    notifyByHeartChange();
   }
 }
 

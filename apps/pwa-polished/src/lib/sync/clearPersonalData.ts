@@ -78,11 +78,11 @@ const PERSONAL_STORES = [
 const HISTORY_STORES = ['reading_history'];
 
 /**
- * Photos behind By Heart cards. A photo is never uploaded, so like the reading
- * history it does not come back: the same account signing in again sees those
- * cards on their background color.
+ * Photos behind By Heart cards and saved recitals. They are never uploaded, so
+ * like the reading history they do not come back: the same account signing in
+ * again sees those cards on their background color, and starts over on recitals.
  */
-const DEVICE_ONLY_STORES = ['by_heart_photos'];
+const DEVICE_ONLY_STORES = ['by_heart_photos', 'by_heart_voice'];
 
 /**
  * The journal lock. Keyed by userId, but only ever one account's: a lock left
@@ -137,6 +137,8 @@ const ACCOUNT_KEYS = [
   'projectbible_window_trails',
   /** The place in a By Heart game (lib/byHeart/game.ts). */
   'projectbible_byheart_run',
+  /** Your Own Voice being on (lib/byHeart/ownVoice.ts), so the next account is asked for itself. */
+  'projectbible_byheart_own_voice',
 ];
 
 /** What has not reached the server yet, and so would be lost by clearing. */

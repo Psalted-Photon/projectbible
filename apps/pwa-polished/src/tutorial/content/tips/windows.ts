@@ -42,6 +42,7 @@ export const WINDOW_TIPS: Tip[] = [
   tile('commentaries', 'Commentary', 'Read the commentators on the chapter you’re in. It can follow along as you read.', 'commentaries'),
   tile('notes', 'Notes', 'All your notes on verses, in one place.'),
   tile('journal', 'Journal', 'A dated journal with a calendar. Verse references you type become links.'),
+  tile('byheart', 'By Heart', 'Memorize verses out loud: design a card, then say it while its words clear. It keeps your score and tells you when each verse is due.'),
   tile('isbe', 'Encyclopedia', 'The Bible encyclopedia, A–Z: people, places, customs and ideas.', 'encyclotopical'),
   tile('naves', 'Topical', 'Nave’s topical index: every passage on a subject, from mercy to fasting.', 'encyclotopical'),
   tile('person', 'People', 'Every named person in the Bible, with their family, dates and verses.', 'people-biblical-v1'),

@@ -48,9 +48,11 @@ import { searchItems } from '../timeline/query';
 import { voiceForTap, useVoice } from '../tts/voiceForTap';
 import { getTodayPlaylist, hasActivePlan, goToPlanStart, playPlanPlaylist } from '../tts/planPlaylist';
 import { readingPlanModalStore } from '../../stores/readingPlanModalStore';
+import { userProfileStore } from '../../stores/userProfileStore';
 import { openDailyGreeting } from '../../stores/dailyGreetingStore';
 import { openDevotional } from '../../stores/devotionalStore';
 import { devotionalTargetFromParams } from '../devotionals/deepLink';
+import { openByHeart } from '../byHeart/open';
 import { canSpeakOriginal } from '../tts/originalText';
 import { originalLanguageOf } from '../translationKind';
 import {
@@ -279,7 +281,7 @@ function openWindow(name: unknown): string {
 const CLOSES: Record<string, WindowContentType> = {
   Bible: 'bible', Connections: 'connections', Commentary: 'commentaries', Encyclopedia: 'isbe',
   People: 'person', Topical: 'naves', Strongs: 'strongs', Map: 'map', Timeline: 'timeline',
-  Art: 'art', Notes: 'notes', Journal: 'journal',
+  Art: 'art', Notes: 'notes', Journal: 'journal', 'By Heart': 'byheart',
 };
 /** Works the lookup card shows, by the window names said for them. */
 const CARD_WORKS: Record<string, string> = { Encyclopedia: 'encyclopedia', People: 'people', Topical: 'topical', Strongs: 'strongs' };
@@ -641,6 +643,17 @@ function devotional(a: Record<string, any>): string {
   return `Opened today's ${a.work ?? 'devotional'}`;
 }
 
+/** The By Heart window, or with "today" the verses due. Signed out, the window asks for a sign-in. */
+async function byHeart(a: Record<string, any>): Promise<string> {
+  if (a.today && get(userProfileStore).isSignedIn) {
+    const { startToday } = await import('../byHeart/today');
+    await startToday();
+    return "Started today's By Heart verses";
+  }
+  openByHeart();
+  return 'Opened By Heart';
+}
+
 // ── All of them ─────────────────────────────────────────────────────────────
 
 /** Carry out one call. Returns what was done, in a short line. */
@@ -671,6 +684,7 @@ export async function runCall(call: VoiceCall): Promise<string> {
       openDailyGreeting();
       return 'Opened the Verse of the Day';
     case 'devotional': return devotional(a);
+    case 'by_heart': return byHeart(a);
     default: return `Can't do ${call.name}`;
   }
 }
@@ -701,6 +715,7 @@ export function describeCall(call: VoiceCall): string {
     case 'reading_plan': return a.aloud ? "play today's reading" : a.today ? "go to today's reading" : 'open the reading plan';
     case 'verse_of_the_day': return 'the Verse of the Day';
     case 'devotional': return `today's ${a.work ?? 'devotional'}${a.time ? ` (${a.time})` : ''}`;
+    case 'by_heart': return a.today ? "today's By Heart verses" : 'By Heart';
     default: return call.name;
   }
 }

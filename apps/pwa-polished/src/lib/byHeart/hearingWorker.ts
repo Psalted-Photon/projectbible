@@ -50,9 +50,6 @@ self.onmessage = async (e: MessageEvent<{ id: number; action: string; payload?: 
       case 'stop':
         result = ready().streamStop();
         break;
-      case 'clip':
-        result = ready().transcribe(payload.pcm, payload.keywords, true);
-        break;
       default:
         throw new Error('Unknown action ' + action);
     }

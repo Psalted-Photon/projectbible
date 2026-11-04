@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowRight, Flask, X } from "phosphor-svelte";
+  import { ArrowRight, X } from "phosphor-svelte";
   import { onMount, onDestroy } from "svelte";
   import {
     applyTheme, getSettings, updateSettings, getTtsSettings, getWakeAlarmSettings,
@@ -87,7 +87,6 @@
   import {
     devOptionsUnlocked, showEruda, hideDevOptions, UNLOCK_TAPS, UNLOCK_WINDOW_MS,
   } from "../../lib/devOptions";
-  import { byHeartLabOpen } from "../../lib/byHeart/lab/labOpen";
 
   /**
    * Appearance changes land on the reader live, so the pane asks its shell to
@@ -1733,18 +1732,6 @@
         <button class="packs-button" on:click={openPacksPane}>
           <span class="icon"><Package size={22} weight="bold" /></span>
           <span class="text">Manage Packs</span>
-          <span class="arrow"><ArrowRight size="1em" weight="bold" /></span>
-        </button>
-      </div>
-
-      <div class="sub-block divided">
-        <h3>By Heart lab</h3>
-        <p class="section-description">
-          The go-or-no-go tests for By Heart: live hearing, blur, pills, the mic button's timing, the simple reader and the word limit.
-        </p>
-        <button class="packs-button" on:click={() => byHeartLabOpen.set(true)}>
-          <span class="icon"><Flask size={22} weight="bold" /></span>
-          <span class="text">Open the lab</span>
           <span class="arrow"><ArrowRight size="1em" weight="bold" /></span>
         </button>
       </div>

@@ -294,3 +294,20 @@
 - Punctuation, capitals, Bible-name capitals, pause paragraphs, verse links
 - Spoken cues: "new paragraph", "heading", "the first point is"
 - Heading and Numbered list buttons in the notes editor
+
+## 28. By Heart
+- Memorize verses out loud in full-screen games, in the Mark it group, sign-in required
+- Runs on the device; only syncing needs internet
+- Design a card, same as Share; saved with its exact words and translation
+- New verse from the simple reader or the Verse of the Day list; Learn by heart on the Verse of the Day card
+- About 150 words per card; longer passages saved in parts
+- VC button in games: tap to leave the mic on, press to close on release; closes on its own after 20 seconds of silence
+- Words clear as they're said; only the word you're on is checked; sound-alikes count
+- Show me (a hint) or I said it (counts as right, remembers the mishearing)
+- Word blur or black box, with a blur slider; the spoken reference is off, start, end or both
+- Place saved after every word
+- Score in color; 90+ grows the gap (1, 3, 7, 16, 35 days), 60–89 holds, under 60 comes back tomorrow; Known after passes on 3 days
+- Today runs everything due, chosen by stage
+- Focus, Build, Recital, Flashcards, Call and Response, Weak Spots, Sword Drill, Silent study
+- Your Own Voice: off by default, best recital per verse, on the device only
+- Voice Control: "open By Heart", "today's memory verses"

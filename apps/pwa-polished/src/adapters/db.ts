@@ -15,10 +15,11 @@ import { getDeviceOwner } from '../lib/sync/deviceOwner';
  * - journal_lock / journal_key_slots: the journal lock and its locked key copies
  * - by_heart_verses: the verses someone is memorizing
  * - by_heart_photos: photos behind By Heart cards, which stay on this device
+ * - by_heart_voice: the best recital of a verse, for those who turned on Your Own Voice
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 45; // Migration 45: by_heart_verses + by_heart_photos
+const DB_VERSION = 46; // Migration 46: by_heart_voice
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -408,6 +409,19 @@ export interface DBByHeartPhoto {
   zoom: number;
   panX: number;
   panY: number;
+}
+
+/**
+ * The best recital of a verse, kept only for someone who turned on Your Own
+ * Voice. Like a photo it stays on this device: not synced, not in the backup
+ * file, and gone on sign-out.
+ */
+export interface DBByHeartRecital {
+  /** The verse's id. */
+  id: string;
+  audio: Blob;
+  score: number;
+  createdAt: number;
 }
 
 /**
@@ -970,6 +984,9 @@ export function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('by_heart_photos')) {
         db.createObjectStore('by_heart_photos', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('by_heart_voice')) {
+        db.createObjectStore('by_heart_voice', { keyPath: 'id' });
       }
 
       // ── Shared notebooks ──────────────────────────────────────────────────

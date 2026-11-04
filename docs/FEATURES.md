@@ -31,6 +31,7 @@ Everything the app does, in plain language. Free, offline-first, and private: yo
 25. [People](#25-people)
 26. [Notes & Notebooks](#26-notes--notebooks)
 27. [Voice Control](#27-voice-control)
+28. [By Heart](#28-by-heart)
 
 ---
 
@@ -832,3 +833,54 @@ Steer the app by talking, and turn what you say into notes and journal entries. 
 - **Writing one out** opens the audio in memory only, and the words go into the entry like typing, so they're scrambled too. If the journal locks part way, it pauses, and carries on after you unlock. After the app reopens, it waits for the unlock too.
 - **Turning the lock on or off** scrambles or opens this device's journal recordings along with the entries. Until none is left scrambled, this device keeps what it needs to open them.
 - **Save as a file** works on a locked-journal recording only after unlocking, and saves it readable: the same rule as the backup file.
+
+## 28. By Heart
+
+Memorize verses by saying them out loud. Design a card for a verse, keep it in a list, and recite it while its words clear. You need to be signed in, and after that it all runs on your device: only syncing waits for internet.
+
+The method comes from the research on memory: recall rather than rereading, speak aloud, fade the cues on new or hard verses, space reviews across days, and call a verse known only after passing on separate days.
+
+### 28.1 Saving a verse
+
+- **By Heart window** in the Mark it group, next to Journal. A Today button sits over your saved verses, each with its small card, reference, score and next date.
+- **New verse** opens the simple reader, with nothing on the page but the words, or a list of the Verse of the Day verses starting from today. The Verse of the Day card has Learn by heart too.
+- **The card** is the same as Share: text color, accent color, a background, a painting or photo, and bold or accent on tapped words. It's both the game screen and something you can share. A saved card can be edited and shared from its row's menu.
+- **About 150 words** go on one card, enough for Psalm 23. A longer passage is saved in parts.
+- **Saved verses keep their exact words and translation.** A photo behind a card stays on the device it was picked on, and another device draws the card on its background color.
+
+### 28.2 Reciting
+
+- **The game screen** fills the whole screen with the card as you designed it. Only the red X, the VC button and the game's controls show. Read Aloud waits. Close it with the X or Escape.
+- **The VC button** shows in games even if it's off in Settings. A quick tap leaves the mic on until you tap it again, and a longer press closes it when you let go. It also closes when the verse ends, on the X, when you leave the app, or after about 20 seconds of silence. The screen stays awake only while it's open.
+- **Words clear as you say them.** Only the word you're on is checked, in order. Sound-alikes count, and a small word the app didn't catch is let go when the next word is right.
+- **A word it won't take:** after a beat it shows what it heard. Tap the word for **Show me**, a brief peek that counts as a hint, or **I said it**, which counts as right and teaches this verse that mishearing. What the recognizer imagines in silence or a breath isn't shown.
+- **Covers:** word blur, or black boxes. The slider sets how blurry. A green word still shows green through its blur. Words can be read under about 0.12 of the text size, so a word said under that line counts as a hint.
+- **The reference** can be off, said at the start, at the end, or both. When it has to be said it's covered too, and it counts toward the score.
+- **Your place** is saved after every word, so leaving the app or unfolding the phone loses nothing.
+
+### 28.3 Your score and schedule
+
+- **A score, not a grade:** a percent in a color that runs green, yellow, orange, red. Hints lower it, and I said it doesn't.
+- **Next date:** 90 or better grows the gap through about 1, 3, 7, 16, then 35 days. 60 to 89 keeps the same gap. Under 60 comes back tomorrow, and is tried again in the same Today.
+- **Known** takes passes on about 3 separate days. Strong verses drop to about monthly and never fully leave.
+- **Only recalling a whole verse counts.** Build, Weak Spots and Sword Drill don't change a verse's score.
+
+### 28.4 Ways to play
+
+- **Today:** one button that runs everything due, shuffled, with the way chosen by how well you know it. New goes to Build, Learning to Focus, and Known takes turns through Flashcards, Call and Response and Recital.
+- **Focus:** the blur recital. It's what tapping a verse opens. The others are in the row's menu.
+- **Build:** phrase by phrase, split at punctuation. Read it out, fill in the gaps, then say it from memory, then the whole verse.
+- **Recital:** nothing shows until the end. Then it reads the whole thing back and lists what it missed, and tapping a word you did say corrects the score.
+- **Flashcards:** the reference and you say the verse, or the opening words and you say the reference and then the rest.
+- **Call and Response:** the app's voice reads a random part of the verse, then you recite all of it. The mic stays closed while it speaks.
+- **Weak Spots:** the phrases around the words you miss most, across all your verses.
+- **Sword Drill:** the one timed game. A phrase from any saved verse appears and you say the next 3 words. A right answer adds seconds and a miss takes them away. It keeps your best.
+- **Silent study:** for when you can't speak out loud, or have no mic. Recall it in your head, reveal it, then pick Missed, Barely, Almost, Pretty Much or Got It. These feed the same schedule and can reach Known, with a small marker on the score since voice is stricter. Today runs this way where there's no mic, and verses in Greek or Hebrew are always silent.
+
+### 28.5 Your Own Voice
+
+Off by default, and the app explains it and asks first. With it on, your best recital of each verse is kept so you can listen back from the row's menu. It stays on this device: never uploaded, not in the backup file, and gone when you sign out. With it off, no audio is kept: it's held only while being heard.
+
+### 28.6 Saying it
+
+"Open By Heart" or "my memory verses" to Voice Control opens the window, and "today's memory verses" starts Today.

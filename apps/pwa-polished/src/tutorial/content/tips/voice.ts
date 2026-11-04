@@ -11,7 +11,7 @@ export const VOICE_TIPS: Tip[] = [
   {
     id: 'voice-mic-button',
     area,
-    target: '.fmic .mic',
+    target: '.fmic:not(.in-game) .mic',
     title: 'Voice Control',
     body:
       'Hold, say what you want, let go. Try “go to Romans 6”, “open Matthew Henry in a new window”, ' +

@@ -20,6 +20,7 @@
   import { formatShareRef, buildShareUrl, type PickedPassage } from '../../lib/shareText';
   import { windowStore } from '../../lib/stores/windowStore';
   import { isOriginalLanguage } from '../../lib/translationKind';
+  import { pauseReading } from '../../lib/tts/readingEngine';
   import { watchVoiceReady } from '../../lib/voice/holdToTalk';
   import { askConfirm } from '../../stores/confirmStore';
   import { navigationStore } from '../../stores/navigationStore';
@@ -62,6 +63,7 @@
 
   async function load() {
     verses = await syncedByHeartStore.list();
+    recitals = new Map((await syncedByHeartStore.recitals()).map((r) => [r.id, r.score]));
     keepThumbs(new Set(verses.map((v) => v.id)));
     loaded = true;
   }
@@ -74,6 +76,43 @@
     if (!ok) return;
     expanded = null;
     await syncedByHeartStore.remove(verse.id);
+  }
+
+  // ── Your Own Voice ─────────────────────────────────────────────────────────
+
+  /** The saved recitals' scores, by verse. */
+  let recitals = new Map<string, number>();
+  let hearing: { id: string; audio: HTMLAudioElement; url: string } | null = null;
+
+  function stopRecital() {
+    if (!hearing) return;
+    hearing.audio.pause();
+    URL.revokeObjectURL(hearing.url);
+    hearing = null;
+  }
+
+  async function hearRecital(verse: DBByHeartVerse) {
+    const same = hearing?.id === verse.id;
+    stopRecital();
+    if (same) return;
+    const recital = await syncedByHeartStore.getRecital(verse.id);
+    if (!recital) return;
+    pauseReading();
+    const url = URL.createObjectURL(recital.audio);
+    const audio = new Audio(url);
+    audio.onended = stopRecital;
+    hearing = { id: verse.id, audio, url };
+    audio.play().catch(() => {
+      stopRecital();
+      showNotice('That recital could not play.', 'error');
+    });
+  }
+
+  async function deleteRecital(verse: DBByHeartVerse) {
+    const ok = await askConfirm(`Delete your saved recital of ${referenceOf(verse)}?`, { confirmLabel: 'Delete', danger: true });
+    if (!ok) return;
+    if (hearing?.id === verse.id) stopRecital();
+    await syncedByHeartStore.removeRecital(verse.id);
   }
 
   let unsubscribe = () => {};
@@ -165,6 +204,7 @@
   onDestroy(() => {
     unsubscribe();
     closeReader();
+    stopRecital();
   });
 
   // ── Saving the card ────────────────────────────────────────────────────────
@@ -256,6 +296,12 @@
               <button class="action" on:click={() => play(verse, way.mode)}>{way.label}</button>
             {/each}
             <button class="action" on:click={() => editCard(verse)}>Edit or share card</button>
+            {#if recitals.has(verse.id)}
+              <button class="action" on:click={() => hearRecital(verse)}>
+                {hearing?.id === verse.id ? 'Stop your recital' : `Hear your recital (${recitals.get(verse.id)}%)`}
+              </button>
+              <button class="action" on:click={() => deleteRecital(verse)}>Delete recital</button>
+            {/if}
             <button class="action danger" on:click={() => remove(verse)}>Remove</button>
           </div>
         {/if}

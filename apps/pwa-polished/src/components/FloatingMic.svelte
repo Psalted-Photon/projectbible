@@ -127,6 +127,7 @@
     use:portal
     class="fmic themed no-edge-gesture grip-{$micButtonGrip}"
     class:dragging={$drag.dragging}
+    class:in-game={!!game}
     style="left: {$drag.left}px; top: {$drag.top}px; visibility: {$drag.ready ? 'visible' : 'hidden'}; --mic-scale: {SCALE[$micButtonSize] ?? 1};"
     role="region"
     aria-label="Voice Control"

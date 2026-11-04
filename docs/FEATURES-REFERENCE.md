@@ -35,6 +35,7 @@ Features are named by **exported symbol and file path**, not by line number. Lin
 25. [People](#25-people)
 26. [Notes & Notebooks](#26-notes--notebooks)
 27. [Voice Control](#27-voice-control)
+28. [By Heart](#28-by-heart)
 
 ---
 
@@ -1725,6 +1726,57 @@ Progress (`TranscriptProgress`: `doneSec`, `pieces`, `tail`, `deleteAfter`, `for
 `src/lib/journalLock/recordingCrypto.ts`. While `scramblesWrites()`, `startRecording` takes `getContentKey()` and holds it to Stop: the name is sealed at the start and every piece as it is saved (`sealPiece`), each with AES-GCM bound by `recordingContext(recId, 'piece <seq>' | 'name' | 'tail')` in `crypto.ts` (`scrambleBytes`, `scrambleText`), and the recording is marked `scrambled`. A journal recording's transcript `tail` is sealed whenever the lock isn't off. `openRecordingBlob()` opens the audio in memory for playing, writing out and Save as a file (readable, like the backup file); `openedNames` holds opened names while unlocked, and `recordingLabel()` gives "Journal recording" while locked.
 
 `needsJournalKey()`: a scrambled recording, or a journal one while the lock isn't off. Such a transcript doesn't start while locked (`waiting`, `forUnlock`); the journal locking under one stops it the same way (the `journalLock` subscription in `transcribe.ts`), as does a `JournalLockedError` from the journal store; `onUnlocked` carries them on. `sweep.ts` brings this account's journal recordings in line with the entries (`recordingsToSweep`, `sweepRecordings`, one transaction per recording through `replaceRecordingChunks`, left alone while busy and checked unchanged before writing), and `JournalWork.recordings` counts them in the progress bar. `hasScrambledEntries()` in `lockState.ts` counts scrambled recordings, so key slots stay on the device while any remain, and turning off keeps this device's slots and the key in memory when one is left.
+
+---
+
+## 28. By Heart
+
+Plan: `ok-i-want-to-tidy-kahan.md`. Requires sign-in: the wall is in `WindowContent.svelte`, and `App.svelte` only mounts a game while signed in.
+
+Library: `src/lib/byHeart/` — `game.ts` (session, saved place, prefs), `rounds.ts`, `recitation.ts`, `wordMatch.ts`, `spokenRef.ts`, `schedule.ts`, `scoring.ts`, `today.ts`, `drill.ts`, `hearing.ts` + `hearingWorker.ts`, `gameMic.ts`, `spokenPart.ts`, `ownVoice.ts`, `verse.ts`, `passage.ts`, `cardThumb.ts`, `open.ts`.
+Components: `src/components/byHeart/` — `ByHeartPane.svelte`, `ByHeartRow.svelte`, `ByHeartPicker.svelte`, `ByHeartGame.svelte`, `ByHeartCard.svelte`, `ByHeartDrill.svelte`. Also `FloatingMic.svelte`, `lib/voice/holdToTalk.ts`, `ShareCardPanel.svelte`, `DailyGreetingModal.svelte`, `lib/verseOfTheDay.ts`.
+Store: `src/adapters/SyncedByHeartStore.ts`. Cloud: `supabase/migrations/019_by_heart.sql`.
+
+### 28.1 Data
+
+| Where | What |
+|---|---|
+| `by_heart_verses` (IndexedDB + Supabase) | One row per saved verse: exact `passage`, `translation`, `part`/`parts`, `card` JSON (`SavedCard`: style, per-word emphasis, painting), `score`, `next_date`, `progress` JSON. Local first, queued for upload, covered by backup, restore, clear-data, ownership and delete-account. |
+| `progress` | `VerseProgress` in `schedule.ts`: `gap`, `passDays`, `lastRound`, `silent`, `plays`, `heardAs` (plain word → accepted mishearings), `built`, `missed` (word index → count). Games add fields here rather than a new migration. |
+| `by_heart_photos` | Device only. A personal photo behind a card. |
+| `by_heart_voice` | Device only, DB version 46. `DBByHeartRecital`: the best recital per verse as a 16 kHz WAV. Only with Your Own Voice on (`projectbible_byheart_own_voice`). Cleared on sign-out with the switch. |
+| `projectbible_byheart_run` | The place in a game: mode, round, cursor, hints. On the device, cleared on sign-out. Only a finished round writes a row. |
+| `byHeartGame` setting | Synced: `blur`, `cover`, `reference`, `drillBest`. `byHeartSilent` is per device. |
+
+### 28.2 Hearing
+
+`LiveHearing` feeds the mic to Whistle's live mode every 250 ms from its own worker, with Voice Control's files and no Needle. `upcomingWords` favors the next 3 words. `Recitation` walks each reply through `walkWords`, carrying on from `WalkAt` so the check never falls behind the screen when a guess changes, and lowers `next` to what settled when a reply says `ended`. Speech with no word clearing for 3 s (4.5 s if no gap comes) starts a fresh stream, for the loop where Whistle only writes more of a repeated word.
+
+**What it shows as heard:** `LiveHearing.wasSpoken` requires finite word times, Whistle's probability ≥ 0.4, and at least 40% of the word's time at ≥ 30% of the take's loudest level. It goes by audio rather than a phrase list. The game waits 1200 ms before showing it.
+
+**Spoken reference:** `findSpokenRef` runs windows of heard words through `tidyRefs` + `findRefs` and compares book, chapter and start verse.
+
+**Recital** doesn't walk. `alignHeard` runs one alignment over everything heard at the end, with sound-alikes, joined and split words and dropped small words.
+
+### 28.3 Rounds
+
+`roundsFor` gives each mode its `Round`s: `from`/`to`, `shown`, `refStart`/`refEnd`, `hidden`, `label`. One screen plays them all. Focus and Call and Response are one round; Recital is one `hidden` round; Flashcards is `verse` (reference shown) or `words` (opening words shown, reference first); Build is three rounds per phrase from `phrasesOf` (two if the phrase is ≤ 3 words) plus the whole verse; Weak is the phrase around `step.word` with the rest clear. A session is `GameStep[]`, and Today is one built by `todaySteps`.
+
+### 28.4 Schedule
+
+`afterRound(verse, score, { silent, missed })` returns the patch. `GAPS` = 1, 3, 7, 16, 35. ≥ 90 grows the gap and adds a pass day; 60–89 keeps it; < 60 is tomorrow and steps back two gaps. The first round on a day sets the schedule and later ones only change the score; a good round before the due date doesn't move it. `stageOf`: New (no score, not built), Known (3 pass days, score ≥ 60), else Learning. `afterBuild` sets tomorrow without a score.
+
+### 28.5 The VC button
+
+`setGameMic` hands the floating button to the game. `pressGame`/`letGoGame`: under `TAP_MS` (500) leaves it on, longer closes on release. `createGameMic` closes after 20 s under the sound level, holds the screen awake with `stayAwake`, and `canOpen` keeps it closed while Call and Response speaks. `GameTalk.hidden` hides the button in silent study.
+
+### 28.6 The card
+
+`ByHeartCard.svelte` paints the real share card (`renderCard`) on a canvas, then a blurred copy over each covered word's box, using `RenderedCard.fontSize` so `blur` is a share of the text size. `DEFAULT_BLUR` 0.29, `BLUR_LINE` 0.12. Reveal is instant. Its `draw()` sets the canvas size through a local, because assigning to `canvas` itself restarts the reactive draw.
+
+### 28.7 Voice action
+
+`by_heart` in `rules.ts` (triggers: by heart, memorize, memory verse), `today` from the words, in `actions.ts`.
 
 ---
 

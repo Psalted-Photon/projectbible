@@ -50,6 +50,7 @@
     type SpokenRefMode,
   } from '../../lib/byHeart/game';
   import { createGameMic } from '../../lib/byHeart/gameMic';
+  import { VoiceKeeper, keepsVoice, ownVoiceOn, setOwnVoice } from '../../lib/byHeart/ownVoice';
   import { Recitation } from '../../lib/byHeart/recitation';
   import { phrasesOf, pickSide, roundsFor, type Round } from '../../lib/byHeart/rounds';
   import {
@@ -73,6 +74,7 @@
   import { pauseReading, readingState } from '../../lib/tts/readingEngine';
   import { fetchVoice, useVoice, voiceForTap } from '../../lib/tts/voiceForTap';
   import { gameTalk, setGameMic, voiceCard, voiceReady, watchVoiceReady } from '../../lib/voice/holdToTalk';
+  import { askConfirm } from '../../stores/confirmStore';
   import { showNotice } from '../../stores/noticeStore';
   import CloseX from '../CloseX.svelte';
   import ByHeartCard from './ByHeartCard.svelte';
@@ -174,6 +176,7 @@
     progress: () => (round?.hidden ? rec?.heard().length : rec?.mark) ?? 0,
     onTake: () => rec?.newTake(),
     canOpen: () => calling !== 'getting' && calling !== 'speaking',
+    onPcm: (pcm) => keeper?.add(pcm),
     onUpdate: (u) => {
       if (!rec) return;
       if (phase === 'finishing') rec.update(u);
@@ -277,6 +280,7 @@
     if (!round) return;
     const item = refStart ? refStartAt() : onReference ? refEndAt() : round.from + cursor;
     hints.add(item);
+    hints = hints;
     shownMe.add(item);
     helpOpen = false;
     savePlace();
@@ -387,6 +391,7 @@
     }
     const missed = [...shownMe].filter((i) => i < words.length);
     await recordScore(scoreOf(itemsToSay(), hints.size), false, missed);
+    await keepRecital();
   }
 
   /** A phrase done with no help is one less to drill. On to the next, with the mic left open. */
@@ -470,6 +475,7 @@
   async function scoreRecital() {
     const items = itemsToSay();
     await recordScore(scoreOf(items, missedWords.length + refsMissed), false, missedWords);
+    await keepRecital();
   }
 
   /** A word it missed that was said: counts as right, and that mishearing is remembered. */
@@ -554,6 +560,42 @@
     calling = 'no';
   }
 
+  // ── Your Own Voice ─────────────────────────────────────────────────────────
+
+  let ownVoice = ownVoiceOn();
+  /** This round's audio, only while Your Own Voice is on and it is a whole recital from the top. */
+  let keeper: VoiceKeeper | null = null;
+
+  async function keepRecital() {
+    const v = verse;
+    const audio = keeper?.empty === false ? keeper.toWav() : null;
+    if (!v || !audio || score === null) return;
+    await syncedByHeartStore.keepRecital({ id: v.id, audio, score, createdAt: Date.now() });
+  }
+
+  async function toggleOwnVoice() {
+    if (ownVoice) {
+      const ok = await askConfirm('Turn off Your Own Voice? The recitals saved on this device are deleted.', {
+        confirmLabel: 'Turn off',
+        danger: true,
+      });
+      if (!ok) return;
+      setOwnVoice(false);
+      ownVoice = false;
+      keeper = null;
+      await syncedByHeartStore.clearRecitals();
+      return;
+    }
+    const ok = await askConfirm(
+      'Your Own Voice keeps your best recital of each verse, so you can listen back to it from the verse’s menu. It stays on this device: it is never uploaded or synced, and it is deleted when you sign out. Turn it on?',
+      { confirmLabel: 'Turn on' },
+    );
+    if (!ok) return;
+    setOwnVoice(true);
+    ownVoice = true;
+    showNotice('Your Own Voice is on. It starts with your next recital.');
+  }
+
   // ── Silent study ───────────────────────────────────────────────────────────
 
   function revealSilent() {
@@ -590,6 +632,7 @@
     refsMissed = 0;
     rec = null;
     round = null;
+    keeper = null;
     dropCall();
   }
 
@@ -614,6 +657,7 @@
       hints = new Set(saved.hints);
       shownMe = new Set(saved.shownMe);
     }
+    keeper = ownVoice && keepsVoice(mode) && !saved ? new VoiceKeeper() : null;
     const r = rounds[roundAt];
     startRound(
       r,
@@ -802,6 +846,9 @@
         {/if}
         {#if canSpeak && mode !== 'weak' && phase !== 'results'}
           <button class="chip" on:click={() => setSilent(mode !== 'silent')}>{mode === 'silent' ? 'Out loud' : 'Silent study'}</button>
+        {/if}
+        {#if canSpeak}
+          <button class="chip" class:on={ownVoice} on:click={toggleOwnVoice}>Your own voice</button>
         {/if}
       </div>
     </div>

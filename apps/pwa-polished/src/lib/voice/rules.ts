@@ -38,7 +38,7 @@ const WINDOWS = ['Bible', 'Harmonies', 'Art', 'Notes', 'Journal'];
 /** Every window, for closing. */
 export const ALL_WINDOWS = [
   'Bible', 'Harmonies', 'Connections', 'Commentary', 'Encyclopedia', 'People',
-  'Topical', 'Strongs', 'Map', 'Timeline', 'Art', 'Family Tree', 'Notes', 'Journal',
+  'Topical', 'Strongs', 'Map', 'Timeline', 'Art', 'Family Tree', 'Notes', 'Journal', 'By Heart',
 ];
 
 export const TRANSLATIONS = ['KJV', 'WEB', 'BSB', 'NET', 'LXX', 'Byzantine', 'Textus Receptus'];
@@ -474,6 +474,8 @@ export function wordValues(name: string, text: string): Record<string, unknown> 
     }
     case 'verse_of_the_day':
       return {};
+    case 'by_heart':
+      return { today: /\b(today|today'?s|due)\b/.test(t) };
     case 'devotional': {
       const work = DEVOTIONAL_WORKS.find(([, re]) => re.test(t))?.[0];
       const rest = t.replace(/\bmorning and evening\b/, ' ');
@@ -818,6 +820,22 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    key: 'by_heart',
+    triggers: /\b(by heart|memori[sz]\w*|memory verses?)\b/,
+    tools: [
+      {
+        name: 'by_heart',
+        description: 'The verses being memorized, or the ones due today.',
+        parameters: {
+          type: 'object',
+          properties: {
+            today: { type: 'boolean', description: 'True when the verses due today are asked for.' },
+          },
+        },
+      },
+    ],
+  },
+  {
     key: 'devotional',
     triggers: DEVOTIONAL_RE,
     tools: [
@@ -845,8 +863,8 @@ const ALL_GROUPS = [...CORE, ...GROUPS];
  * - a bare book name counts only when nothing else was asked for
  * - a reference in a highlight, commentary or connections request belongs to it
  * - stop words beat reading, and closing beats opening
- * - the reading plan, Verse of the Day and devotional beat reading, and a
- *   devotional beats the commentary ("Spurgeon's devotional")
+ * - the reading plan, Verse of the Day, By Heart and devotional beat reading,
+ *   and a devotional beats the commentary ("Spurgeon's devotional")
  * - "where" means the map, even with a person named
  * - with a person named, family words mean the tree and bio words the bio
  */
@@ -858,7 +876,7 @@ export function toolsFor(text: string): { tools: ToolSpec[]; groups: string[] } 
   if (keys.has('stopping')) keys.delete('reading');
   if (keys.has('closing')) keys.delete('windows');
   // "Open my reading plan" isn't Read Aloud, nor is "read me the verse of the day".
-  if (['plan', 'daily_verse', 'devotional'].some((k) => keys.has(k))) keys.delete('reading');
+  if (['plan', 'daily_verse', 'by_heart', 'devotional'].some((k) => keys.has(k))) keys.delete('reading');
   if (keys.has('devotional')) keys.delete('commentary');
   // "Where was Jesus born": the question is about a place, not the person.
   if (keys.has('map') && placeWhere(t)) {
@@ -956,5 +974,5 @@ export const APP_KEYWORDS = [
   'Lightfoot', 'Luther', 'Aquinas', 'Treasury of Scripture Knowledge',
   'Connections', 'Encyclopedia', 'Topical', "Strong's", 'Timeline', 'Family Tree',
   'Harmonies', 'King James', 'World English Bible', 'Berean', 'NET Bible', 'Septuagint',
-  'Reading Plan', 'Verse of the Day', 'Devotional', 'Morning and Evening', "Faith's Checkbook", 'Daily Light',
+  'Reading Plan', 'Verse of the Day', 'Devotional', 'Morning and Evening', "Faith's Checkbook", 'Daily Light', 'By Heart',
 ].join('\n');
