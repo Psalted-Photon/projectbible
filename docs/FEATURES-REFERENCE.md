@@ -1772,7 +1772,7 @@ Store: `src/adapters/SyncedByHeartStore.ts`. Cloud: `supabase/migrations/019_by_
 
 ### 28.6 The card
 
-`ByHeartCard.svelte` paints the real share card (`renderCard`) on a canvas, then a blurred copy over each covered word's box, using `RenderedCard.fontSize` so `blur` is a share of the text size. `DEFAULT_BLUR` 0.29, `BLUR_LINE` 0.12. Reveal is instant. Its `draw()` sets the canvas size through a local, because assigning to `canvas` itself restarts the reactive draw.
+`ByHeartCard.svelte` paints the real share card (`renderCard`) on a canvas, then a blurred copy over each covered word's box, using `RenderedCard.fontSize` so `blur` is a share of the text size. `DEFAULT_BLUR` 0.29, `BLUR_LINE` 0.24. Reveal is instant. Its `draw()` sets the canvas size through a local, because assigning to `canvas` itself restarts the reactive draw.
 
 ### 28.7 Voice action
 

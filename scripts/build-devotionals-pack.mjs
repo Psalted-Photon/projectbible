@@ -316,6 +316,86 @@ const SME_STRAY_SPACES = {
   '10.24.am': 'fruit- bearing',
 };
 
+/** Swap each [from, to] pair in. A pair that no longer finds its words stops the build. */
+function replaceAll(text, pairs, where) {
+  for (const [from, to] of pairs ?? []) {
+    if (!text.includes(from)) warnings.push(`${where}: no "${from}" to fix`);
+    text = text.split(from).join(to);
+  }
+  return text;
+}
+
+// Lines the copyist skipped and words misprinted in the digital copy, checked against scans
+// of the first printings: Morning by Morning (1865-67) and Evening by Evening (1868-84) on
+// archive.org. See "Fixes" in data-sources/devotionals-modern/STYLE.md for what counts. These
+// run after the spacing repairs, and are keyed by the slot the module has the reading in.
+const SME_WORD_FIXES = {
+  '01.01.am': [['we preserve in Christ', 'we preserved in Christ']],
+  '01.12.am': [['invites thee, give thy goods', 'invites thee, give thyself to it; when the poor require thee, give thy goods']],
+  '01.14.am': [['multum in parro', 'multum in parvo']],
+  '01.18.am': [['Happy day! happy!', 'Happy day! happy day!']],
+  '01.19.am': [['company of a Christ', 'company of Christ']],
+  '01.21.am': [['Then Moses sang', 'When Moses sang']],
+  '01.26.am': [['Oh, what precious word is that.', 'Oh, what a precious word is that!']],
+  '01.28.am': [['weeps “imperfection”; every harsh', 'weeps “imperfection”; every sigh which bursts from your heart, cries “imperfection”; every harsh']],
+  '01.29.am': [['Hush, hush, my doubts', 'Hush, my fears! this world is but a narrow span, and thou shalt soon have passed it. Hush, hush, my doubts']],
+  '02.16.am': [['contented with <hi type="italic">learning', 'contented without <hi type="italic">learning']],
+  '02.21.am': [['springing up unto everlasting life', 'springing up into everlasting life']],
+  '03.03.am': [['that lovely house', 'that lonely house']],
+  '03.06.am': [['the being “born again,” is a matter', 'the being “born again” by the power of the Holy Spirit. To be “born again,” is a matter']],
+  '03.08.am': [['predestinated for us in Christ’s last legacy', 'predestinated for us in God’s solemn decrees, and bequeathed us in Christ’s last legacy']],
+  '03.26.am': [['he is dumb and opened not his mouth', 'he is dumb, and openeth not his mouth']],
+  '04.04.am': [['reign at his right hand; and all this', 'reign at his right hand, even as he has overcome and has sat down at his Father’s right hand; and all this']],
+  '04.10.am': [['the groans of Calvary yields us', 'the groans of Calvary have put all other groans to flight. Thus Calvary yields us']],
+  '06.03.am': [['Potters were the very highest', 'Potters were not the very highest']],
+  '08.07.am': [['honour, now frowns', 'honour, nor frowns']],
+  '08.27.am': [['which we an never', 'which we can never']],
+  '09.08.am': [['bunch of grapes have been', 'bunch of grapes has been']],
+  '09.13.am': [['obtained by a one', 'obtained by one']],
+  '10.16.am': [['this percept', 'this precept']],
+  '11.20.am': [['a censor smoking', 'a censer smoking']],
+  '01.10.pm': [['Whom mine eye shall', 'Whom mine eyes shall']],
+  '01.11.pm': [['Mark, he does not say, “Satan hath <hi type="italic">desired</hi> to have you.”', 'Mark, he does not say, “Satan hath sifted you, and therefore I will pray,” but “Satan hath <hi type="italic">desired</hi> to have you.”']],
+  '01.16.pm': [['have lain him', 'have slain him']],
+  '01.19.pm': [['its killing spirit', 'its living spirit']],
+  '01.22.pm': [['old covenant is adversity', 'old covenant was prosperity, but the promise of the new covenant is adversity'], ['beareth not fruit”', 'beareth not fruit he taketh away, and every branch that beareth fruit”'], ['that it may bring forth fruit', 'that it may bring forth more fruit']],
+  '01.23.pm': [['and long for the hour', 'and longed for the hour']],
+  '01.28.pm': [['God-giving', 'God-given']],
+  '01.29.pm': [['waste, not can I bear', 'waste, nor can I bear']],
+  '02.07.pm': [['Come up thither', 'Come up hither']],
+  '02.12.pm': [['Great Father revealed', 'The Great Father revealed'], ['awaits to be gracious', 'waits to be gracious']],
+  '02.14.pm': [['If we dare not lean', 'If we cannot clasp the Lord in our hands with Simeon, if we dare not lean']],
+  '02.22.pm': [['for by faith you have fled', 'for now that you are forgiven and accepted, now that by faith you have fled']],
+  '02.24.pm': [['gave his children pain.', 'gave his children pain. He feels the smart far more than his people.']],
+  '03.01.pm': [['in the world without him, when thou wakest', 'in the world without him, in the midst of its temptations and its cares? What wouldst thou do in the morning without him, when thou wakest']],
+  '03.07.pm': [['mix not only thy wine with water,', 'mix not thy wine with water;']],
+  '03.08.pm': [['beauteous florets', 'beauteous flowerets']],
+  '03.22.pm': [['realize the thoughts that', 'realize the thought that']],
+  '03.29.pm': [['This is a registry', 'There is a registry']],
+  '04.01.pm': [['Slight not that work', 'Slight not that word']],
+  '04.16.pm': [['No, in the soul’s', 'So, in the soul’s'], ['<hi type="italic">sun</hi>;” till the evening', '<hi type="italic">sun</hi>.” Intermittent supplication avails but little, we must wrestle all night, and hold up our hands, “<hi type="italic">until the going down of the</hi> <hi type="italic">sun</hi>;” till the evening']],
+  '04.21.pm': [['they had rest; he rose again', 'they had rest; when he rose again']],
+  '05.12.pm': [['venture among couriers', 'venture among courtiers'], ['bids us to,', 'bids us go,']],
+  '05.28.pm': [['Dispairing', 'Despairing']],
+  '05.31.pm': [['does he put with them', 'does he put within them']],
+  '06.02.pm': [['Gate in the river Jordan', 'Gate to the river Jordan']],
+  '06.08.pm': [['Will you look to the north pole', 'Will you look to the top of the Alps for summer heat? will you journey to the north pole']],
+  '06.09.pm': [['every title of Scripture', 'every tittle of Scripture']],
+  '06.25.pm': [['thou are not', 'thou art not']],
+  '06.29.pm': [['to account with the Babylonians', 'to account for his folly with the Babylonians']],
+  '07.06.pm': [['Pelian', 'Pelion']],
+  '07.18.pm': [['elbow weakness', 'elbow meekness']],
+  '08.20.pm': [['these days break down', 'these days is to break down']],
+  '08.31.pm': [['<reference osisRef="Bible:John.1.7">John 1:7</reference>', '<reference osisRef="Bible:1John.1.7">1 John 1:7</reference>'], ['the model which it set', 'the model which is set']],
+  '09.06.pm': [['We who looks', 'He who looks']],
+  '10.25.pm': [['moon that without', 'moon than without']],
+  '10.30.pm': [['Ten of thousands', 'Tens of thousands']],
+  '11.03.pm': [['merchandize', 'merchandise']],
+  '11.12.pm': [['perfect a Lord', 'perfect Lord']],
+  '12.10.pm': [['she went when prayer', 'she went where prayer']],
+  '12.30.pm': [['a true ketch', 'a true sketch']],
+};
+
 /** Repair one reading. A fix that no longer finds its words stops the build. */
 function repairSource(body, id) {
   for (const spaced of SME_SPACING_FIXES[id] ?? []) {
@@ -334,7 +414,8 @@ function repairSource(body, id) {
     if (!body.includes(stray)) warnings.push(`SME ${id}: no "${stray}" to repair`);
     body = body.replace(stray, stray.replace(/(-|>) /, '$1'));
   }
-  return body.replace(/(?<=[A-Za-z])—s\b/g, '’s');
+  body = body.replace(/(?<=[A-Za-z])—s\b/g, '’s');
+  return replaceAll(body, SME_WORD_FIXES[id], `SME ${id}`);
 }
 
 function buildSpurgeonME() {
@@ -387,6 +468,26 @@ function thmlToHtml(s) {
     .trim();
 }
 
+// Typing slips in CCEL's copy, checked against a scan of the 1893 printing. The copy is a later
+// revised edition, so where it simply words things differently it's left as it is.
+const CHECKBOOK_WORD_FIXES = {
+  '3.25': [['to the bed by\nsickness', 'to the bed of\nsickness']],
+  '4.13': [['humble\nu5;', 'humble\nus;']],
+  '5.21': [['loaded with benefit.', 'loaded with benefits.']],
+  '5.26': [['a\ntroubled grace', 'a\ntreble grace']],
+  '6.20': [['wild\nthought,', 'wild\nthoughts,']],
+  '7.18': [['at this we may', 'at this time we may']],
+  '8.8': [['thou are\nnot bound', 'thou art\nnot bound']],
+  '8.10': [['thou has taken', 'thou hast taken']],
+  '8.20': [['In seven there shall be no evil touch thee', 'In seven there shall no evil touch thee']],
+  '8.21': [['shades of the pictures', 'shades of the picture']],
+  '9.9': [['forseeth', 'foreseeth']],
+  '9.27': [['the candles of the Lord', 'the candle of the Lord']],
+  '11.17': [['will He cast even', 'will He cast off even']],
+  '12.15': [['renew their hears', 'renew their hearts']],
+  '12.21': [['They cry to enslave', 'They try to enslave']],
+};
+
 function buildCheckbook() {
   const xml = readFileSync(CHECKBOOK, 'utf8')
     // March 31's promise is tagged as the whole chapter, with its verses left outside the tag.
@@ -403,7 +504,8 @@ function buildCheckbook() {
     const h3 = d.match(/<h3[^>]*>([\s\S]*?)<\/h3>/);
     const vq = d.match(/<p class="VerseQuote"[^>]*>([\s\S]*?)<scripRef[^>]*osisRef="([^"]+)"[^>]*>[\s\S]*?<\/scripRef>\s*<\/p>/);
     if (!h3 || !vq) { warnings.push(`Checkbook ${month}/${day}: title or promise not found`); continue; }
-    const ref = parseOsis(vq[2]);
+    // April 19's promise is Ezekiel 34:11, which the source tags as Exodus.
+    const ref = parseOsis(month === 4 && day === 19 ? 'Bible:Ezek.34.11' : vq[2]);
     if (!ref) { warnings.push(`Checkbook ${month}/${day}: promise ref ${vq[2]} unresolved`); continue; }
     const kjvText = decodeEntities(vq[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim().replace(/^["“]\s*|\s*["”]$/g, '');
     let rest = d.slice(d.indexOf(vq[0]) + vq[0].length);
@@ -411,7 +513,7 @@ function buildCheckbook() {
     rows.push({
       work_id: 'faiths-checkbook', month, day, slot: 'day',
       title: titleCase(decodeEntities(h3[1].replace(/<[^>]+>/g, '')).trim()),
-      body_html: thmlToHtml(rest),
+      body_html: thmlToHtml(replaceAll(rest, CHECKBOOK_WORD_FIXES[`${month}.${day}`], `Checkbook ${month}.${day}`)),
       key_refs: [{ ...ref, kjvText }],
     });
   }

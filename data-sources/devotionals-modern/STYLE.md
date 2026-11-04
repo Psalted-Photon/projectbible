@@ -66,11 +66,18 @@ Set from the approved sample, Spurgeon's "a living dog… a dead lion" passage w
 
 ### Fixes
 
-The sources have a few typos. Fix them quietly in the modern text ("so are we preserve" → "preserved"; a quotation that never closes gets closed). Never fix them in the original.
+The digital copies have damage that isn't Spurgeon's: lines the copyist's eye skipped, misprinted words, missing spaces, a reading under the wrong heading. It's repaired in the build script (`SME_SPACING_FIXES`, `SME_WORD_FIXES`, `CHECKBOOK_WORD_FIXES`), so both views read right. A repair that stops finding its words fails the build. Words that come back also go in the modern text.
 
-When the slip changes the meaning, also say so in a note, because the original view still shows it: a dropped or added word ("Every branch in me that beareth *not* fruit", January 22 evening), missing words ("The promise of the old covenant is adversity"), a misprinted word ("*multum in parro*", "its killing spirit").
+The test for a repair: the text reads wrong on its own, and a scan of the first printings has the right wording. The scans are on archive.org: `morningbymorning00spur`, `eveningbyevening00spur` and `thechequebookoft00purguoft`, among others. CCEL's copy is useful for comparing but isn't enough alone, because it has errors of its own ("sword of promise" for "word", January 15 morning).
 
-Damage from the digital copy, which isn't Spurgeon's, is repaired in the build script rather than noted: a reading under the wrong heading (June 2, November 2 evening), words with the space missing (`SME_SPACING_FIXES`) and a dash typed for an apostrophe. A misprinted word still stays as printed, with a note if it changes the meaning.
+Don't change these to match the scans:
+
+- **Spelling and small style differences.** The scans are American printings (honor, gray, farther).
+- **Places the American printings rewrote.** November 5 morning is a different reading there, because the original is about the Gunpowder Plot. Herbert's verse on February 12 evening is reworded there too.
+- **Wording that matches the King James Bible** where a scan differs from it.
+- **The Checkbook's wording.** CCEL's copy is a later revised edition ("suit" for "livery"), so only its typing slips are repaired.
+
+A slip no source can settle stays as printed, with a note: "supplying" for Herbert's "suppling" (February 12 evening), "bombproof casement" (September 18).
 
 ## Notes
 

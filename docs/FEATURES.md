@@ -854,7 +854,7 @@ The method comes from the research on memory: recall rather than rereading, spea
 - **The VC button** shows in games even if it's off in Settings. A quick tap leaves the mic on until you tap it again, and a longer press closes it when you let go. It also closes when the verse ends, on the X, when you leave the app, or after about 20 seconds of silence. The screen stays awake only while it's open.
 - **Words clear as you say them.** Only the word you're on is checked, in order. Sound-alikes count, and a small word the app didn't catch is let go when the next word is right.
 - **A word it won't take:** after a beat it shows what it heard. Tap the word for **Show me**, a brief peek that counts as a hint, or **I said it**, which counts as right and teaches this verse that mishearing. What the recognizer imagines in silence or a breath isn't shown.
-- **Covers:** word blur, or black boxes. The slider sets how blurry. A green word still shows green through its blur. Words can be read under about 0.12 of the text size, so a word said under that line counts as a hint.
+- **Covers:** word blur, or black boxes. The slider sets how blurry. A green word still shows green through its blur. Words can be read under about 0.24 of the text size, so a word said under that line counts as a hint.
 - **The reference** can be off, said at the start, at the end, or both. When it has to be said it's covered too, and it counts toward the score.
 - **Your place** is saved after every word, so leaving the app or unfolding the phone loses nothing.
 
@@ -875,7 +875,7 @@ The method comes from the research on memory: recall rather than rereading, spea
 - **Call and Response:** the app's voice reads a random part of the verse, then you recite all of it. The mic stays closed while it speaks.
 - **Weak Spots:** the phrases around the words you miss most, across all your verses.
 - **Sword Drill:** the one timed game. A phrase from any saved verse appears and you say the next 3 words. A right answer adds seconds and a miss takes them away. It keeps your best.
-- **Silent study:** for when you can't speak out loud, or have no mic. Recall it in your head, reveal it, then pick Missed, Barely, Almost, Pretty Much or Got It. These feed the same schedule and can reach Known, with a small marker on the score since voice is stricter. Today runs this way where there's no mic, and verses in Greek or Hebrew are always silent.
+- **Silent study:** for when you can't speak out loud, or have no mic. The Out loud / Silent study toggle sits at the top of the game settings. Recall it in your head, reveal it, then pick Missed, Barely, Almost, Pretty Much or Got It. These feed the same schedule and can reach Known, with a small marker on the score since voice is stricter. Today runs this way where there's no mic, and verses in Greek or Hebrew are always silent.
 
 ### 28.5 Your Own Voice
 

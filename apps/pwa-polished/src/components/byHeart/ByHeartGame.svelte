@@ -27,7 +27,7 @@
    * or a fold's relaunch loses nothing.
    */
   import { onDestroy, onMount } from 'svelte';
-  import { MicrophoneSlash, SlidersHorizontal } from 'phosphor-svelte';
+  import { Microphone, MicrophoneSlash, SlidersHorizontal } from 'phosphor-svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
   import { getSettings, updateSettings } from '../../adapters/settings';
   import { syncedByHeartStore } from '../../adapters/SyncedByHeartStore';
@@ -610,7 +610,8 @@
 
   function setSilent(on: boolean) {
     const v = verse;
-    if (!v) return;
+    // Tapping the side already on must not restart the round.
+    if (!v || on === (mode === 'silent')) return;
     updateSettings({ byHeartSilent: on });
     mode = on ? 'silent' : steps[at].mode !== 'silent' ? steps[at].mode : formatFor(v);
     controlsOpen = false;
@@ -810,6 +811,18 @@
 
   {#if controlsOpen}
     <div class="controls">
+      {#if canSpeak && mode !== 'weak' && phase !== 'results'}
+        <div class="mode-toggle" role="group" aria-label="How to play">
+          <button class:on={mode !== 'silent'} aria-pressed={mode !== 'silent'} on:click={() => setSilent(false)}>
+            <Microphone size="1.1em" weight="bold" />
+            Out loud
+          </button>
+          <button class:on={mode === 'silent'} aria-pressed={mode === 'silent'} on:click={() => setSilent(true)}>
+            <MicrophoneSlash size="1.1em" weight="bold" />
+            Silent study
+          </button>
+        </div>
+      {/if}
       <label class="slider">
         <span>Blur</span>
         <input
@@ -843,9 +856,6 @@
         {/if}
         {#if mode === 'call' && phase === 'playing' && calling === 'no' && spoken}
           <button class="chip" on:click={() => { controlsOpen = false; void speakCall(); }}>Hear it again</button>
-        {/if}
-        {#if canSpeak && mode !== 'weak' && phase !== 'results'}
-          <button class="chip" on:click={() => setSilent(mode !== 'silent')}>{mode === 'silent' ? 'Out loud' : 'Silent study'}</button>
         {/if}
         {#if canSpeak}
           <button class="chip" class:on={ownVoice} on:click={toggleOwnVoice}>Your own voice</button>
@@ -1018,6 +1028,37 @@
     padding: 12px;
     border-radius: 12px;
     background: rgba(0, 0, 0, 0.72);
+  }
+
+  .mode-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .mode-toggle button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 8px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 0.95em;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .mode-toggle button.on {
+    background: #f472b6;
+    color: #1a0a12;
   }
 
   .slider {

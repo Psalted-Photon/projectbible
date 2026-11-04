@@ -69,8 +69,9 @@ export const BY_HEART_TIPS: Tip[] = [
     corner: 'bottom-right',
     title: 'Game settings',
     body:
-      'How blurry the covers are, or black boxes instead. Whether the reference has to be said. Silent study, for ' +
-      'when you can’t speak out loud. Your Own Voice, which keeps your best recital on this device if you turn it on.',
+      'At the top, Out loud or Silent study, for when you can’t speak out loud. Then how blurry the covers are, or ' +
+      'black boxes instead. Whether the reference has to be said. Your Own Voice, which keeps your best recital on ' +
+      'this device if you turn it on.',
   },
   {
     id: 'byheart-game-mic',

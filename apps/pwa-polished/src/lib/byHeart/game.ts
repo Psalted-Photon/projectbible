@@ -108,13 +108,13 @@ export type GameCover = 'wordblur' | 'box';
 
 /**
  * How blurry covered words are, as a share of the text size, so one number
- * means the same at every size. Words turn readable at about 0.12; 0.29 is just
- * past that, as a cover needs no more than it takes to hide the word.
+ * means the same at every size. Words can still be made out under about 0.24;
+ * 0.29 is just past that, as a cover needs no more than it takes to hide the word.
  */
 export const DEFAULT_BLUR = 0.29;
 export const BLUR_RANGE = { min: 0, max: 0.6 };
 /** Under this a word can be read, so saying it counts as a hint. */
-export const BLUR_LINE = 0.12;
+export const BLUR_LINE = 0.24;
 
 /** Whether the reference has to be said, and when. */
 export type SpokenRefMode = 'off' | 'start' | 'end' | 'both';
