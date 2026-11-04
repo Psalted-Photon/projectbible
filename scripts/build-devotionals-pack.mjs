@@ -262,6 +262,81 @@ function smeToHtml(osis) {
   return h.replace(/<\/span> ([:;,.])/g, '</span>$1').replace(/<\/em> ([:;,.])/g, '</em>$1');
 }
 
+// A reading the source prints under the wrong heading, replaced with Spurgeon's own text.
+// 11.02.pm: the module repeats the November 3 evening reading under Psalm 119:53.
+// The text below is from CCEL (ccel.org/ccel/spurgeon/morneve.d1102pm.html), with the
+// module's curly quotes, and agrees with Bible Gateway's copy word for word.
+const SME_BODY_FIXES = {
+  '11.02.pm': '<p>My soul, feelest thou this holy shuddering at the sins of others? for otherwise thou lackest inward holiness. David’s cheeks were wet with rivers of waters because of prevailing unholiness, Jeremiah desired eyes like fountains that he might lament the iniquities of Israel, and Lot was vexed with the conversation of the men of Sodom. Those upon whom the mark was set in Ezekiel’s vision, were those who sighed and cried for the abominations of Jerusalem. It cannot but grieve gracious souls to see what pains men take to go to hell. They know the evil of sin experimentally, and they are alarmed to see others flying like moths into its blaze. Sin makes the righteous shudder, because it violates a holy law, which it is to every man’s highest interest to keep; it pulls down the pillars of the commonwealth. Sin in others horrifies a believer, because it puts him in mind of the baseness of his own heart: when he sees a transgressor he cries with the saint mentioned by Bernard, “He fell today, and I may fall to-morrow.” Sin to a believer is horrible, because it crucified the Saviour; he sees in every iniquity the nails and spear. How can a saved soul behold that cursed kill-Christ sin without abhorrence? Say, my heart, dost thou sensibly join in all this? It is an awful thing to insult God to His face. The good God deserves better treatment, the great God claims it, the just God will have it, or repay His adversary to his face. An awakened heart trembles at the audacity of sin, and stands alarmed at the contemplation of its punishment. How monstrous a thing is rebellion! How direful a doom is prepared for the ungodly! My soul, never laugh at sin’s fooleries, lest thou come to smile at sin itself. It is thine enemy, and thy Lord’s enemy. View it with detestation, for so only canst thou evidence the possession of holiness, without which no man can see the Lord.</p>',
+};
+
+// Damage from the digital copy, found by comparing every reading with CCEL's edition. These
+// change spacing only, plus the dashes the module has for apostrophes (Jacob—s ladder).
+// Each entry here is how the words should read; the module has them with no space.
+const SME_SPACING_FIXES = {
+  '02.23.am': ['.” In'],
+  '03.15.pm': ['with all'],
+  '03.16.pm': ['the prayer'],
+  '03.22.pm': ['where I'],
+  '03.30.pm': ['they must'],
+  '04.01.pm': ['you it'],
+  '04.05.am': ['is Christ\'s'],
+  '04.07.pm': ['will sing'],
+  '04.13.am': ['for plenty'],
+  '04.15.pm': ['to lift'],
+  '04.19.pm': ['in thy'],
+  '04.21.am': ['for my'],
+  '04.22.am': ['courts now'],
+  '04.27.am': ['do all'],
+  '05.12.am': ['knoweth afar'],
+  '05.14.pm': ['for that'],
+  '05.15.am': ['a present', 'even now'],
+  '05.16.pm': ['was a'],
+  '05.17.pm': ['we are'],
+  '05.24.am': ['and then'],
+  '05.27.pm': ['shall we'],
+  '06.02.pm': ['struggle between', 'very active', 'weapons of', 'the other', 'resist and', 'it takes', 'wrestles earnestly', 'to struggle', 'the battle', 'from the', 'so securely', 'driven out', 'closely beset', 'Almighty helper', 'is ever', 'eventually come', 'such assistance', 'its foes', 'Are Satan', 'not discouraged', 'with you', 'the healer', 'for who', 'be the', 'From strength', 'the well-fought', 'prayer, and', 'pray, Tread'],
+  '06.03.am': ['the king', 'the material', 'most menial', 'dove covered', 'those who', 'and ditching', 'that, “although', 'society, and'],
+  '06.03.pm': ['to learn', 'and surely', 'robe of', 'he not', 'till they', 'How then', 'which you', 'gushing with', 'self to', 'before that', 'you do', 'of God’s', 'in lowliness', 'feet! Follower', 'biography, “He', 'grief, showing', 'God, why'],
+  '06.04.am': ['beloved people', 'into this', 'the Redeemer’s', 'suggest themselves', 'of Jesus', 'the Church', 'is he', 'Spirit is', 'must be', 'the Saviour’s', 'meditate upon', 'a nearer', 'It must', 'hath prepared', 'Christ, and'],
+  '06.04.pm': ['humiliated and', 'and acquainted', 'of sorrow', 'our faith', 'of victory', 'him out', 'had with', 'has well', 'illustrious crown', 'the Lamb', 'the glory', 'a Conqueror', 'now, inasmuch'],
+  '07.08.am': ['remembereth, why'],
+  '07.15.pm': ['intimates, she'],
+  '11.07.am': ['.” It'],
+  '12.06.pm': ['to John', 'girdle of', 'upon earth', 'eternal throne'],
+  '12.27.pm': ['the LORD shall'],
+};
+// A space left after a hyphen, written as the module has it.
+const SME_STRAY_SPACES = {
+  '01.25.am': 'infant- faith',
+  '03.18.am': 'highly- favoured',
+  '04.02.am': 'self-</hi> <hi type="italic">sacrifice',
+  '05.01.am': "heart's- ease",
+  '10.22.pm': 'water- brook',
+  '10.24.am': 'fruit- bearing',
+};
+
+/** Repair one reading. A fix that no longer finds its words stops the build. */
+function repairSource(body, id) {
+  for (const spaced of SME_SPACING_FIXES[id] ?? []) {
+    // The join can fall at the edge of italics: with<hi>all</hi>, <hi>the</hi>prayer.
+    const parts = spaced.split(' ');
+    const pattern = parts.map((p) => p.replace(/[.?]/g, '\\$&')).join('((?:<[^>]+>)*)');
+    const re = new RegExp(`(?<![A-Za-z])${pattern}(?![A-Za-z])`, 'g');
+    if (!re.test(body)) warnings.push(`SME ${id}: "${spaced}" has no run-together words to repair`);
+    body = body.replace(re, (...m) => parts.map((p, i) => {
+      if (i === parts.length - 1) return p;
+      return m[i + 1].startsWith('</') ? `${p}${m[i + 1]} ` : `${p} ${m[i + 1]}`;
+    }).join(''));
+  }
+  const stray = SME_STRAY_SPACES[id];
+  if (stray) {
+    if (!body.includes(stray)) warnings.push(`SME ${id}: no "${stray}" to repair`);
+    body = body.replace(stray, stray.replace(/(-|>) /, '$1'));
+  }
+  return body.replace(/(?<=[A-Za-z])—s\b/g, '’s');
+}
+
 function buildSpurgeonME() {
   const rows = [];
   for (const e of readZLD(SME)) {
@@ -270,13 +345,13 @@ function buildSpurgeonME() {
     const month = +km[1], day = +km[2];
     for (const sec of e.text.matchAll(/<div type="section" osisID="[^"]*\.(am|pm)"><title>([^<]*)<\/title>([\s\S]*?)<\/div>/g)) {
       const slot = sec[1] === 'am' ? 'morning' : 'evening';
-      const body = sec[3];
+      const body = repairSource(sec[3], `${e.key}.${sec[1]}`);
       const head = body.match(/^<p><hi type="italic">([\s\S]*?)<\/hi><lb\/><reference osisRef="([^"]+)">([^<]*)<\/reference><\/p>/);
       if (!head) { warnings.push(`SME ${e.key} ${slot}: headline not found`); continue; }
       const ref = smeRef(head[2], head[3]);
       if (!ref) { warnings.push(`SME ${e.key} ${slot}: headline ref ${head[2]} unresolved`); continue; }
-      const kjvText = decodeEntities(head[1]).replace(/^[“"]\s*|\s*[”"]$/g, '').trim();
-      const bodyHtml = smeToHtml(body.slice(head[0].length)).trim();
+      const kjvText = decodeEntities(head[1]).replace(/^[“"]\s*|\s*[“”"]$/g, '').trim();
+      const bodyHtml = smeToHtml(SME_BODY_FIXES[`${e.key}.${sec[1]}`] ?? body.slice(head[0].length)).trim();
       rows.push({
         work_id: 'spurgeon-me', month, day, slot,
         title: sec[2],
@@ -285,6 +360,9 @@ function buildSpurgeonME() {
       });
     }
   }
+  // June 2: the module has the morning and evening bodies the wrong way round.
+  const [am, pm] = ['morning', 'evening'].map((slot) => rows.find((r) => r.month === 6 && r.day === 2 && r.slot === slot));
+  [am.body_html, pm.body_html] = [pm.body_html, am.body_html];
   return rows;
 }
 

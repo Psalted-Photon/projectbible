@@ -70,6 +70,8 @@ The sources have a few typos. Fix them quietly in the modern text ("so are we pr
 
 When the slip changes the meaning, also say so in a note, because the original view still shows it: a dropped or added word ("Every branch in me that beareth *not* fruit", January 22 evening), missing words ("The promise of the old covenant is adversity"), a misprinted word ("*multum in parro*", "its killing spirit").
 
+Damage from the digital copy, which isn't Spurgeon's, is repaired in the build script rather than noted: a reading under the wrong heading (June 2, November 2 evening), words with the space missing (`SME_SPACING_FIXES`) and a dash typed for an apostrophe. A misprinted word still stays as printed, with a note if it changes the meaning.
+
 ## Notes
 
 The (i) panel works in both views, so notes explain what a reader of the *original* trips over:
