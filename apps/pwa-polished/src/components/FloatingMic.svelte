@@ -12,6 +12,10 @@
    * Its size and which side the grip is on are set in Settings → Voice
    * Control. Holding the grip still for 2 seconds offers to hide it.
    *
+   * In a By Heart game it shows even when switched off in Settings, without
+   * changing that setting, and opens the game's mic: a tap leaves it on, a
+   * longer press closes it on release. Commands are off, and it offers no hide.
+   *
    * Dark by design and carries `themed`, so it turns with the reader's theme
    * the way the Read Aloud pill does.
    */
@@ -29,6 +33,7 @@
     micButtonGrip,
     voiceReady,
     talk,
+    gameTalk,
     pressToTalk,
     moveTalk,
     releaseTalk,
@@ -51,7 +56,8 @@
     save: setMicButtonPos,
   });
 
-  $: visible = $micButtonOn;
+  $: game = $gameTalk;
+  $: visible = $micButtonOn || !!game;
   $: if (visible && el) void drag.place(el);
   $: if (!visible) drag.teardown();
 
@@ -69,6 +75,7 @@
     drag.start(e);
     clearHold();
     if (!$drag.dragging) return; // a control's press, not the grip's
+    if (game) return; // a game needs it
     holdTimer = setTimeout(() => {
       holdTimer = null;
       navigator.vibrate?.(15);
@@ -88,9 +95,11 @@
 
   $: mine = $talk.source === 'float';
   $: held = mine && ($talk.phase === 'starting' || $talk.phase === 'listening');
-  $: live = held && $talk.phase === 'listening' && !$talk.off;
-  $: off = held && $talk.off;
-  $: working = mine && $talk.phase === 'working';
+  $: live = game ? game.on && !game.starting : held && $talk.phase === 'listening' && !$talk.off;
+  $: off = !game && held && $talk.off;
+  $: working = game ? game.starting : mine && $talk.phase === 'working';
+  $: level = game ? game.level : $talk.level;
+  $: micLabel = !game ? 'Hold to talk' : game.on ? 'Close the mic' : 'Tap to leave the mic on, or hold it while you speak';
   $: noMic = $voiceReady.mic === false;
 
   // Space or Enter held down talks too.
@@ -136,9 +145,9 @@
         class="mic"
         class:live
         class:off
-        style="--level: {live ? $talk.level : 0}"
-        aria-label="Hold to talk"
-        title="Hold to talk"
+        style="--level: {live ? level : 0}"
+        aria-label={micLabel}
+        title={micLabel}
         on:pointerdown={(e) => pressToTalk(e, 'float')}
         on:pointermove={moveTalk}
         on:pointerup={releaseTalk}

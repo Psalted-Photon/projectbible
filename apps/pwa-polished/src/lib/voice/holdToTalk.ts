@@ -12,6 +12,10 @@
  *
  * The mic is open only while the button is held. Let go and it closes, and
  * what was said runs; slide off first and it is dropped.
+ *
+ * In a By Heart game the floating button works differently: commands are off,
+ * and its press goes to the game's mic instead. A quick tap leaves the mic on
+ * until it is tapped again, and a longer press closes it on release.
  */
 
 import { get, writable } from 'svelte/store';
@@ -247,6 +251,63 @@ export async function allowMic(): Promise<void> {
   }
 }
 
+// ── By Heart's games ────────────────────────────────────────────────────────
+
+/** A game's mic, which the floating button opens while the game is up. */
+export interface GameMic {
+  open(): void;
+  close(): void;
+  isOpen(): boolean;
+}
+
+export interface GameTalk {
+  /** The mic is open, or on its way. */
+  on: boolean;
+  /** On its way. */
+  starting: boolean;
+  /** Loudness, 0-1. */
+  level: number;
+}
+
+/** The mic of the game on screen. Null with no game up, when the button goes back to commands. */
+export const gameTalk = writable<GameTalk | null>(null);
+
+/** Up to this long is a tap, which leaves the mic on. Longer closes it on release. */
+const TAP_MS = 500;
+
+let gameMic: GameMic | null = null;
+let gamePress: { at: number; wasOpen: boolean } | null = null;
+
+/** A game has come up, or gone with null. */
+export function setGameMic(mic: GameMic | null): void {
+  gameMic = mic;
+  gamePress = null;
+  gameTalk.set(mic ? { on: false, starting: false, level: 0 } : null);
+}
+
+function pressGame(anchor: HTMLElement, pointerId?: number): void {
+  const mic = gameMic;
+  if (!mic) return;
+  const wasOpen = mic.isOpen();
+  if (!wasOpen && !micReadyToListen(() => gameMic?.open())) return;
+  if (pointerId != null) {
+    try {
+      anchor.setPointerCapture(pointerId);
+    } catch {
+      // Fine without it.
+    }
+  }
+  gamePress = { at: performance.now(), wasOpen };
+  if (!wasOpen) mic.open();
+}
+
+function letGoGame(): void {
+  const press = gamePress;
+  gamePress = null;
+  if (!press) return;
+  if (press.wasOpen || performance.now() - press.at >= TAP_MS) gameMic?.close();
+}
+
 // ── A take ──────────────────────────────────────────────────────────────────
 
 /** Which button the take came from: each shows it its own way. */
@@ -315,6 +376,10 @@ export const talkBusy = (s: TalkState) => s.phase === 'starting' || s.phase === 
  * coming to the button when the finger slides off it.
  */
 export function startTalk(anchor: HTMLElement, source: TalkSource, pointerId?: number): void {
+  if (gameMic && source === 'float') {
+    pressGame(anchor, pointerId);
+    return;
+  }
   if (talkBusy(get(talk))) return;
   const stop = blocker();
   if (stop) {
@@ -384,6 +449,10 @@ export function moveTalk(e: PointerEvent): void {
 
 /** Let go: the mic closes, and what was said runs. */
 export async function releaseTalk(): Promise<void> {
+  if (gamePress) {
+    letGoGame();
+    return;
+  }
   const s = get(talk);
   if (!take || (s.phase !== 'starting' && s.phase !== 'listening')) return;
   const t = take;
@@ -412,6 +481,11 @@ export async function releaseTalk(): Promise<void> {
 
 /** The press was taken away (a scroll, a call): drop what was heard. */
 export function cancelTalk(): void {
+  if (gamePress) {
+    gamePress = null;
+    gameMic?.close();
+    return;
+  }
   if (!take) return;
   take.cancel();
   take = null;

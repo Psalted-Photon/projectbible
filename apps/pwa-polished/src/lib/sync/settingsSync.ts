@@ -38,6 +38,8 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   // Share-card looks saved by name. A photo is never part of a look, so
   // nothing personal or heavy rides along — just fonts, colors and layout.
   'cardLooks',
+  // How By Heart's games cover words. A taste, like a saved look.
+  'byHeartGame',
   // Names given to Highlights categories, like "Family" for green text.
   'highlightNames',
   // The Connections window's sets and saved views: references and colors,

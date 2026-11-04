@@ -28,6 +28,7 @@
   import { fixedOrigin } from '../lib/fixedOrigin';
   import { morphFrom, morphInto } from '../lib/motion';
   import { getBibleTtsPlayerPos, setBibleTtsPlayerPos } from '../adapters/settings';
+  import { byHeartGame } from '../lib/byHeart/game';
   import { continuousPlay } from '../stores/audioStore';
   import {
     readingState,
@@ -60,7 +61,7 @@
   } from '../lib/tts/playerDock';
   import BrandSpinner from './BrandSpinner.svelte';
 
-  $: visible = $isBibleReadingActive && $bibleFloating;
+  $: visible = $isBibleReadingActive && $bibleFloating && !$byHeartGame;
   $: reference = $readingPosition ? `${$readingPosition.book} ${$readingPosition.chapter}` : '';
   $: progress =
     $chapterProgress && $chapterProgress.duration > 0

@@ -14,6 +14,7 @@
   import { portal } from '../lib/portal';
   import { floatDrag } from '../lib/floatDrag';
   import { getTtsPlayerPos, setTtsPlayerPos } from '../adapters/settings';
+  import { byHeartGame } from '../lib/byHeart/game';
   import {
     readingState,
     readingSource,
@@ -30,6 +31,7 @@
   $: title = $readingSource.kind === 'text' ? $readingSource.title : '';
   $: failed = $readingState === 'error';
   $: visible =
+    !$byHeartGame &&
     isText &&
     ($readingState === 'starting' || $readingState === 'playing' || $readingState === 'paused' || failed);
   $: progress =

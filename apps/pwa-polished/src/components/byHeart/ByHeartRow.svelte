@@ -2,7 +2,7 @@
   /**
    * One saved verse in the By Heart list: its small card, its reference in the
    * book's color, its score and when it comes back. The card is drawn the first
-   * time the row scrolls into view.
+   * time the row scrolls into view. Tapping the row opens its game.
    */
   import { onDestroy } from 'svelte';
   import { DotsThree } from 'phosphor-svelte';
@@ -10,6 +10,7 @@
   import { getBookColor, translationLabel } from '../../lib/bibleData';
   import { cardThumb } from '../../lib/byHeart/cardThumb';
   import { scoreColor } from '../../lib/byHeart/scoring';
+  import { openGame } from '../../lib/byHeart/game';
   import { nextDateLabel, referenceOf } from '../../lib/byHeart/verse';
 
   export let verse: DBByHeartVerse;
@@ -42,14 +43,16 @@
 </script>
 
 <div class="row">
-  <div class="thumb" bind:this={thumb}>
+  <button class="thumb" bind:this={thumb} aria-label="Recite {referenceOf(verse)}" on:click={() => openGame(verse.id)}>
     {#if url}<img src={url} alt="" />{/if}
-  </div>
-  <div class="text">
+  </button>
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="text" on:click={() => openGame(verse.id)}>
     <div class="ref">
       <span class="ref-name" style="color: {getBookColor(verse.book)}">{referenceOf(verse)}</span>
       {#if isNet}
-        <a class="tr" href="http://netbible.org" target="_blank" rel="noopener noreferrer">({label})</a>
+        <a class="tr" href="http://netbible.org" target="_blank" rel="noopener noreferrer" on:click|stopPropagation>({label})</a>
       {:else}
         <span class="tr">({label})</span>
       {/if}
@@ -82,9 +85,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 0;
+    border: none;
     border-radius: 4px;
     background: rgba(127, 127, 127, 0.12);
     overflow: hidden;
+    cursor: pointer;
   }
 
   img {
@@ -102,6 +108,7 @@
   .text {
     flex: 1;
     min-width: 0;
+    cursor: pointer;
   }
 
   .ref {

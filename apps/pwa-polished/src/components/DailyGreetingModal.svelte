@@ -6,6 +6,7 @@
   import { get } from 'svelte/store';
   import { renderVerseHtml } from '../lib/verseRendering';
   import { translationLabel } from '../lib/bibleData';
+  import { byHeartGame } from '../lib/byHeart/game';
   import { openByHeart } from '../lib/byHeart/open';
   import { parseVotdRef, readVotdVerse, votdRefOn, type VerseSpan } from '../lib/verseOfTheDay';
   import { Sun, ArrowRight, SunHorizon, MoonStars, CalendarBlank } from 'phosphor-svelte';
@@ -121,7 +122,7 @@
   // Escape closes it, unless something on top (a word card, the lookup card)
   // took the press first.
   function onEscape(e: KeyboardEvent) {
-    if (e.key !== 'Escape' || e.defaultPrevented || !($dailyGreetingOpen && !$welcomePending)) return;
+    if (e.key !== 'Escape' || e.defaultPrevented || !($dailyGreetingOpen && !$welcomePending && !$byHeartGame)) return;
     e.preventDefault();
     close();
   }
@@ -131,8 +132,9 @@
 
 <!-- A brand-new account gets the welcome first; both cards are fixed at the
      same depth, so they would otherwise stack. The greeting stays open
-     underneath and appears the moment the welcome is closed. -->
-{#if $dailyGreetingOpen && !$welcomePending}
+     underneath and appears the moment the welcome is closed. A By Heart game
+     holds it back the same way. -->
+{#if $dailyGreetingOpen && !$welcomePending && !$byHeartGame}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="dg-overlay" on:click={close}>
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_interactive_supports_focus -->

@@ -18,6 +18,7 @@
   import FloatingBiblePlayer from "./components/FloatingBiblePlayer.svelte";
   import VoiceLayer from "./components/VoiceLayer.svelte";
   import { byHeartLabOpen } from "./lib/byHeart/lab/labOpen";
+  import { byHeartGame } from "./lib/byHeart/game";
   import WakeAlarmStart from "./components/WakeAlarmStart.svelte";
   import TutorialLayer from "./tutorial/TutorialLayer.svelte";
   import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
@@ -375,6 +376,7 @@
   });
 
   $: readingPlanModalStore.set(showReadingPlanModal);
+  $: gameVerse = $byHeartGame?.verseId ?? null;
 
   // Calculate main content area based on open panels
   $: leftPanels = $windowStore.filter((w) => w.edge === "left");
@@ -505,6 +507,15 @@
     {#if $byHeartLabOpen}
       {#await import('./components/byHeart/lab/ByHeartLab.svelte') then lab}
         <svelte:component this={lab.default} />
+      {/await}
+    {/if}
+
+    <!-- A By Heart game, over everything. Loaded only when one opens. -->
+    {#if gameVerse}
+      {#await import('./components/byHeart/ByHeartGame.svelte') then game}
+        {#key gameVerse}
+          <svelte:component this={game.default} verseId={gameVerse} />
+        {/key}
       {/await}
     {/if}
   {/if}

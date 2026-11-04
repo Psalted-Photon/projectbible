@@ -135,6 +135,8 @@ const ACCOUNT_KEYS = [
   'projectbible_trail',
   /** Each Bible window's breadcrumb trail, saved the same way (navigationStore.ts). */
   'projectbible_window_trails',
+  /** The place in a By Heart game (lib/byHeart/game.ts). */
+  'projectbible_byheart_run',
 ];
 
 /** What has not reached the server yet, and so would be lost by clearing. */
