@@ -267,6 +267,8 @@ export interface GameTalk {
   starting: boolean;
   /** Loudness, 0-1. */
   level: number;
+  /** Nothing to say right now (silent study), so the button stays out of the way. */
+  hidden?: boolean;
 }
 
 /** The mic of the game on screen. Null with no game up, when the button goes back to commands. */

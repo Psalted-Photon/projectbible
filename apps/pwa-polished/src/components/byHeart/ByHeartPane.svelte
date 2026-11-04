@@ -13,10 +13,12 @@
   import { translationLabel } from '../../lib/bibleData';
   import { cardImageOf, keepThumbs } from '../../lib/byHeart/cardThumb';
   import { MAX_WORDS, splitParts } from '../../lib/byHeart/passage';
+  import { startToday } from '../../lib/byHeart/today';
   import { drawableStyle, isDue, referenceOf, savedCardOf, shareRefOf, type SavedCard } from '../../lib/byHeart/verse';
   import { formatShareRef, buildShareUrl, type PickedPassage } from '../../lib/shareText';
   import { windowStore } from '../../lib/stores/windowStore';
   import { isOriginalLanguage } from '../../lib/translationKind';
+  import { watchVoiceReady } from '../../lib/voice/holdToTalk';
   import { askConfirm } from '../../stores/confirmStore';
   import { navigationStore } from '../../stores/navigationStore';
   import { showNotice } from '../../stores/noticeStore';
@@ -53,6 +55,7 @@
   let unsubscribe = () => {};
   onMount(() => {
     unsubscribe = subscribeToByHeartChanges(() => void load());
+    watchVoiceReady();
     void load();
   });
 
@@ -203,7 +206,7 @@
 <div class="bh-pane">
   {#if view === 'home'}
     <div class="bar">
-      <button class="today" disabled>
+      <button class="today" disabled={dueCount === 0} on:click={() => void startToday()}>
         <span>Today</span>
         <span class="today-count">{dueCount === 1 ? '1 verse due' : `${dueCount} verses due`}</span>
       </button>

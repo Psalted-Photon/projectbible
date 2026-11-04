@@ -11,13 +11,15 @@
 import { writable } from 'svelte/store';
 import { getSettings, updateSettings } from '../../adapters/settings';
 
-/** How a verse is played. */
-export type GameMode = 'focus';
+/** How a verse is played. Silent study is the one with no voice. */
+export type GameMode = 'focus' | 'silent';
 
 /** One verse, played one way. */
 export interface GameStep {
   verseId: string;
   mode: GameMode;
+  /** A second try in the same session, after a score under 60. */
+  retry?: boolean;
 }
 
 /** What is on the game screen: the steps it runs through, and which one it is on. */
@@ -25,6 +27,8 @@ export interface GameSession {
   id: number;
   steps: GameStep[];
   at: number;
+  /** Today's run, which ends by saying so. */
+  today?: boolean;
 }
 
 /** The game on screen. Null is none, and nothing of it is loaded. */

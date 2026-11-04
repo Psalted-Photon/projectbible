@@ -5,12 +5,13 @@
    * time the row scrolls into view. Tapping the row opens its game.
    */
   import { onDestroy } from 'svelte';
-  import { DotsThree } from 'phosphor-svelte';
+  import { DotsThree, MicrophoneSlash } from 'phosphor-svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
   import { getBookColor, translationLabel } from '../../lib/bibleData';
   import { cardThumb } from '../../lib/byHeart/cardThumb';
   import { scoreColor } from '../../lib/byHeart/scoring';
   import { openGame } from '../../lib/byHeart/game';
+  import { progressOf, stageOf } from '../../lib/byHeart/schedule';
   import { nextDateLabel, referenceOf } from '../../lib/byHeart/verse';
 
   export let verse: DBByHeartVerse;
@@ -61,6 +62,10 @@
     <div class="meta">
       {#if verse.score !== null}
         <span class="score" style="--score: {scoreColor(verse.score)}">{verse.score}%</span>
+        {#if progressOf(verse).silent}
+          <span class="silent" title="Scored in silent study" aria-label="Scored in silent study"><MicrophoneSlash size="1em" weight="bold" /></span>
+        {/if}
+        {#if stageOf(verse) === 'known'}<span>Known</span>{/if}
       {/if}
       <span>{nextDateLabel(verse)}</span>
     </div>
@@ -141,6 +146,12 @@
   .score {
     font-weight: 700;
     color: var(--score);
+  }
+
+  .silent {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.8;
   }
 
   .more {

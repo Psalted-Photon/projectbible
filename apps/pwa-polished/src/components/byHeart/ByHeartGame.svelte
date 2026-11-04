@@ -9,6 +9,10 @@
    * can be tapped: Show me is a brief peek and counts as a hint, and I said it
    * counts as right and teaches the verse that mishearing.
    *
+   * Silent study is the same card with no voice: recall it in your head, reveal
+   * it, and say how it went. Today's run goes through every verse due, one after
+   * another, and one under 60 comes around again at the end.
+   *
    * Closes by X or Escape only. Never `themed`: the theme's invert would turn the
    * card's colors into their opposites.
    *
@@ -16,8 +20,9 @@
    * or a fold's relaunch loses nothing.
    */
   import { onDestroy, onMount } from 'svelte';
-  import { SlidersHorizontal } from 'phosphor-svelte';
+  import { MicrophoneSlash, SlidersHorizontal } from 'phosphor-svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
+  import { getSettings, updateSettings } from '../../adapters/settings';
   import { syncedByHeartStore } from '../../adapters/SyncedByHeartStore';
   import { cardImageOf, qrUrlOf } from '../../lib/byHeart/cardThumb';
   import {
@@ -31,20 +36,24 @@
     saveRun,
     setGamePrefs,
     type GameCover,
+    type GameMode,
     type GameSession,
     type SpokenRefMode,
   } from '../../lib/byHeart/game';
   import { createGameMic } from '../../lib/byHeart/gameMic';
   import { Recitation } from '../../lib/byHeart/recitation';
   import { roundsFor, type Round } from '../../lib/byHeart/rounds';
+  import { HOLD_SCORE, afterRound, formatFor, progressOf, stageOf, withHeardAs } from '../../lib/byHeart/schedule';
   import { scoreColor, scoreOf } from '../../lib/byHeart/scoring';
   import type { RefTarget } from '../../lib/byHeart/spokenRef';
-  import { cardContentOf, drawableStyle, referenceOf, savedCardOf, type SavedCard } from '../../lib/byHeart/verse';
+  import { cardContentOf, drawableStyle, nextDateLabel, referenceOf, savedCardOf, type SavedCard } from '../../lib/byHeart/verse';
   import { plainWord, upcomingWords } from '../../lib/byHeart/wordMatch';
   import { portal } from '../../lib/portal';
   import { cardWords, type CardImage, type CardStyle } from '../../lib/shareCard';
+  import { isOriginalLanguage } from '../../lib/translationKind';
   import { pauseReading, readingState } from '../../lib/tts/readingEngine';
-  import { gameTalk, setGameMic, voiceCard, watchVoiceReady } from '../../lib/voice/holdToTalk';
+  import { gameTalk, setGameMic, voiceCard, voiceReady, watchVoiceReady } from '../../lib/voice/holdToTalk';
+  import { showNotice } from '../../stores/noticeStore';
   import CloseX from '../CloseX.svelte';
   import ByHeartCard from './ByHeartCard.svelte';
 
@@ -56,10 +65,20 @@
   const STUCK_BEAT_MS = 1200;
   /** How long Show me leaves a word clear. */
   const PEEK_MS = 1500;
+  /** Silent study's answers. */
+  const SILENT_CHOICES = [
+    { label: 'Missed', score: 0 },
+    { label: 'Barely', score: 25 },
+    { label: 'Almost', score: 50 },
+    { label: 'Pretty Much', score: 75 },
+    { label: 'Got It', score: 100 },
+  ];
 
-  const steps = session.steps;
+  let steps = session.steps;
   let at = session.at;
   $: step = steps[at];
+  /** How this step is being played, which silent study can change. */
+  let mode: GameMode = session.steps[session.at].mode;
 
   let verse: DBByHeartVerse | null = null;
   let card: SavedCard | null = null;
@@ -67,7 +86,7 @@
   let image: CardImage | null = null;
   let words: string[] = [];
 
-  let phase: 'loading' | 'playing' | 'results' = 'loading';
+  let phase: 'loading' | 'playing' | 'silent' | 'silentPick' | 'results' = 'loading';
   let round: Round | null = null;
   let rec: Recitation | null = null;
 
@@ -76,7 +95,7 @@
   let refStart = false;
   let refEnd = false;
   $: onReference = refStart || (refEnd && round !== null && round.from + cursor >= round.to);
-  $: revealed = !round || phase === 'results' ? words.length : round.from + cursor;
+  $: revealed = phase === 'silent' ? 0 : !round || phase !== 'playing' ? words.length : round.from + cursor;
   $: shown = new Set(round?.shown ?? []);
   $: coverReference = phase === 'playing' && (refStart || refEnd);
 
@@ -91,8 +110,11 @@
   let cover: GameCover = prefs.cover;
   let reference: SpokenRefMode = prefs.reference;
   let controlsOpen = false;
+  let canSpeak = true;
 
   $: readable = cover === 'wordblur' && blur < BLUR_LINE;
+  $: if ($gameTalk && !!$gameTalk.hidden !== (mode === 'silent')) gameTalk.update((s) => s && { ...s, hidden: mode === 'silent' });
+  $: noMic = $voiceReady.mic === false || $voiceReady.permission === 'denied';
 
   // Audio stays paused for as long as the game is up, a timer or alarm starting
   // it in the meantime included.
@@ -125,7 +147,9 @@
     if (moved) {
       // A word said while it could be read is a hint, whichever word it is.
       if (readable) {
-        for (let i = cursor; i < r.cursor; i++) hints.add(round.from + i);
+        for (let i = cursor; i < r.cursor; i++) {
+          if (plainWord(words[round.from + i])) hints.add(round.from + i);
+        }
         if (refStart && !r.refStart) hints.add(refStartAt());
         if (refEnd && !r.refEnd) hints.add(refEndAt());
       }
@@ -144,7 +168,7 @@
     if (!verse) return;
     saveRun({
       verseId: verse.id,
-      mode: step.mode,
+      mode,
       cursor,
       refStart,
       refEnd,
@@ -225,10 +249,9 @@
     const as = plainWord(heard);
     if (!v || !on || !as || !rec) return;
     rec.alsoAccept(word, heard);
-    const progress = v.progress as { heardAs?: Record<string, string[]> };
-    const heardAs = { ...progress.heardAs, [on]: [...(progress.heardAs?.[on] ?? []), as] };
-    verse = { ...v, progress: { ...v.progress, heardAs } };
-    void syncedByHeartStore.update(v.id, { progress: verse.progress });
+    const progress = withHeardAs(v, on, as);
+    verse = { ...v, progress };
+    void syncedByHeartStore.update(v.id, { progress });
   }
 
   // ── The round ──────────────────────────────────────────────────────────────
@@ -247,7 +270,7 @@
         ref: refTargetOf(v),
         refStart: place ? place.refStart : r.refStart,
         refEnd: place ? place.refEnd : r.refEnd,
-        alsoAs: { ...(v.progress as { heardAs?: Record<string, string[]> }).heardAs },
+        alsoAs: Object.fromEntries(Object.entries(progressOf(v).heardAs ?? {}).map(([word, heard]) => [word, [...heard]])),
       },
       place ? undefined : rec ?? undefined,
     );
@@ -277,10 +300,41 @@
   }
 
   async function finishStep() {
+    await recordScore(scoreOf(itemsToSay(), hints.size), false);
+  }
+
+  /** The round's score goes on the verse and sets when it comes back. */
+  async function recordScore(value: number, silent: boolean) {
     const v = verse;
     if (!v) return;
-    score = scoreOf(itemsToSay(), hints.size);
-    await syncedByHeartStore.update(v.id, { score });
+    const patch = afterRound(v, value, { silent });
+    verse = { ...v, ...patch };
+    score = value;
+    await syncedByHeartStore.update(v.id, patch);
+    // Under 60 comes around again in the same session, once.
+    if (session.today && value < HOLD_SCORE && !step.retry) {
+      steps = [...steps, { verseId: v.id, mode, retry: true }];
+    }
+  }
+
+  function revealSilent() {
+    phase = 'silentPick';
+  }
+
+  function pickSilent(value: number) {
+    clearRun();
+    phase = 'results';
+    void recordScore(value, true);
+  }
+
+  function setSilent(on: boolean) {
+    const v = verse;
+    if (!v) return;
+    updateSettings({ byHeartSilent: on });
+    mode = on ? 'silent' : formatFor(v);
+    controlsOpen = false;
+    mic.close();
+    startOver();
   }
 
   function startOver() {
@@ -294,8 +348,14 @@
   }
 
   function loadRounds(pickUp: boolean) {
-    const saved = pickUp && verse ? readRun(verse.id, step.mode) : null;
-    const list = roundsFor({ mode: step.mode, count: words.length, reference });
+    if (mode === 'silent') {
+      round = null;
+      rec = null;
+      phase = 'silent';
+      return;
+    }
+    const saved = pickUp && verse ? readRun(verse.id, mode) : null;
+    const list = roundsFor({ mode, count: words.length, reference });
     if (saved) {
       hints = new Set(saved.hints);
       shownMe = new Set(saved.shownMe);
@@ -326,7 +386,28 @@
     image = picture;
     style = drawableStyle(saved, !!picture);
     verse = got;
+    // The app only hears English, so the original languages are studied silently.
+    canSpeak = !isOriginalLanguage(got.translation);
+    // Silent study chosen on this device goes for everything it plays.
+    mode = !canSpeak || getSettings().byHeartSilent === true ? 'silent' : step.mode;
     loadRounds(true);
+  }
+
+  $: hasNext = at + 1 < steps.length;
+
+  function next() {
+    if (!hasNext) {
+      close();
+      if (session.today) showNotice('That is everything due today.');
+      return;
+    }
+    at += 1;
+    hints = new Set();
+    shownMe = new Set();
+    score = null;
+    rec = null;
+    round = null;
+    void loadStep();
   }
 
   // ── Controls ───────────────────────────────────────────────────────────────
@@ -391,7 +472,7 @@
   });
 
   // The session on screen is what a relaunch brings back.
-  $: byHeartGame.update((s) => (s && s.at !== at ? { ...s, at } : s));
+  $: byHeartGame.update((s) => (s && (s.at !== at || s.steps !== steps) ? { ...s, at, steps } : s));
 </script>
 
 <svelte:window on:keydown|capture={onKey} />
@@ -443,24 +524,29 @@
           on:change={keepBlur}
         />
       </label>
-      {#if readable}
+      {#if readable && mode !== 'silent'}
         <p class="note">Words can be read at this blur, so saying them counts as a hint.</p>
       {/if}
       <div class="chips">
         <button class="chip" class:on={cover === 'wordblur'} on:click={() => setCover('wordblur')}>Word blur</button>
         <button class="chip" class:on={cover === 'box'} on:click={() => setCover('box')}>Black box</button>
       </div>
-      <div class="chips">
-        <span class="chips-label">Say the reference</span>
-        {#each REFERENCE_CHOICES as choice (choice.value)}
-          <button class="chip" class:on={reference === choice.value} on:click={() => setReference(choice.value)}>{choice.label}</button>
-        {/each}
-      </div>
-      {#if phase === 'playing' && (cursor > 0 || hints.size > 0)}
+      {#if mode !== 'silent'}
         <div class="chips">
-          <button class="chip" on:click={startOver}>Start over</button>
+          <span class="chips-label">Say the reference</span>
+          {#each REFERENCE_CHOICES as choice (choice.value)}
+            <button class="chip" class:on={reference === choice.value} on:click={() => setReference(choice.value)}>{choice.label}</button>
+          {/each}
         </div>
       {/if}
+      <div class="chips">
+        {#if phase === 'playing' && (cursor > 0 || hints.size > 0)}
+          <button class="chip" on:click={startOver}>Start over</button>
+        {/if}
+        {#if canSpeak && phase !== 'results'}
+          <button class="chip" on:click={() => setSilent(mode !== 'silent')}>{mode === 'silent' ? 'Out loud' : 'Silent study'}</button>
+        {/if}
+      </div>
     </div>
   {/if}
 
@@ -476,21 +562,47 @@
         <button class="line" on:click={() => (helpOpen = true)}>Heard “{stuck}”</button>
       {:else if onReference}
         <span class="line">Say the reference</span>
+      {:else if noMic}
+        <button class="line" on:click={() => setSilent(true)}>No mic here. Silent study</button>
       {:else if !$gameTalk?.on && cursor === 0}
         <span class="line">Tap the mic and say it from memory</span>
       {/if}
     </div>
   {/if}
 
-  {#if phase === 'results' && score !== null}
+  {#if phase === 'silent'}
+    <div class="end">
+      <div class="end-note">Recall it in your head, then reveal it.</div>
+      <div class="end-row">
+        <button class="end-btn main" on:click={revealSilent}>Reveal</button>
+      </div>
+    </div>
+  {:else if phase === 'silentPick'}
+    <div class="end">
+      <div class="end-note">How did it go?</div>
+      <div class="end-row picks">
+        {#each SILENT_CHOICES as choice (choice.score)}
+          <button class="end-btn pick" on:click={() => pickSilent(choice.score)}>{choice.label}</button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if phase === 'results' && score !== null && verse}
     <div class="end">
       <div class="end-score">
         <span class="score" style="color: {scoreColor(score)}">{score}%</span>
         <span class="score-word">score</span>
+        {#if mode === 'silent'}
+          <span class="silent" title="Scored in silent study" aria-label="Scored in silent study"><MicrophoneSlash size="1em" weight="bold" /></span>
+        {/if}
+      </div>
+      <div class="end-note">
+        {#if stageOf(verse) === 'known'}Known. {/if}{nextDateLabel(verse)}
       </div>
       <div class="end-row">
         <button class="end-btn" on:click={startOver}>Again</button>
-        <button class="end-btn main" on:click={close}>Done</button>
+        <button class="end-btn main" on:click={next}>{hasNext ? 'Next' : 'Done'}</button>
       </div>
     </div>
   {/if}
@@ -687,6 +799,28 @@
   .score-word {
     font-size: 0.85em;
     opacity: 0.8;
+  }
+
+  .silent {
+    display: inline-flex;
+    align-self: center;
+    opacity: 0.8;
+  }
+
+  .end-note {
+    font-size: 0.9em;
+    text-align: center;
+    opacity: 0.9;
+  }
+
+  .picks {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .end-btn.pick {
+    padding: 9px 14px;
   }
 
   .end-row {

@@ -57,7 +57,7 @@
   });
 
   $: game = $gameTalk;
-  $: visible = $micButtonOn || !!game;
+  $: visible = game ? !game.hidden : $micButtonOn;
   $: if (visible && el) void drag.place(el);
   $: if (!visible) drag.teardown();
 

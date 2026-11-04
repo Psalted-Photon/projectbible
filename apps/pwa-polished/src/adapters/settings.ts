@@ -198,6 +198,8 @@ export interface UserSettings {
   // and whether the reference is said. Tastes, so they follow the account. See
   // lib/byHeart/game.ts.
   byHeartGame?: { blur?: number; cover?: 'wordblur' | 'box'; reference?: 'off' | 'start' | 'end' | 'both' };
+  // Silent study chosen on this device, which may be the one with no mic.
+  byHeartSilent?: boolean;
   highlightNames?: Record<string, string>; // Names given to Highlights categories, by category key (synced)
   // The Connections window's sets and saved views (synced). Kept loose here and
   // checked by lib/connections/sets.ts on read, like cardLooks.
