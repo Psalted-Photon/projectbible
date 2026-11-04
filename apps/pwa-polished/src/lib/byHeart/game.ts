@@ -34,6 +34,8 @@ export interface GameSession {
   at: number;
   /** Today's run, which ends by saying so. */
   today?: boolean;
+  /** Sword Drill, which has its own screen and no steps. */
+  drill?: boolean;
 }
 
 /** The game on screen. Null is none, and nothing of it is loaded. */
@@ -41,6 +43,10 @@ export const byHeartGame = writable<GameSession | null>(null);
 
 export function openGame(verseId: string, mode: GameMode = 'focus'): void {
   byHeartGame.set({ id: Date.now(), steps: [{ verseId, mode }], at: 0 });
+}
+
+export function openDrill(): void {
+  byHeartGame.set({ id: Date.now(), steps: [], at: 0, drill: true });
 }
 
 export function closeGame(): void {
@@ -117,6 +123,8 @@ export interface GamePrefs {
   blur: number;
   cover: GameCover;
   reference: SpokenRefMode;
+  /** Sword Drill's most right answers in one go. */
+  drillBest: number;
 }
 
 export function gamePrefs(): GamePrefs {
@@ -128,6 +136,7 @@ export function gamePrefs(): GamePrefs {
         : DEFAULT_BLUR,
     cover: saved?.cover === 'box' ? 'box' : 'wordblur',
     reference: saved?.reference ?? 'off',
+    drillBest: saved?.drillBest ?? 0,
   };
 }
 

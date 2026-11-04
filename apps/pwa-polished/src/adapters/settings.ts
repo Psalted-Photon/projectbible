@@ -195,9 +195,9 @@ export interface UserSettings {
   journalTheme?: EditorThemeSettings; // Journal writing surface
   cardLooks?: SavedCardLook[]; // Share-card looks saved by name (synced)
   // How By Heart's games are played: how blurry the covers are or black boxes,
-  // and whether the reference is said. Tastes, so they follow the account. See
-  // lib/byHeart/game.ts.
-  byHeartGame?: { blur?: number; cover?: 'wordblur' | 'box'; reference?: 'off' | 'start' | 'end' | 'both' };
+  // and whether the reference is said. Tastes, so they follow the account, as
+  // does Sword Drill's best. See lib/byHeart/game.ts.
+  byHeartGame?: { blur?: number; cover?: 'wordblur' | 'box'; reference?: 'off' | 'start' | 'end' | 'both'; drillBest?: number };
   // Silent study chosen on this device, which may be the one with no mic.
   byHeartSilent?: boolean;
   highlightNames?: Record<string, string>; // Names given to Highlights categories, by category key (synced)

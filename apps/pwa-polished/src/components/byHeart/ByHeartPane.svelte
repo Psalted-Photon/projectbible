@@ -12,7 +12,7 @@
   import { subscribeToByHeartChanges, syncedByHeartStore, type NewByHeartVerse } from '../../adapters/SyncedByHeartStore';
   import { translationLabel } from '../../lib/bibleData';
   import { cardImageOf, keepThumbs } from '../../lib/byHeart/cardThumb';
-  import { byHeartGame, openGame, type GameMode } from '../../lib/byHeart/game';
+  import { byHeartGame, openDrill, openGame, type GameMode } from '../../lib/byHeart/game';
   import { MAX_WORDS, splitParts } from '../../lib/byHeart/passage';
   import { weakSteps } from '../../lib/byHeart/schedule';
   import { startToday } from '../../lib/byHeart/today';
@@ -239,6 +239,7 @@
     {#if verses.length}
       <div class="bar drills">
         <button class="drill" on:click={openWeakSpots}>Weak Spots</button>
+        <button class="drill" on:click={openDrill}>Sword Drill</button>
       </div>
     {/if}
 
