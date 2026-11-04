@@ -405,6 +405,47 @@ function singleQuoteOpen(text, from, to) {
 }
 
 /**
+ * Someone retelling what he said, inside a speech opened in an earlier verse
+ * (Peter in Acts 11, Paul in Acts 20, 22 and 26). That speaker's “ is still open
+ * here, so the quote scan would paint the whole verse when only the inner ‘...’
+ * is his. WEB gives it away: its span starts partway through the verse, on a ‘.
+ * His own speech never does, even where it opens on a quotation (Matt 22:44
+ * starts the verse), and a verse that carries his words on from a ‘ in the verse
+ * before starts with them (Acts 26:16).
+ *
+ * Returns the ‘...’ parts his words fall in, or null when this isn't that case.
+ * A ‘ left open at the verse end runs on into the next verse (Acts 26:15).
+ */
+function retoldSayings(text, wjHere) {
+  const first = wjHere[0];
+  if (!first || first.usfxS === 0 || !/^\s*‘/.test(first.text)) return null;
+
+  const regions = [];
+  let open = -1;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '‘' && open < 0) open = i;
+    else if (text[i] === '’' && open >= 0 && !/[A-Za-z]/.test(text[i + 1] || '')) {
+      regions.push({ s: open, e: i + 1 });
+      open = -1;
+    }
+  }
+  if (open >= 0) regions.push({ s: open, e: text.length });
+
+  // The other ‘...’ in the verse is the one retelling it (Acts 22:8 "I answered,
+  // ‘Who are you, Lord?’ He said to me, ‘I am Jesus...’"), so match by words.
+  const picked = new Set();
+  for (const span of wjHere) {
+    let best = null, bestOv = 0;
+    for (const r of regions) {
+      const ov = wordOverlap(span.text, text.slice(r.s, r.e));
+      if (ov > bestOv) { bestOv = ov; best = r; }
+    }
+    if (best) picked.add(best);
+  }
+  return picked.size > 0 ? [...picked].sort((a, b) => a.s - b.s) : null;
+}
+
+/**
  * Post-processing pass using curly double-quote tracking across verse
  * boundaries. BSB and NET consistently wrap Jesus' speech in \u201C...\u201D
  * regardless of how many verses it spans — those quotes are the ground truth.
@@ -519,7 +560,11 @@ function refineWithCrossVerseQuotes(transOut, getter) {
         //    We do NOT override when scan result is wider (that was the Luke 23:3
         //    multi-speaker bug where Pilate's question got highlighted).
         const existing = transOut[key];
-        if (quoteOpenAtStart) {
+        const retold = quoteOpenAtStart ? retoldSayings(text, wjSpans[key] || []) : null;
+        if (retold) {
+          transOut[key] = retold;
+          refined++;
+        } else if (quoteOpenAtStart) {
           // The continuation span is trusted, but later quotes in the verse may be
           // a reply from someone else (NET Matt 13:51 "They replied, 'Yes.'",
           // John 8:41 "We were not born...") — keep those only where they share
@@ -650,6 +695,16 @@ const SOURCE_FIXES = {
     'MAT:26:18': [{ text: '“Go into the city to a certain man and tell him, ‘The Teacher says, “My time is near. I will observe the Passover with my disciples at your house.”’”' }],
     'REV:2:24': [{ text: 'But to the rest of you in Thyatira, all who do not hold to this teaching (who have not learned the so-called “deep secrets of Satan”), to you I say: I do not put any additional burden on you.' }],
     'REV:3:17': [{ text: 'Because you say, “I am rich and have acquired great wealth, and need nothing,” but do not realize that you are wretched, pitiful, poor, blind, and naked,' }],
+    // A reply between his sayings went red with them: "The first." in 21:31,
+    // Peter's "Yes, Lord" in John 21.
+    'MAT:21:31': [{ text: 'Which of the two did his father’s will?”' }, { text: '“I tell you the truth, tax collectors and prostitutes will go ahead of you into the kingdom of God!' }],
+    'JHN:21:15': [{ text: '“Simon, son of John, do you love me more than these do?”' }, { text: '“Feed my lambs.”' }],
+    'JHN:21:16': [{ text: '“Simon, son of John, do you love me?”' }, { text: '“Shepherd my sheep.”' }],
+    'JHN:21:17': [{ text: '“Simon, son of John, do you love me?”' }, { text: '“Do you love me?”' }, { text: '“Feed my sheep.' }],
+    // NET's text doesn't have the words WEB gives him here, so what matched WEB's
+    // span was narration.
+    'LUK:9:55': [],
+    'LUK:9:56': [],
   },
 };
 
@@ -674,7 +729,8 @@ for (const { id, getter } of translations) {
   // A fix can name a verse the source never marked, so walk those too.
   const keys = new Set([...Object.keys(sourceSpans), ...Object.keys(SOURCE_FIXES[id] ?? {})]);
   for (const key of keys) {
-    const spanDefs = SOURCE_FIXES[id]?.[key] ?? sourceSpans[key];
+    const handFix = SOURCE_FIXES[id]?.[key];
+    const spanDefs = handFix ?? sourceSpans[key];
     // NET has no <wj> markup of its own; it borrows WEB's spans.
     const ownSpans = id !== 'net';
     const webText = webByKey[key];
@@ -687,7 +743,10 @@ for (const { id, getter } of translations) {
     const results = [];
     let from = 0;
     for (const spanDef of spanDefs) {
-      const exact = ownSpans ? locateVerbatim(spanDef.text, cleanText, from) : null;
+      // A hand fix is typed from the pack, so it is word for word too. Snapping one
+      // to the quote marks goes wrong when the verse opens on a ” from the verse
+      // before (Matt 21:31), since the marks then pair up the wrong way round.
+      const exact = ownSpans || handFix ? locateVerbatim(spanDef.text, cleanText, from) : null;
       if (exact) from = exact.e;
       const r = exact ?? snapToQuotes(alignSpan(spanDef.text, refText, cleanText), cleanText);
       if (r && r.e > r.s) { results.push(r); aligned++; } else skipped++;
