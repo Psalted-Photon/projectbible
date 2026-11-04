@@ -12,9 +12,11 @@
 import type { DBByHeartVerse } from '../../adapters/db';
 import type { NewByHeartVerse } from '../../adapters/SyncedByHeartStore';
 import { localDateStr } from '../../stores/clockStore';
+import { cardWords } from '../shareCard';
+import { isOriginalLanguage } from '../translationKind';
 import type { GameMode, GameStep } from './game';
 import { isDue } from './verse';
-import { isOriginalLanguage } from '../translationKind';
+import { plainWord } from './wordMatch';
 
 /** What a verse's `progress` holds. Every field is absent until it has something to say. */
 export interface VerseProgress {
@@ -30,6 +32,10 @@ export interface VerseProgress {
   plays?: number;
   /** Mishearings accepted for this verse, by plain word. */
   heardAs?: Record<string, string[]>;
+  /** Build has been through it, so it isn't New any more. */
+  built?: boolean;
+  /** How many times each word was missed, by its place in the verse. Weak Spots drills these. */
+  missed?: Record<string, number>;
 }
 
 export const progressOf = (verse: Pick<DBByHeartVerse, 'progress'>): VerseProgress => (verse.progress ?? {}) as VerseProgress;
@@ -46,7 +52,7 @@ const KNOWN_DAYS = 3;
 export type Stage = 'new' | 'learning' | 'known';
 
 export function stageOf(verse: DBByHeartVerse): Stage {
-  if (verse.score === null) return 'new';
+  if (verse.score === null) return progressOf(verse).built ? 'learning' : 'new';
   const days = progressOf(verse).passDays?.length ?? 0;
   return days >= KNOWN_DAYS && verse.score >= HOLD_SCORE ? 'known' : 'learning';
 }
@@ -65,10 +71,14 @@ function addDays(day: string, days: number): string {
 export function afterRound(
   verse: DBByHeartVerse,
   score: number,
-  { silent = false, today = localDateStr(new Date()) }: { silent?: boolean; today?: string } = {},
+  { silent = false, missed = [], today = localDateStr(new Date()) }: { silent?: boolean; missed?: number[]; today?: string } = {},
 ): Partial<NewByHeartVerse> {
   const p = progressOf(verse);
   const progress: VerseProgress = { ...p, silent, plays: (p.plays ?? 0) + 1, lastRound: today };
+  if (missed.length) {
+    progress.missed = { ...p.missed };
+    for (const at of missed) progress.missed[at] = (progress.missed[at] ?? 0) + 1;
+  }
   if (p.lastRound === today) return { score, progress: progress as Record<string, unknown> };
   if (score >= PASS_SCORE) progress.passDays = [...(p.passDays ?? []), today].slice(-KNOWN_DAYS);
   if (score >= HOLD_SCORE && !isDue(verse, today)) return { score, progress: progress as Record<string, unknown> };
@@ -94,9 +104,53 @@ export function withHeardAs(verse: Pick<DBByHeartVerse, 'progress'>, word: strin
   return { ...p, heardAs: { ...p.heardAs, [word]: [...known, heard] } };
 }
 
+/**
+ * Build has been through a verse: it isn't New any more and comes back tomorrow.
+ * It doesn't count as recalling the verse, so no score, and a date already set stays.
+ */
+export function afterBuild(verse: DBByHeartVerse, today = localDateStr(new Date())): Partial<NewByHeartVerse> {
+  const progress = { ...progressOf(verse), built: true } as Record<string, unknown>;
+  return verse.nextDate === null ? { nextDate: addDays(today, 1), progress } : { progress };
+}
+
+/** A word got through Weak Spots without help: one less to drill. */
+export function withoutMissed(verse: DBByHeartVerse, word: number): Record<string, unknown> {
+  const p = progressOf(verse);
+  const missed = { ...p.missed };
+  const left = (missed[word] ?? 0) - 1;
+  if (left > 0) missed[word] = left;
+  else delete missed[word];
+  return { ...p, missed };
+}
+
+/** The most-missed words across every verse, the phrase around each drilled once. */
+const WEAK_SPOTS = 12;
+
+export function weakSteps(verses: DBByHeartVerse[]): GameStep[] {
+  const spots: { verseId: string; word: number; count: number }[] = [];
+  for (const verse of verses) {
+    if (isOriginalLanguage(verse.translation)) continue;
+    const words = cardWords(verse.passage);
+    for (const [at, count] of Object.entries(progressOf(verse).missed ?? {})) {
+      const word = +at;
+      if (count > 0 && plainWord(words[word] ?? '')) spots.push({ verseId: verse.id, word, count });
+    }
+  }
+  return spots
+    .sort((a, b) => b.count - a.count)
+    .slice(0, WEAK_SPOTS)
+    .map(({ verseId, word }) => ({ verseId, word, mode: 'weak' as const }));
+}
+
+/** Known verses take turns through these. */
+const ROTATION: GameMode[] = ['flashcards', 'call', 'recital'];
+
 /** How a verse is played in Today, by its stage. */
-export function formatFor(_verse: DBByHeartVerse): GameMode {
-  return 'focus';
+export function formatFor(verse: DBByHeartVerse): GameMode {
+  const stage = stageOf(verse);
+  if (stage === 'new') return 'build';
+  if (stage === 'learning') return 'focus';
+  return ROTATION[(progressOf(verse).plays ?? 0) % ROTATION.length];
 }
 
 /** Everything due, shuffled, each played the way its stage calls for. */

@@ -12,7 +12,9 @@
   import { subscribeToByHeartChanges, syncedByHeartStore, type NewByHeartVerse } from '../../adapters/SyncedByHeartStore';
   import { translationLabel } from '../../lib/bibleData';
   import { cardImageOf, keepThumbs } from '../../lib/byHeart/cardThumb';
+  import { byHeartGame, openGame, type GameMode } from '../../lib/byHeart/game';
   import { MAX_WORDS, splitParts } from '../../lib/byHeart/passage';
+  import { weakSteps } from '../../lib/byHeart/schedule';
   import { startToday } from '../../lib/byHeart/today';
   import { drawableStyle, isDue, referenceOf, savedCardOf, shareRefOf, type SavedCard } from '../../lib/byHeart/verse';
   import { formatShareRef, buildShareUrl, type PickedPassage } from '../../lib/shareText';
@@ -35,6 +37,28 @@
   let expanded: string | null = null;
 
   $: dueCount = verses.filter((v) => isDue(v)).length;
+
+  const OTHER_WAYS: { mode: GameMode; label: string }[] = [
+    { mode: 'build', label: 'Build' },
+    { mode: 'recital', label: 'Recital' },
+    { mode: 'flashcards', label: 'Flashcards' },
+    { mode: 'call', label: 'Call and Response' },
+    { mode: 'silent', label: 'Silent study' },
+  ];
+
+  function play(verse: DBByHeartVerse, mode: GameMode) {
+    expanded = null;
+    openGame(verse.id, mode);
+  }
+
+  function openWeakSpots() {
+    const steps = weakSteps(verses);
+    if (!steps.length) {
+      showNotice('Nothing to drill yet. Words you ask to see or miss in a recital collect here.');
+      return;
+    }
+    byHeartGame.set({ id: Date.now(), steps, at: 0 });
+  }
 
   async function load() {
     verses = await syncedByHeartStore.list();
@@ -212,6 +236,11 @@
       </button>
       <button class="new" on:click={newVerse}><Plus size="1em" weight="bold" /> New verse</button>
     </div>
+    {#if verses.length}
+      <div class="bar drills">
+        <button class="drill" on:click={openWeakSpots}>Weak Spots</button>
+      </div>
+    {/if}
 
     <div class="list">
       {#each verses as verse (verse.id)}
@@ -222,6 +251,9 @@
         />
         {#if expanded === verse.id}
           <div class="actions">
+            {#each OTHER_WAYS.filter((w) => w.mode === 'silent' || !isOriginalLanguage(verse.translation)) as way (way.mode)}
+              <button class="action" on:click={() => play(verse, way.mode)}>{way.label}</button>
+            {/each}
             <button class="action" on:click={() => editCard(verse)}>Edit or share card</button>
             <button class="action danger" on:click={() => remove(verse)}>Remove</button>
           </div>
@@ -290,7 +322,8 @@
 
   .today,
   .new,
-  .back {
+  .back,
+  .drill {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -326,6 +359,16 @@
     font-weight: 400;
     opacity: 0.8;
     text-overflow: ellipsis;
+  }
+
+  .drills {
+    padding-block: calc(6px * var(--bar-scale, 1));
+  }
+
+  .drill {
+    flex: 1;
+    padding-block: calc(6px * var(--bar-scale, 1));
+    font-weight: 500;
   }
 
   .step-bar {

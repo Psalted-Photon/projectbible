@@ -27,6 +27,8 @@ export interface GameHearing {
   progress: () => number;
   /** The mic is opening: a new stream, starting from nothing heard. */
   onTake: () => void;
+  /** Whether the mic may open now. It stays closed while the app's own voice is speaking. */
+  canOpen?: () => boolean;
   onUpdate: (update: HeardUpdate) => void;
   onPcm?: (pcm: Float32Array) => void;
 }
@@ -60,7 +62,7 @@ export function createGameMic(o: GameHearing): GameMicControl {
   }
 
   function open(): void {
-    if (take) return;
+    if (take || o.canOpen?.() === false) return;
     const t = new LiveHearing({
       method: 'stream',
       hopMs: HOP_MS,

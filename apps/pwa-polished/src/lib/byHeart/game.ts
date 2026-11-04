@@ -12,7 +12,10 @@ import { writable } from 'svelte/store';
 import { getSettings, updateSettings } from '../../adapters/settings';
 
 /** How a verse is played. Silent study is the one with no voice. */
-export type GameMode = 'focus' | 'silent';
+export type GameMode = 'focus' | 'build' | 'recital' | 'flashcards' | 'call' | 'weak' | 'silent';
+
+/** Which way a flashcard goes: reference to verse, or opening words to reference. */
+export type FlashSide = 'verse' | 'words';
 
 /** One verse, played one way. */
 export interface GameStep {
@@ -20,6 +23,8 @@ export interface GameStep {
   mode: GameMode;
   /** A second try in the same session, after a score under 60. */
   retry?: boolean;
+  /** Weak Spots: the word to drill around. */
+  word?: number;
 }
 
 /** What is on the game screen: the steps it runs through, and which one it is on. */
@@ -50,8 +55,13 @@ export const RUN_KEY = 'projectbible_byheart_run';
 export interface GameRun {
   verseId: string;
   mode: GameMode;
-  /** How many words are done. */
+  /** Which round of the game it is on, and how many of the round's words are done. */
+  round: number;
   cursor: number;
+  /** Whether the reference is being said, as it was when the game started. */
+  reference: SpokenRefMode;
+  /** A flashcard's way round. */
+  side?: FlashSide;
   /** The reference is still to be said. */
   refStart: boolean;
   refEnd: boolean;

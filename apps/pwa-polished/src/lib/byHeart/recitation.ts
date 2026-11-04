@@ -34,6 +34,8 @@ export class Recitation {
   refEnd: boolean;
   /** Settled words that weren't what the user is on. They may be nothing anyone said. */
   wrongNow: TimedWord[] = [];
+  /** What earlier takes heard, for reading a whole recital back at the end. */
+  private earlier: string[] = [];
 
   private place: WalkAt;
   private tapped = new Set<number>();
@@ -80,8 +82,14 @@ export class Recitation {
     return [...this.settled.map((w) => w.word), ...splitWords(this.pending)];
   }
 
+  /** Everything heard since this stretch started, however many times the mic opened. */
+  allHeard(): string[] {
+    return [...this.earlier, ...this.heard()];
+  }
+
   /** The mic has opened again: a new stream, starting from nothing heard. */
   newTake(): void {
+    this.earlier.push(...this.heard());
     this.settled = [];
     this.pending = '';
     this.wrongNow = [];

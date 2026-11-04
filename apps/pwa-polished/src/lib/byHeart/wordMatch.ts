@@ -201,6 +201,88 @@ export function walkWords(
   return { ...walk, place: { cursor: walk.cursor, next, lastHeard: got[next - 1] ?? from?.lastHeard ?? '' } };
 }
 
+export interface Aligned {
+  /** Whether each word of the verse was said. */
+  said: boolean[];
+  /** The word heard in its place, where a word was missed and one was heard instead. */
+  heardFor: (string | null)[];
+}
+
+/**
+ * A whole recital read back against the verse, for when nothing was checked word
+ * by word on the way. Finds the longest run of words said in order, with the same
+ * forgiveness as walkWords: sound-alikes, two words heard as one or one as two,
+ * and small words let go when the next word is there.
+ */
+export function alignHeard(words: string[], heard: string[], alsoAs?: Record<string, string[]>): Aligned {
+  const want = words.map(plainWord);
+  const raw = heard.filter((w) => plainWord(w));
+  const got = raw.map(plainWord);
+  const m = want.length;
+  const n = got.length;
+  const memo = new Map<string, boolean>();
+  const same = (h: string, w: string): boolean => {
+    if (!w) return false;
+    const key = `${h}|${w}`;
+    let hit = memo.get(key);
+    if (hit === undefined) {
+      hit = !!sameWord(h, w) || !!alsoAs?.[w]?.includes(h);
+      memo.set(key, hit);
+    }
+    return hit;
+  };
+  const best = Array.from({ length: n + 1 }, () => new Int16Array(m + 1));
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      let top = Math.max(best[i - 1][j], best[i][j - 1], best[i - 1][j - 1]);
+      if (same(got[i - 1], want[j - 1])) top = Math.max(top, best[i - 1][j - 1] + 1);
+      if (j >= 2 && got[i - 1] === want[j - 2] + want[j - 1]) top = Math.max(top, best[i - 1][j - 2] + 2);
+      if (i >= 2 && got[i - 2] + got[i - 1] === want[j - 1]) top = Math.max(top, best[i - 2][j - 1] + 1);
+      best[i][j] = top;
+    }
+  }
+  const said: boolean[] = want.map((w) => !w);
+  const heardFor: (string | null)[] = want.map(() => null);
+  let i = n;
+  let j = m;
+  while (i > 0 && j > 0) {
+    const here = best[i][j];
+    if (same(got[i - 1], want[j - 1]) && here === best[i - 1][j - 1] + 1) {
+      said[j - 1] = true;
+      i--;
+      j--;
+    } else if (j >= 2 && got[i - 1] === want[j - 2] + want[j - 1] && here === best[i - 1][j - 2] + 2) {
+      said[j - 1] = said[j - 2] = true;
+      i--;
+      j -= 2;
+    } else if (i >= 2 && got[i - 2] + got[i - 1] === want[j - 1] && here === best[i - 2][j - 1] + 1) {
+      said[j - 1] = true;
+      i -= 2;
+      j--;
+    } else if (here === best[i - 1][j - 1]) {
+      // One heard where another should be: the likely mishearing.
+      if (want[j - 1]) heardFor[j - 1] = raw[i - 1].trim();
+      i--;
+      j--;
+    } else if (here === best[i - 1][j]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  // A small word dropped ahead of one that was said is let go.
+  for (let k = 0; k < m; k++) {
+    if (said[k] || !isSmallWord(want[k])) continue;
+    let run = 1;
+    while (k + run < m && !said[k + run] && isSmallWord(want[k + run])) run++;
+    if (run <= MAX_DROPPED && k + run < m && said[k + run]) {
+      for (let s = 0; s < run; s++) said[k + s] = true;
+    }
+    k += run - 1;
+  }
+  return { said, heardFor };
+}
+
 /** The next words for the recognizer to favor, one per line, or null for none. */
 export function upcomingWords(words: string[], cursor: number, count: number): string | null {
   const out: string[] = [];
