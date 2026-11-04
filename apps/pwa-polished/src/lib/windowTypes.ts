@@ -1,7 +1,7 @@
 /**
  * windowTypes.ts
  *
- * The fourteen things the window pickers offer, in four groups, and how each
+ * The fifteen things the window pickers offer, in four groups, and how each
  * one starts out.
  *
  * Three places offer this list: the tile grid in a brand-new window, the apps
@@ -32,7 +32,7 @@ import type { PanelIconName } from '../components/icons/PanelIcon.svelte';
  */
 export type WindowChoice =
   | 'bible' | 'map' | 'timeline' | 'connections' | 'notes' | 'isbe' | 'person' | 'naves' | 'strongs'
-  | 'commentaries' | 'journal' | 'art' | 'harmony' | 'tree';
+  | 'commentaries' | 'journal' | 'byheart' | 'art' | 'harmony' | 'tree';
 
 /** The choices that do fill a window. */
 export type WindowContentChoice = Exclude<WindowChoice, 'harmony' | 'tree'>;
@@ -83,6 +83,8 @@ export const WINDOW_TYPES: WindowTypeInfo[] = [
   { type: 'tree',         icon: 'tree',         label: 'Family Tree',  accent: '#22c55e', group: 'see' },
   { type: 'notes',        icon: 'notes',        label: 'Notes',        accent: '#fde047', group: 'mark' },
   { type: 'journal',      icon: 'journal',      label: 'Journal',      accent: '#f2893e', group: 'mark' },
+  // A rose for the heart, a shade off Art's so the two read apart.
+  { type: 'byheart',      icon: 'byheart',      label: 'By Heart',     accent: '#f472b6', group: 'mark' },
 ];
 
 /** The types in each group, groups in order. Every picker draws from this. */

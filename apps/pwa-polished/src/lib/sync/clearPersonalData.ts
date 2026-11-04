@@ -9,7 +9,7 @@
  *
  * Three groups go:
  *
- *   The personal stores — the same nine `prepareBackup` copies, because that
+ *   The personal stores — the same ten `prepareBackup` copies, because that
  *   list has already been proven to be exactly one person's own work.
  *
  *   The journal lock and its key slots — slotStore keeps one account's lock
@@ -48,7 +48,7 @@ import {
 } from '../backup/backupFile';
 
 /**
- * The nine stores holding this account's own work. Mirrors PERSONAL_STORES in
+ * The ten stores holding this account's own work. Mirrors PERSONAL_STORES in
  * db.ts and the list `prepareBackup` walks.
  */
 const PERSONAL_STORES = [
@@ -59,6 +59,7 @@ const PERSONAL_STORES = [
   'journal_entries',
   'notebooks',
   'notebook_pages',
+  'by_heart_verses',
   'reading_progress',
   'plan_metadata',
 ];
@@ -75,6 +76,13 @@ const PERSONAL_STORES = [
  * one store where signing out is genuinely a loss rather than a round trip.
  */
 const HISTORY_STORES = ['reading_history'];
+
+/**
+ * Photos behind By Heart cards. A photo is never uploaded, so like the reading
+ * history it does not come back: the same account signing in again sees those
+ * cards on their background color.
+ */
+const DEVICE_ONLY_STORES = ['by_heart_photos'];
 
 /**
  * The journal lock. Keyed by userId, but only ever one account's: a lock left
@@ -97,6 +105,7 @@ const SHARED_STORES = [
 const ALL_STORES = [
   ...PERSONAL_STORES,
   ...HISTORY_STORES,
+  ...DEVICE_ONLY_STORES,
   ...LOCK_STORES,
   ...SHARED_STORES,
 ];
@@ -290,12 +299,14 @@ export async function clearPersonalData(reason: ClearReason = 'sign-out'): Promi
   // bottom of their own files specifically to keep that cycle from forming.
   // Guarded, because a sign-out should not fail over a repaint.
   try {
-    const [{ notifyHighlightChange }, { notifyUserDataChange }] = await Promise.all([
+    const [{ notifyHighlightChange }, { notifyUserDataChange }, { notifyByHeartChange }] = await Promise.all([
       import('../../adapters/SyncedHighlightAdapter'),
       import('../../adapters/SyncedUserDataStore'),
+      import('../../adapters/SyncedByHeartStore'),
     ]);
     notifyHighlightChange();
     notifyUserDataChange();
+    notifyByHeartChange();
   } catch (err) {
     console.warn('[ClearData] Could not tell the UI the data is gone:', err);
   }

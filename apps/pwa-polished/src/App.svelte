@@ -33,6 +33,7 @@
   import { onMount } from "svelte";
   import { syncService } from "./lib/sync";
   import { readingPlanModalStore } from "./stores/readingPlanModalStore";  import { localDateStr } from './stores/clockStore';  import { todayStore } from './stores/clockStore';  import { checkAndShowDailyGreeting, dailyGreetingOpen, openDailyGreeting } from './stores/dailyGreetingStore';  import { get } from 'svelte/store';  import "./adapters/SyncedReadingAdapter"; // registers reading plan/progress pull handlers
+  import "./adapters/SyncedByHeartStore"; // registers the By Heart pull handler
   import "./adapters/SyncedHighlightAdapter"; // registers verse/word highlight pull handlers
   import { getSettings } from "./adapters/settings";
   import { navigationStore } from "./stores/navigationStore";

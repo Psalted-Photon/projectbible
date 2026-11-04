@@ -8,11 +8,12 @@
  * survives the lock being turned off and on again.
  *
  * Left out on purpose: the journal lock's keys, downloaded packs, window
- * layout, and anything else that only makes sense on this one device.
+ * layout, photos behind By Heart cards, and anything else that only makes
+ * sense on this one device.
  */
 
 import type {
-  DBJournalEntry, DBNotebook, DBNotebookPage, DBUserBookmark, DBUserHighlight, DBUserNote, DBUserWordHighlight,
+  DBByHeartVerse, DBJournalEntry, DBNotebook, DBNotebookPage, DBUserBookmark, DBUserHighlight, DBUserNote, DBUserWordHighlight,
 } from '../../adapters/db';
 import { openDB } from '../../adapters/db';
 import { getSettings, type UserSettings } from '../../adapters/settings';
@@ -40,6 +41,8 @@ export interface BackupData {
   notebooks: DBNotebook[];
   notebookPages: DBNotebookPage[];
   journal: DBJournalEntry[];
+  /** Missing from files made before By Heart. */
+  byHeart?: DBByHeartVerse[];
   readingPlans: {
     active: unknown[];
     history: unknown[];
@@ -68,6 +71,7 @@ export interface PreparedBackup {
     notebookPages: number;
     highlights: number;
     journal: number;
+    byHeart: number;
     readingPlans: number;
   };
   /** Journal entries left out: still locked, or the key couldn't open them. */
@@ -137,7 +141,7 @@ async function readJournal(includeJournal: boolean): Promise<{ rows: DBJournalEn
 export async function prepareBackup(options: { includeJournal: boolean }): Promise<PreparedBackup> {
   await syncService.forceSync();
 
-  const [notes, highlights, wordHighlights, bookmarks, notebooks, notebookPages, metadata, readingProgress, journal] =
+  const [notes, highlights, wordHighlights, bookmarks, notebooks, notebookPages, byHeart, metadata, readingProgress, journal] =
     await Promise.all([
       allRows<DBUserNote>('user_notes'),
       allRows<DBUserHighlight>('user_highlights'),
@@ -145,6 +149,7 @@ export async function prepareBackup(options: { includeJournal: boolean }): Promi
       allRows<DBUserBookmark>('user_bookmarks'),
       allRows<DBNotebook>('notebooks'),
       allRows<DBNotebookPage>('notebook_pages'),
+      allRows<DBByHeartVerse>('by_heart_verses'),
       allRows<Record<string, unknown>>('plan_metadata'),
       allRows<Record<string, unknown>>('reading_progress'),
       readJournal(options.includeJournal),
@@ -167,6 +172,7 @@ export async function prepareBackup(options: { includeJournal: boolean }): Promi
       notebooks,
       notebookPages,
       journal: journal.rows,
+      byHeart,
       readingPlans: { active, history, catchUpDays: readCatchUpDays(), metadata },
       readingProgress,
       settings: getSettings(),
@@ -188,6 +194,7 @@ export async function prepareBackup(options: { includeJournal: boolean }): Promi
       notebookPages: notebookPages.length,
       highlights: highlights.length + wordHighlights.length,
       journal: journal.rows.length,
+      byHeart: byHeart.length,
       readingPlans: planIds.size,
     },
     journalLeftOut: journal.leftOut,

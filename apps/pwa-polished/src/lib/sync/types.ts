@@ -19,6 +19,7 @@ export type SyncTable =
   | 'journal_entries'
   | 'notebooks'
   | 'notebook_pages'
+  | 'by_heart_verses'
   | 'reading_plans'
   | 'reading_progress'
   | 'journal_lock';

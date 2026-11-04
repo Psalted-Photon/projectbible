@@ -13,10 +13,12 @@ import { getDeviceOwner } from '../lib/sync/deviceOwner';
  * - user_bookmarks: user bookmarks
  * - journal_entries: daily journal entries
  * - journal_lock / journal_key_slots: the journal lock and its locked key copies
+ * - by_heart_verses: the verses someone is memorizing
+ * - by_heart_photos: photos behind By Heart cards, which stay on this device
  */
 
 const DB_NAME = 'projectbible';
-const DB_VERSION = 44; // Migration 44: word_links + original_forms (the Word Links pack)
+const DB_VERSION = 45; // Migration 45: by_heart_verses + by_heart_photos
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let dbInstance: IDBDatabase | null = null;
@@ -358,6 +360,54 @@ export interface DBNotebookPage {
    * the next account to sign in. See PERSONAL_STORES.
    */
   ownerId?: string;
+}
+
+/**
+ * One verse being memorized in By Heart, with its exact words and translation,
+ * the card it was designed on, and how the memorizing is going.
+ */
+export interface DBByHeartVerse {
+  id: string;
+  book: string;
+  chapter: number;
+  startVerse: number;
+  endVerse: number;
+  /** Every verse the passage touches, when that is not simply start to end. */
+  verses?: number[];
+  translation: string;
+  passage: string;
+  /** A long passage is saved in parts. 1 of 1 for most. */
+  part: number;
+  parts: number;
+  /** The look, the styled words and the painting (lib/byHeart/verse.ts). */
+  card: Record<string, unknown>;
+  /** The latest score, 0-100. Null until it has been recited. */
+  score: number | null;
+  /** The next date it is due, YYYY-MM-DD. Null until it has been recited. */
+  nextDate: string | null;
+  /** What the games keep between sessions. */
+  progress: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+  /**
+   * The account this row belongs to. Absent on rows written while signed out,
+   * which are adopted by the next account to sign in. See PERSONAL_STORES.
+   */
+  ownerId?: string;
+}
+
+/**
+ * A photo behind a By Heart card, with how it was framed. Never uploaded: a
+ * photo stays on the device it was picked on, so this store is not synced and
+ * does not come back after a sign-out.
+ */
+export interface DBByHeartPhoto {
+  /** The verse's id. */
+  id: string;
+  image: Blob;
+  zoom: number;
+  panX: number;
+  panY: number;
 }
 
 /**
@@ -911,6 +961,15 @@ export function openDB(): Promise<IDBDatabase> {
         const pageStore = db.createObjectStore('notebook_pages', { keyPath: 'id' });
         pageStore.createIndex('notebookId', 'notebookId', { unique: false });
         pageStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      // By Heart: the saved verses, and the photos behind their cards
+      if (!db.objectStoreNames.contains('by_heart_verses')) {
+        const verseStore = db.createObjectStore('by_heart_verses', { keyPath: 'id' });
+        verseStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('by_heart_photos')) {
+        db.createObjectStore('by_heart_photos', { keyPath: 'id' });
       }
 
       // ── Shared notebooks ──────────────────────────────────────────────────
@@ -1516,6 +1575,7 @@ const PERSONAL_STORES = new Set([
   'journal_entries',
   'notebooks',
   'notebook_pages',
+  'by_heart_verses',
   'reading_progress',
   'plan_metadata',
 ]);

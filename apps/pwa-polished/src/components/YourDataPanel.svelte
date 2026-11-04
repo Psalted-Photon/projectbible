@@ -39,6 +39,7 @@
         plural(prepared.counts.notebookPages, 'notebook page', 'notebook pages'),
         plural(prepared.counts.highlights, 'highlight', 'highlights'),
         plural(prepared.counts.journal, 'journal entry', 'journal entries'),
+        plural(prepared.counts.byHeart, 'By Heart verse', 'By Heart verses'),
         plural(prepared.counts.readingPlans, 'reading plan', 'reading plans'),
         'your settings',
       ].join(' · ')
@@ -100,10 +101,10 @@
   let fileInput: HTMLInputElement;
   let backup: BackupFile | null = null;
   let contents: Record<RestorePart, number> | null = null;
-  let chosen: Record<RestorePart, boolean> = { notes: true, notebooks: true, highlights: true, journal: true, readingPlans: true, settings: true };
+  let chosen: Record<RestorePart, boolean> = { notes: true, notebooks: true, highlights: true, journal: true, byHeart: true, readingPlans: true, settings: true };
   let result: RestoreSummary | null = null;
 
-  const PART_ORDER: RestorePart[] = ['notes', 'notebooks', 'highlights', 'journal', 'readingPlans', 'settings'];
+  const PART_ORDER: RestorePart[] = ['notes', 'notebooks', 'highlights', 'journal', 'byHeart', 'readingPlans', 'settings'];
 
   function partLabel(part: RestorePart, n: number): string {
     switch (part) {
@@ -111,6 +112,7 @@
       case 'notebooks': return plural(n, 'notebook page', 'notebook pages');
       case 'highlights': return plural(n, 'highlight', 'highlights');
       case 'journal': return plural(n, 'journal entry', 'journal entries');
+      case 'byHeart': return plural(n, 'By Heart verse', 'By Heart verses');
       case 'readingPlans': return `${plural(n, 'reading plan', 'reading plans')} and their progress`;
       case 'settings': return 'Settings';
     }
@@ -121,6 +123,7 @@
     notebooks: 'Notebook pages',
     highlights: 'Highlights',
     journal: 'Journal',
+    byHeart: 'By Heart',
   };
 
   $: availableParts = contents ? PART_ORDER.filter((p) => contents![p] > 0) : [];
@@ -184,7 +187,7 @@
       }
       backup = read;
       contents = counts;
-      chosen = { notes: true, notebooks: true, highlights: true, journal: true, readingPlans: true, settings: true };
+      chosen = { notes: true, notebooks: true, highlights: true, journal: true, byHeart: true, readingPlans: true, settings: true };
       restoreStep = 'preview';
     } catch (err) {
       showNotice(errorText(err), 'error');
@@ -235,7 +238,7 @@
 <div class="setting-group your-data">
   <p class="setting-label">Your Data</p>
   <p class="data-note">
-    Save a copy of your notes, notebooks, highlights, journal, reading plans and settings to a file, or bring one back.
+    Save a copy of your notes, notebooks, highlights, journal, By Heart verses, reading plans and settings to a file, or bring one back.
   </p>
 
   {#if restoreStep === 'idle'}
@@ -300,8 +303,8 @@
         {/each}
         {#if anySkipped}
           <p class="data-note">
-            Left out: a verse that already had a different note or highlight, or a day that already had a different
-            journal entry. The one on this device was kept.
+            Left out: a verse that already had a different note or highlight, a day that already had a different
+            journal entry, or a passage already in By Heart. The one on this device was kept.
           </p>
         {/if}
         <button class="primary-btn" on:click={finishRestore}>Done</button>

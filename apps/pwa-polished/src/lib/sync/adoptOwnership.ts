@@ -33,6 +33,7 @@ const STORES = [
   'journal_entries',
   'notebooks',
   'notebook_pages',
+  'by_heart_verses',
   'reading_progress',
   'plan_metadata',
 ];

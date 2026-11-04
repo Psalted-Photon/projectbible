@@ -10,6 +10,7 @@
   import CommentaryReader from "./CommentaryReader.svelte";
   import JournalWriter from "./JournalWriter.svelte";
   import JournalLockScreen from "./JournalLockScreen.svelte";
+  import ByHeartPane from "./byHeart/ByHeartPane.svelte";
   import { journalLock } from "../lib/journalLock/lockState";
   import { userProfileStore } from "../stores/userProfileStore";
   import { profileModalStore } from "../stores/profileModalStore";
@@ -77,6 +78,8 @@
   {:else if $journalLock.ready}
     <JournalWriter initialDate={panel.contentState?.date} />
   {/if}
+{:else if panel.contentType === 'byheart'}
+  <ByHeartPane />
 {:else if panel.contentType === 'art'}
   <ArtPane
     sceneId={panel.contentState?.sceneId}

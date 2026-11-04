@@ -1,7 +1,7 @@
 <script lang="ts" context="module">
   export type PanelIconName =
     | 'bible' | 'map' | 'timeline' | 'connections' | 'commentary' | 'notes' | 'journal'
-    | 'encyclopedia' | 'topical' | 'people' | 'strongs' | 'art' | 'harmony' | 'tree';
+    | 'encyclopedia' | 'topical' | 'people' | 'strongs' | 'art' | 'harmony' | 'tree' | 'byheart';
 
   /**
    * Line art drawn for the window picker — one entry per panel type, each a list
@@ -9,7 +9,7 @@
    * the library panes: no fills, stroke only, round caps and joins, so a single
    * drawing carries both the dark halo and the white line (see the markup).
    *
-   * The fourteen have to stay legible at 20px and, more importantly, tell each other
+   * The fifteen have to stay legible at 20px and, more importantly, tell each other
    * apart at 20px — hence three different book silhouettes rather than three
    * books: the Bible is open and spread, the journal is closed and clasped, the
    * encyclopedia is a shelf of volumes.
@@ -75,6 +75,12 @@
       'M5.8 3.8h11a1.6 1.6 0 011.6 1.6v13.2a1.6 1.6 0 01-1.6 1.6h-11z',
       'M8.4 3.8v16.4',
       'M18.4 11h1.4a.6.6 0 01.6.6v1.2a.6.6 0 01-.6.6h-1.4',
+    ],
+    // A heart with two lines of words kept inside it.
+    byheart: [
+      'M12 20.2C7.6 17 3.8 13.8 3.8 9.6a4.3 4.3 0 018.2-1.9 4.3 4.3 0 018.2 1.9c0 4.2-3.8 7.4-8.2 10.6z',
+      'M8.8 10.8h6.4',
+      'M9.8 13.6h4.4',
     ],
     // Three volumes of different heights standing on a shelf.
     encyclopedia: [

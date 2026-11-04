@@ -4,8 +4,9 @@
  * Restore only adds and updates; it never deletes. An item on both sides
  * keeps whichever copy was edited last. A new item is left out if its spot is
  * already taken by a different one: a verse that already has a note or a
- * highlight, or a day that already has a journal entry. The reader and the
- * journal assume one per spot.
+ * highlight, a day that already has a journal entry, or a passage already in
+ * By Heart in the same words. The reader and the journal assume one per spot,
+ * and By Heart would otherwise schedule the same verse twice.
  *
  * Every restored row is saved on the device and queued for upload as a whole
  * row with its original dates. Saving on the device alone isn't enough: the
@@ -14,10 +15,11 @@
  */
 
 import type {
-  DBJournalEntry, DBNotebook, DBNotebookPage, DBUserBookmark, DBUserHighlight, DBUserNote, DBUserWordHighlight,
+  DBByHeartVerse, DBJournalEntry, DBNotebook, DBNotebookPage, DBUserBookmark, DBUserHighlight, DBUserNote, DBUserWordHighlight,
 } from '../../adapters/db';
 import { writeTransaction } from '../../adapters/db';
 import { applyTheme, getSettings, updateSettings, type UserSettings } from '../../adapters/settings';
+import { byHeartUploadOp, notifyByHeartChange } from '../../adapters/SyncedByHeartStore';
 import { forgetRemotePlanStatuses, planUploadOp, queueProgressEntry } from '../../adapters/SyncedReadingAdapter';
 import { readingProgressStore, type ReadingProgressEntry } from '../../stores/ReadingProgressStore';
 import { repeatsStore } from '../../stores/repeatsStore';
@@ -32,7 +34,7 @@ import {
   type BackupData, type BackupFile,
 } from './backupFile';
 
-export type RestorePart = 'notes' | 'notebooks' | 'highlights' | 'journal' | 'readingPlans' | 'settings';
+export type RestorePart = 'notes' | 'notebooks' | 'highlights' | 'journal' | 'byHeart' | 'readingPlans' | 'settings';
 
 export interface PartResult {
   added: number;
@@ -110,6 +112,13 @@ function goodJournal(data: BackupData): DBJournalEntry[] {
   return list<DBJournalEntry>(data.journal).filter((r) =>
     isRow(r, { id: 'string', date: 'string', text: 'string', createdAt: 'number', updatedAt: 'number' }));
 }
+function goodByHeart(data: BackupData): DBByHeartVerse[] {
+  return list<DBByHeartVerse>(data.byHeart).filter((r) =>
+    isRow(r, {
+      id: 'string', book: 'string', chapter: 'number', startVerse: 'number', endVerse: 'number',
+      translation: 'string', passage: 'string', part: 'number', parts: 'number', createdAt: 'number', updatedAt: 'number',
+    }));
+}
 interface StoredPlan {
   id: string;
   plan: any;
@@ -154,6 +163,7 @@ export function backupContents(backup: BackupFile): Record<RestorePart, number> 
     notebooks: goodPages(d).length,
     highlights: goodHighlights(d).length + goodWordHighlights(d).length,
     journal: goodJournal(d).length,
+    byHeart: goodByHeart(d).length,
     readingPlans: goodPlans(d).active.length + goodPlans(d).archived.length,
     settings: goodSettings(d) ? 1 : 0,
   };
@@ -402,6 +412,39 @@ async function restoreJournal(data: BackupData): Promise<PartResult> {
   return result;
 }
 
+async function restoreByHeart(data: BackupData): Promise<PartResult> {
+  const result = newResult();
+  const local = await allRows<DBByHeartVerse>('by_heart_verses');
+  const byId = new Map(local.map((r) => [r.id, r]));
+  const spotOf = (r: DBByHeartVerse) => `${r.translation}|${r.part}|${r.passage}`;
+  const taken = new Set(local.map(spotOf));
+
+  for (const verse of goodByHeart(data)) {
+    const existing = byId.get(verse.id);
+    if (!existing && taken.has(spotOf(verse))) {
+      result.skipped++;
+      continue;
+    }
+    if (!isNewer(verse, existing)) continue;
+    const row: DBByHeartVerse = {
+      id: verse.id, book: verse.book, chapter: verse.chapter, startVerse: verse.startVerse, endVerse: verse.endVerse,
+      verses: Array.isArray(verse.verses) ? verse.verses : undefined,
+      translation: verse.translation, passage: verse.passage, part: verse.part, parts: verse.parts,
+      card: verse.card && typeof verse.card === 'object' ? verse.card : {},
+      score: typeof verse.score === 'number' ? verse.score : null,
+      nextDate: typeof verse.nextDate === 'string' ? verse.nextDate : null,
+      progress: verse.progress && typeof verse.progress === 'object' ? verse.progress : {},
+      createdAt: verse.createdAt, updatedAt: verse.updatedAt,
+    };
+    await putAndQueue('by_heart_verses', row, byHeartUploadOp(row));
+    taken.add(spotOf(row));
+    if (existing) result.updated++;
+    else result.added++;
+  }
+  notifyByHeartChange();
+  return result;
+}
+
 /**
  * Plans have no edit date, so a plan already on this device, active or in
  * history, is left as it is; only missing ones are added. Each added plan is
@@ -563,6 +606,7 @@ export async function restoreBackup(backup: BackupFile, parts: Set<RestorePart>)
   if (parts.has('notes')) summary.results.notes = await restoreNotes(data);
   if (parts.has('highlights')) summary.results.highlights = await restoreHighlights(data);
   if (parts.has('journal')) summary.results.journal = await restoreJournal(data);
+  if (parts.has('byHeart')) summary.results.byHeart = await restoreByHeart(data);
   if (parts.has('readingPlans')) {
     const added = await restorePlans(data);
     summary.readingPlans = { added: added.length, progressDays: await restoreProgress(data) };

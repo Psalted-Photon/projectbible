@@ -45,7 +45,7 @@ function snoozed(): boolean {
 
 const PERSONAL_STORES = [
   'user_notes', 'user_highlights', 'user_word_highlights', 'user_bookmarks',
-  'notebooks', 'notebook_pages', 'journal_entries', 'plan_metadata', 'reading_progress',
+  'notebooks', 'notebook_pages', 'by_heart_verses', 'journal_entries', 'plan_metadata', 'reading_progress',
 ] as const;
 
 /**
