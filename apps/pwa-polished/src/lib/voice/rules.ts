@@ -19,6 +19,7 @@
  */
 
 import { editDistance } from '../fuzzy';
+import { HEARD_AS } from '../tts/pronunciationData';
 
 export interface ToolSpec {
   name: string;
@@ -319,8 +320,25 @@ function wordsToNumber(words: string): number {
  * highlights, "Versix" and "verse No. 6" are verse 6, "H43-0" is H430, and
  * "Destellonians" or "the Salonians" is Thessalonians.
  */
+/**
+ * Words Whistle writes for a name, from the Name Lab's "also hear it as" box.
+ * The build only lets one through if the Bible uses the name at least 5 times as
+ * often, the same rule as soundAlikes.ts.
+ */
+const HEARD_WORDS = Object.keys(HEARD_AS);
+const HEARD_RE = HEARD_WORDS.length ? new RegExp(String.raw`\b(?:${HEARD_WORDS.join('|')})\b`, 'gi') : null;
+const SEARCH_RE = /\b(search\w*|find|look for|which verses?|verses? (about|that|with)|what does the bible say)\b/;
+
+/** Searching means those very words, so "search for pilot" keeps its pilot. */
+function namesForHeardWords(text: string): string {
+  if (!HEARD_RE) return text;
+  const lower = text.toLowerCase();
+  if (SEARCH_RE.test(lower) || SAYS_RE.test(lower)) return text;
+  return text.replace(HEARD_RE, (word) => HEARD_AS[word.toLowerCase()]);
+}
+
 export function tidy(text: string): string {
-  let t = text
+  let t = namesForHeardWords(text)
     .replace(new RegExp(String.raw`\bver(?:se?)?(${SMALL.slice(1).join('|')}|twenty|thirty|forty|fifty)\b`, 'gi'), 'verse $1')
     .replace(/\b(verses?|chapters?)\s+(?:no\.?|number)\s*/gi, '$1 ')
     .replace(/\bb\.\s?c\.?(?=\s|$)/gi, 'BC')
@@ -579,7 +597,7 @@ const CORE: Group[] = [
   },
   {
     key: 'search',
-    triggers: { test: (t: string) => /\b(search\w*|find|look for|which verses?|verses? (about|that|with)|what does the bible say)\b/.test(t) || SAYS_RE.test(t) },
+    triggers: { test: (t: string) => SEARCH_RE.test(t) || SAYS_RE.test(t) },
     tools: [
       {
         name: 'search',

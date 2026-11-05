@@ -25,7 +25,7 @@ import {
   APP_KEYWORDS,
   type ToolSpec,
 } from './rules';
-import { editDistance, soundKey } from '../fuzzy';
+import { closestSound, soundKey } from '../fuzzy';
 
 /** One action, as the app carries it out. */
 export interface VoiceCall {
@@ -203,18 +203,7 @@ const parseList = (v: unknown): any[] => {
 
 /** The name in the people list that a misheard name sounds most like, or null. */
 function soundAlike(q: string): string | null {
-  const flat = q.replace(/ /g, '');
-  const key = soundKey(flat);
-  if (key.length < 3) return null;
-  let best: { name: string; kd: number; fd: number } | null = null;
-  for (const [name, k] of people.keys) {
-    const kd = editDistance(key, k);
-    if (kd > (key.length >= 5 ? 2 : 1)) continue;
-    const fd = editDistance(flat, name);
-    if (fd > Math.max(2, Math.round(name.length * 0.45))) continue;
-    if (!best || kd < best.kd || (kd === best.kd && fd < best.fd)) best = { name, kd, fd };
-  }
-  return best?.name ?? null;
+  return closestSound(q.replace(/ /g, ''), people.keys);
 }
 
 const TITLE_WORDS = /\b(the|apostle|prophet|prophetess|king|queen|saint|st|priest|judge|named|called)\b/g;

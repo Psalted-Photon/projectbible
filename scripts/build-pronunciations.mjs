@@ -14,7 +14,7 @@ import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { moveStress, plainLetters, syllables, withoutStress } from '../apps/pwa-polished/public/name-lab-sounds.js';
-import { readNameFixes, soundsFor } from './lib/name-sounds.mjs';
+import { bibleWordCounts, readNameFixes, soundsFor } from './lib/name-sounds.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'apps', 'pwa-polished', 'src', 'lib', 'tts', 'pronunciationData.ts');
@@ -48,6 +48,22 @@ for (const { key, code, says } of accents) {
   });
 }
 
+// A word Whistle writes only stands for the name if the Bible uses the name at
+// least 5 times as often, the rule soundAlikes.ts uses, so a real word that
+// matters stays itself.
+const counts = bibleWordCounts();
+const heardAs = {};
+const leftOut = [];
+for (const fix of fixes) {
+  const named = counts.get(fix.name) || 0;
+  for (const word of fix.hear) {
+    if (!/^[a-z']+$/.test(word)) throw new Error(`${fix.name}: "${word}" has to be one small-letter word`);
+    const used = (counts.get(word) || 0) + (counts.get(word[0].toUpperCase() + word.slice(1)) || 0);
+    if (named >= 5 * used) heardAs[word] = fix.name;
+    else leftOut.push(`${word} for ${fix.name} (${word} ${used}, ${fix.name} ${named})`);
+  }
+}
+
 const entries = (table) =>
   Object.entries(table).map(([from, to]) => `  ${JSON.stringify(from)}: ${JSON.stringify(to)},`).join('\n');
 const block = (table) => (Object.keys(table).length ? `{\n${entries(table)}\n}` : '{}');
@@ -65,6 +81,10 @@ export const SPELLINGS: Record<string, string> = ${block(spellings)};
 /** A word's sounds with the stress marks taken out, and what to say instead, per accent. */
 export const STRONG_US: Record<string, string> = ${block(stress.us)};
 export const STRONG_UK: Record<string, string> = ${block(stress.uk)};
+
+/** A word Whistle writes, and the name it stands for in a voice command. */
+export const HEARD_AS: Record<string, string> = ${block(heardAs)};
 `,
 );
-console.log(`→ ${OUT}\n${Object.keys(spellings).length} spellings, ${Object.keys(stress.us).length} strong syllables`);
+console.log(`→ ${OUT}\n${Object.keys(spellings).length} spellings, ${Object.keys(stress.us).length} strong syllables, ${Object.keys(heardAs).length} words for commands`);
+if (leftOut.length) console.log(`Left out of commands, too common in the Bible: ${leftOut.join('; ')}`);

@@ -36,6 +36,25 @@ export function typoDistance(a: string, b: string): number {
   return prev[b.length];
 }
 
+/**
+ * The name a misheard name sounds most like, or null. It has to be close in how
+ * it sounds, then close in how it's spelled. A tie goes to the earlier name, so
+ * a list in order of how common its names are favors the common one.
+ */
+export function closestSound(heard: string, names: Array<[name: string, key: string]>): string | null {
+  const key = soundKey(heard);
+  if (key.length < 3) return null;
+  let best: { name: string; kd: number; fd: number } | null = null;
+  for (const [name, k] of names) {
+    const kd = editDistance(key, k);
+    if (kd > (key.length >= 5 ? 2 : 1)) continue;
+    const fd = editDistance(heard, name);
+    if (fd > Math.max(2, Math.round(name.length * 0.45))) continue;
+    if (!best || kd < best.kd || (kd === best.kd && fd < best.fd)) best = { name, kd, fd };
+  }
+  return best?.name ?? null;
+}
+
 /** How a name sounds, roughly: "mephibosheth" and "mefa boshes" both come out "mfps(t)". */
 export function soundKey(s: string): string {
   const k = s.replace(/[^a-z]/g, '')

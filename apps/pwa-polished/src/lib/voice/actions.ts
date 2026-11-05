@@ -43,6 +43,7 @@ import { openConnectionsWindow } from '../openConnectionsWindow';
 import { openTimelineWindow } from '../openTimelineWindow';
 import { atlasInstalled, loadAtlasIndex, getAtlasJson } from '../atlas/data';
 import { ScriptureSearch } from '../atlas/search.js';
+import { closestSound, soundKey } from '../fuzzy';
 import { timelineInstalled, loadTimeline } from '../timeline/data';
 import { searchItems } from '../timeline/query';
 import { voiceForTap, useVoice } from '../tts/voiceForTap';
@@ -451,7 +452,18 @@ const yearLabel = (year: number) => (year < 0 ? `${-year} BC` : `AD ${year}`);
 async function findPlace(name: string): Promise<{ name: string; lat: number; lon: number; modern?: string; type?: string } | null> {
   const index = await loadAtlasIndex();
   const [places, ancient] = await Promise.all([getAtlasJson(index.biblicalPlaces.file), getAtlasJson(index.ancientNames.file)]);
-  return new ScriptureSearch(places, ancient).search(name.replace(/^the\s+/i, ''), 1)[0] ?? null;
+  const said = name.replace(/^the\s+/i, '');
+  const search = new ScriptureSearch(places, ancient);
+  const found = search.search(said, 1)[0];
+  if (found) return found;
+  // Whistle writes what it hears ("kana"), so try the same sound match people
+  // get. Most-cited places first, so a tie lands on the one Scripture names most.
+  const flat = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
+  const names = [...places]
+    .sort((a: any, b: any) => (b.v?.length ?? 0) - (a.v?.length ?? 0))
+    .map((p: any): [string, string] => [flat(p.n), soundKey(flat(p.n))]);
+  const close = closestSound(flat(said), names);
+  return close ? search.search(close, 1)[0] ?? null : null;
 }
 
 async function map(a: Record<string, any>): Promise<string> {

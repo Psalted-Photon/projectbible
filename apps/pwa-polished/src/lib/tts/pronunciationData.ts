@@ -9,3 +9,6 @@ export const SPELLINGS: Record<string, string> = {};
 /** A word's sounds with the stress marks taken out, and what to say instead, per accent. */
 export const STRONG_US: Record<string, string> = {};
 export const STRONG_UK: Record<string, string> = {};
+
+/** A word Whistle writes, and the name it stands for in a voice command. */
+export const HEARD_AS: Record<string, string> = {};
