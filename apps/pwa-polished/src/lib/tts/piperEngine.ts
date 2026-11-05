@@ -194,6 +194,9 @@ export async function synthesize(
   // own ids are authoritative otherwise, and English must stay untouched.
   const substitutions = speech?.substitutions;
   let phonemeIds = result.phonemeIds;
+  if (result.edited && config.phoneme_id_map) {
+    phonemeIds = idsFromPhonemes(result.phonemes, config.phoneme_id_map);
+  }
   if (substitutions && Object.keys(substitutions).length > 0 && config.phoneme_id_map) {
     const rewritten = result.phonemes.map((p) => substitutions[p] ?? p);
     if (rewritten.some((p, i) => p !== result.phonemes[i])) {

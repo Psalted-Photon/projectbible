@@ -19,18 +19,15 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { stripFootnotes, stripHtml } from './lib/clean-text.mjs';
+import { bibleWordCounts, soundsFor } from './lib/name-sounds.mjs';
 import { plainLetters, stressDisagrees, syllablesLost } from '../apps/pwa-polished/public/name-lab-sounds.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(root, 'apps', 'pwa-polished');
 const OUT = join(app, 'public', 'name-lab-names.json');
-const TTS_DIR = join(app, 'public', 'tts');
-const VENDOR = join(app, 'src', 'lib', 'tts', 'vendor', 'piper-phonemize.js');
 const NAMES_FILE = join(app, 'src', 'lib', 'voice', 'bibleNames.ts');
 
 /** Real names that bibleNames.ts leaves out because they are everyday words too. */
@@ -45,26 +42,7 @@ const names = [...new Set([...lists.flat(), ...ALSO])];
 // ─── counts ─────────────────────────────────────────────────────────────────
 
 const packs = join(root, 'packs');
-const tx = new Database(join(packs, 'consolidated', 'translations.sqlite'), { readonly: true });
-const net = new Database(join(packs, 'net.sqlite'), { readonly: true });
-
-const counts = new Map();
-const WORD_RE = /[A-Za-z]+(?:['’-][A-Za-z]+)*/g;
-
-function countVerses(rows) {
-  for (const { text } of rows) {
-    const clean = stripHtml(stripFootnotes(text)).replace(/[\x00-\x1f]/g, ' ');
-    for (const m of clean.matchAll(WORD_RE)) {
-      if (!/^[A-Z]/.test(m[0])) continue;
-      // Possessives count for the name, and capitals ("JEHOVAH") read as the name.
-      const bare = m[0].replace(/['’]s?$/, '');
-      const word = bare === bare.toUpperCase() ? bare[0] + bare.slice(1).toLowerCase() : bare;
-      counts.set(word, (counts.get(word) || 0) + 1);
-    }
-  }
-}
-for (const t of ['kjv', 'web', 'bsb']) countVerses(tx.prepare('SELECT text FROM verses WHERE translation_id = ?').all(t));
-countVerses(net.prepare('SELECT text FROM verses').all());
+const counts = bibleWordCounts();
 
 // ─── ISBE guides ────────────────────────────────────────────────────────────
 
@@ -155,43 +133,6 @@ function guideFor(name) {
 }
 
 // ─── sounds ─────────────────────────────────────────────────────────────────
-
-// The vendored module is an Emscripten build that expects a CommonJS-ish global
-// scope when it detects Node, the same setup as scripts/phonemize-probe.mjs.
-globalThis.require = createRequire(import.meta.url);
-globalThis.__dirname = TTS_DIR;
-globalThis.__filename = join(TTS_DIR, 'piper-phonemize.js');
-const { createPiperPhonemize } = await import(pathToFileURL(VENDOR).href);
-
-const BATCH = 50;
-
-/**
- * Each input object prints one line. In batches, because a long input overruns
- * the module's memory, and with a fresh module per batch, because one aborts
- * after a few calls. The app starts a fresh one per call too.
- */
-async function soundsFor(words, accent) {
-  const out = [];
-  for (let at = 0; at < words.length; at += BATCH) {
-    const batch = words.slice(at, at + BATCH);
-    const printed = [];
-    const phonemizer = await createPiperPhonemize({
-      print: (line) => printed.push(line),
-      printErr: (line) => console.error(line),
-      locateFile: (file) => join(TTS_DIR, file),
-    });
-    phonemizer.callMain([
-      '-l', accent,
-      '--input', JSON.stringify(batch.map((text) => ({ text }))),
-      '--espeak_data', '/espeak-ng-data',
-    ]);
-    if (printed.length !== batch.length) {
-      throw new Error(`Asked for ${batch.length} words in ${accent} and got ${printed.length}`);
-    }
-    out.push(...printed.map((line) => JSON.parse(line).phonemes.join('')));
-  }
-  return out;
-}
 
 const us = await soundsFor(names, 'en-us');
 const uk = await soundsFor(names, 'en-gb-x-rp');

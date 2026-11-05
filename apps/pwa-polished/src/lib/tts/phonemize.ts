@@ -10,12 +10,15 @@
 
 import { createPiperPhonemize } from './vendor/piper-phonemize.js';
 import { ASSET_BASE } from './ttsRuntime.js';
+import { moveNameStress } from './pronunciations.js';
 
 export interface Phonemized {
   /** The sounds, as espeak's own symbols. */
   phonemes: string[];
   /** espeak's numbering. Piper uses these directly; Kokoro ignores them. */
   phonemeIds: number[];
+  /** A name's stress was moved after espeak, so phonemeIds no longer match the sounds. */
+  edited: boolean;
 }
 
 export async function phonemize(text: string, espeakVoice: string): Promise<Phonemized> {
@@ -25,7 +28,11 @@ export async function phonemize(text: string, espeakVoice: string): Promise<Phon
       print: (msg) => {
         try {
           const parsed = JSON.parse(msg);
-          resolve({ phonemes: parsed.phonemes ?? [], phonemeIds: parsed.phoneme_ids });
+          const phonemes: string[] = parsed.phonemes ?? [];
+          const sounds = phonemes.join('');
+          const moved = moveNameStress(sounds, espeakVoice);
+          const edited = moved !== sounds;
+          resolve({ phonemes: edited ? [...moved] : phonemes, phonemeIds: parsed.phoneme_ids, edited });
         } catch {
           reject(new Error(`Unexpected phonemizer output: ${msg}`));
         }

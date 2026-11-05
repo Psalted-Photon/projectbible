@@ -1,0 +1,5 @@
+# The Name Lab's fixes. Paste what its Copy fixes button gives you on the end of
+# this file, then run: node scripts/build-pronunciations.mjs
+# and: node scripts/build-name-lab-list.mjs
+# A later line for a name replaces an earlier one.
+

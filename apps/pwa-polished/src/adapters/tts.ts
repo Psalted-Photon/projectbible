@@ -22,6 +22,7 @@ import {
   type TtsEngine,
 } from '../lib/tts/voices.js';
 import { HEBREW_VOICE_ID, HEBREW_WORD_PACE } from '../lib/tts/hebrewSounds.js';
+import { respellNames } from '../lib/tts/pronunciations.js';
 import { get, writable } from 'svelte/store';
 import { getTtsSettings, updateTtsSettings } from './settings.js';
 
@@ -446,6 +447,8 @@ export async function synthesizeSpeech(
 ): Promise<Blob> {
   const info = getVoiceInfo(voiceId);
   const engine = info ? voiceEngine(info) : 'piper';
+  // Names are fixed on the way to English voices only, so a Greek reading is untouched.
+  const said = info?.lang === 'en' && !speech?.espeakVoice ? respellNames(text) : text;
 
   // The two engines are told about pronunciation in different ways. Kokoro has
   // no config file of its own, so its espeak language comes from the catalog;
@@ -453,9 +456,9 @@ export async function synthesizeSpeech(
   // would ask an English voice to read with Greek rules.
   const payload =
     engine === 'kokoro'
-      ? { text, voiceId, engine, phonemeVoice: info?.phonemeVoice ?? 'en-us' }
+      ? { text: said, voiceId, engine, phonemeVoice: info?.phonemeVoice ?? 'en-us' }
       : {
-          text,
+          text: said,
           voiceId,
           engine,
           espeakVoice: speech?.espeakVoice,
