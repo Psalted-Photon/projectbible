@@ -68,6 +68,9 @@ function copyTtsRuntime() {
     // and a lab that guessed at pronunciation differently from the reader would
     // audition voices you never actually get to hear.
     [resolve(__dirname, 'src/lib/tts/vendor/piper-phonemize.js'), 'piper-phonemize.js'],
+    // The runtime's own script, so name-lab-worker.js runs the same version the
+    // app does, without a pinned copy of its own to fall out of step.
+    [resolve(ortDist, 'ort.min.mjs'), 'ort.min.mjs'],
   ];
 
   function copyTo(targetDir: string, label: string) {
@@ -310,6 +313,8 @@ export default defineConfig({
         //   voice-control-lab  the go/no-go test for Voice Control. Its folder
         //                     (worker, engine, actions) stays out as well; the
         //                     models it downloads are kept in its own cache.
+        //   name-lab          hears Bible names and tries spellings for them.
+        //                     Its helpers and name list stay out as well.
         //   reset.html       the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -337,6 +342,7 @@ export default defineConfig({
           '**/assets/connections-chord-lab-*.js',
           '**/voice-control-lab.html',
           '**/voice-control-lab/**',
+          '**/name-lab*',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
@@ -350,6 +356,7 @@ export default defineConfig({
           /^\/connections-grid-lab\.html$/,
           /^\/connections-chord-lab\.html$/,
           /^\/voice-control-lab\.html$/,
+          /^\/name-lab\.html$/,
         ],
         runtimeCaching: [
           {

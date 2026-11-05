@@ -1,0 +1,1078 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Name Lab</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #141414;
+    --panel: #1c1c1c;
+    --line: #2f2f2f;
+    --text: #e6e6e6;
+    --dim: #9a9a9a;
+    --faint: #6f6f6f;
+    --accent: #7c6ad0;
+    --accent-soft: #2b2542;
+    --flag: #e0b341;
+    --good: #6fbf73;
+    --bad: #f08a8a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 16px 96px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.15rem; margin: 0 0 2px; }
+  .sub { color: var(--dim); font-size: 0.82rem; margin-bottom: 14px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px; margin-bottom: 14px;
+  }
+  button {
+    font: inherit; color: var(--text); background: #2a2a2a;
+    border: 1px solid #3d3d3d; border-radius: 7px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #333; border-color: #555; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { background: #3b3169; border-color: #5b4da8; }
+  button.primary:hover:not(:disabled) { background: #473b80; }
+  input[type="text"], select, textarea {
+    font: inherit; color: var(--text); background: #131313;
+    border: 1px solid #3a3a3a; border-radius: 7px; padding: 6px 8px; min-width: 0;
+  }
+  label { color: var(--dim); font-size: 0.85rem; }
+  .row-flex { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hint { font-size: 0.8rem; color: var(--faint); }
+  #status { font-size: 0.82rem; color: var(--dim); min-height: 1.3em; margin-top: 8px; }
+  #status.err { color: var(--bad); }
+
+  /* The bar that stays while the list scrolls under it. */
+  .bar {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--bg); padding: 8px 0 10px; border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chip { padding: 3px 10px; border-radius: 999px; font-size: 0.82rem; }
+  .chip.on { background: var(--accent-soft); border-color: var(--accent); }
+  .chip b { font-weight: 600; color: var(--dim); margin-left: 3px; }
+  #search { flex: 1 1 160px; }
+  .now {
+    display: none; margin-top: 8px; padding: 8px 10px;
+    background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px;
+    align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .now.on { display: flex; }
+  .now .who { flex: 1 1 160px; min-width: 0; }
+  .now .who strong { font-size: 1.02rem; }
+
+  /* A long list, so rows the screen can't see aren't laid out. */
+  .item { content-visibility: auto; contain-intrinsic-size: auto 62px; border-bottom: 1px solid #242424; }
+  .item.open { content-visibility: visible; }
+  .row {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center;
+    padding: 8px 4px;
+  }
+  .row.current { background: var(--accent-soft); border-radius: 8px; }
+  .info { cursor: pointer; min-width: 0; }
+  .name { font-weight: 600; }
+  .count { color: var(--faint); font-size: 0.75rem; margin-left: 6px; font-variant-numeric: tabular-nums; }
+  .tag {
+    font-size: 0.68rem; border-radius: 4px; padding: 0 5px; margin-left: 6px;
+    border: 1px solid currentColor; white-space: nowrap;
+  }
+  .tag.flag { color: var(--flag); }
+  .tag.fixed { color: var(--accent); }
+  .tag.wrong { color: var(--bad); }
+  .tag.right { color: var(--good); }
+  .lines { font-size: 0.82rem; color: var(--dim); display: flex; gap: 2px 14px; flex-wrap: wrap; }
+  .says { color: var(--text); }
+  .guide { color: var(--faint); }
+  .acts { display: flex; gap: 4px; }
+  .acts button, .play { padding: 4px 9px; }
+  .acts button.on-right { background: #223a24; border-color: var(--good); }
+  .acts button.on-wrong { background: #3f2424; border-color: var(--bad); }
+  .item.done .name, .item.done .says { opacity: 0.6; }
+  .more { padding: 14px 4px; color: var(--dim); }
+
+  /* The fix card, opened under its row. */
+  .card {
+    background: var(--panel); border: 1px solid #3a3456; border-radius: 10px;
+    padding: 12px; margin: 2px 0 12px;
+  }
+  .card .field { margin-bottom: 12px; }
+  .card .field > label { display: block; margin-bottom: 4px; }
+  .card .spell { width: 100%; max-width: 320px; }
+  .accents { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+  .accent { background: #171717; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .accent h3 { margin: 0 0 6px; font-size: 0.75rem; color: var(--dim); font-weight: 600; }
+  .accent .plain { font-size: 1.02rem; margin-bottom: 8px; overflow-wrap: anywhere; }
+  .syllables { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .syllables button { padding: 2px 9px; font-size: 0.88rem; }
+  .syllables button.strong { background: #3b3169; border-color: #8a78e0; font-weight: 700; }
+  .notes { font-size: 0.82rem; color: var(--flag); margin: 8px 0 0; min-height: 1.2em; }
+  .tried { font-size: 0.8rem; color: var(--faint); margin-top: 6px; }
+  .tried button { padding: 0 7px; font-size: 0.78rem; margin: 2px 3px 2px 0; }
+  .hears { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .hear { background: #242424; border: 1px solid #3a3a3a; border-radius: 999px; padding: 1px 4px 1px 10px; font-size: 0.85rem; }
+  .hear button { padding: 0 6px; border: 0; background: transparent; color: var(--dim); }
+  .card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  #copied { width: 100%; height: 170px; margin-top: 8px; font: 0.8rem/1.45 ui-monospace, Menlo, Consolas, monospace; }
+
+  @media (max-width: 560px) {
+    .row { grid-template-columns: auto 1fr; }
+    .acts { grid-column: 2; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Name Lab</h1>
+  <div class="sub" id="summary">Loading the names…</div>
+
+  <div class="panel">
+    <div class="row-flex">
+      <label for="usVoice">US voice</label>
+      <select id="usVoice"></select>
+      <label for="ukVoice">UK voice</label>
+      <select id="ukVoice"></select>
+      <label for="readWith">Read the list with</label>
+      <select id="readWith">
+        <option value="us">US</option>
+        <option value="uk">UK</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="bar">
+    <div class="chips" id="chips"></div>
+    <div class="row-flex">
+      <input type="text" id="search" placeholder="Search, or type any word to try it" autocomplete="off">
+      <button class="primary" id="playBtn" title="Space">Play from here</button>
+      <button id="copyBtn">Copy fixes</button>
+    </div>
+    <div class="row-flex hint" style="margin-top:6px">
+      <label><input type="checkbox" id="auto"> Count what I don't tap as sounds right</label>
+      <label for="gap">Pause</label>
+      <input type="range" id="gap" min="0.2" max="2.5" step="0.1" style="width:110px">
+      <span id="gapLabel"></span>
+    </div>
+    <div class="now" id="now">
+      <div class="who"><strong id="nowName"></strong> <span class="hint" id="nowSays"></span></div>
+      <button id="nowWrong" title="X">Sounds wrong</button>
+      <button id="nowStop">Stop</button>
+    </div>
+    <textarea id="copied" readonly hidden></textarea>
+    <div id="status"></div>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script type="module">
+import {
+  plainLetters,
+  syllables,
+  moveStress,
+  guideLetters,
+  stressDisagrees,
+  syllablesLost,
+  spliceWord,
+} from '/name-lab-sounds.js';
+
+const $ = (id) => document.getElementById(id);
+const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const ACCENTS = { us: { label: 'US', code: 'en-us' }, uk: { label: 'UK', code: 'en-gb-x-rp' } };
+/** Where a name sits in a sentence, for hearing it with words around it. */
+const FRAME = ['And the word came to', 'that day.'];
+
+// ─── what's remembered in this browser ──────────────────────────────────────
+
+const STORE = 'namelab_v1';
+const saved = {
+  marks: {},
+  fixes: {},
+  extra: [],
+  usVoice: null,
+  ukVoice: null,
+  readWith: 'us',
+  filter: 'flagged',
+  gap: 0.6,
+  auto: true,
+};
+try {
+  Object.assign(saved, JSON.parse(localStorage.getItem(STORE) || '{}'));
+} catch {
+  // Blocked or damaged storage: start fresh, and the page still works.
+}
+function save() {
+  try {
+    localStorage.setItem(STORE, JSON.stringify(saved));
+  } catch {
+    say('This browser would not save your progress. Use Copy fixes before leaving.', true);
+  }
+}
+
+function say(text, isError) {
+  $('status').textContent = text;
+  $('status').className = isError ? 'err' : '';
+}
+
+// ─── the voices, in their worker ────────────────────────────────────────────
+
+const worker = new Worker('/name-lab-worker.js', { type: 'module' });
+const pending = new Map();
+let nextJob = 1;
+
+worker.onmessage = ({ data }) => {
+  if (data.status !== undefined) {
+    say(data.status);
+    return;
+  }
+  const job = pending.get(data.id);
+  if (!job) return;
+  pending.delete(data.id);
+  if (data.ok) job.resolve(data.result);
+  else job.reject(Object.assign(new Error(data.error), { dropped: data.dropped }));
+};
+worker.onerror = (event) => say(`The voice engine would not start: ${event.message || 'unknown error'}`, true);
+
+function ask(message) {
+  return new Promise((resolve, reject) => {
+    const id = nextJob++;
+    pending.set(id, { resolve, reject });
+    worker.postMessage({ id, ...message });
+  });
+}
+
+const soundsOf = (text, accent) => ask({ op: 'sounds', text, accent: ACCENTS[accent].code });
+
+let voices = [];
+const voiceFor = (accent) => voices.find((v) => v.id === saved[`${accent}Voice`]) ?? null;
+
+function fillVoicePickers() {
+  for (const accent of ['us', 'uk']) {
+    const select = $(`${accent}Voice`);
+    const list = voices.filter((v) => (accent === 'uk') === v.accent.startsWith('en-gb'));
+    select.textContent = '';
+    for (const voice of list) select.add(new Option(voice.label, voice.id));
+    if (list.length === 0) select.add(new Option('None on this device', ''));
+    select.disabled = list.length === 0;
+    const preferred = accent === 'us' ? 'af_heart' : 'blend_jacob';
+    const pick = list.find((v) => v.id === saved[`${accent}Voice`]) ?? list.find((v) => v.id === preferred) ?? list[0];
+    saved[`${accent}Voice`] = pick ? pick.id : null;
+    if (pick) select.value = pick.id;
+  }
+  if (!voiceFor(saved.readWith)) saved.readWith = voiceFor('us') ? 'us' : 'uk';
+  $('readWith').value = saved.readWith;
+  if (voices.length === 0) {
+    say('No English voices on this device yet. Download one for Read Aloud in the app and reload this page. You can still see what each name will say.', true);
+  }
+}
+
+// ─── the names ──────────────────────────────────────────────────────────────
+
+let rows = [];
+const byName = new Map();
+
+function addRow(row) {
+  rows.push(row);
+  byName.set(row.n, row);
+}
+
+const fixOf = (name) => saved.fixes[name] ?? null;
+const isFixed = (name) => {
+  const fix = fixOf(name);
+  return !!fix && (!!fix.spell || fix.stress !== undefined);
+};
+
+/** The sounds before any strong-syllable tap: the name's own, or its new spelling's. */
+function spelledSounds(name, accent) {
+  const fix = fixOf(name);
+  return fix?.spell ? fix[accent] : byName.get(name)[accent];
+}
+
+/** The sounds the voice is given now, fixes included. */
+function finalSounds(name, accent) {
+  const fix = fixOf(name);
+  const sounds = spelledSounds(name, accent);
+  return fix?.stress !== undefined ? moveStress(sounds, fix.stress) : sounds;
+}
+
+/** Worked out once per name: the filter counts ask for every name each time a mark changes. */
+function flagsOf(row) {
+  if (row.flags) return row.flags;
+  row.flags = [];
+  if (row.g) {
+    if (stressDisagrees(row.g, row.us) || stressDisagrees(row.g, row.uk)) row.flags.push('stress');
+    else if (syllablesLost(row.g, row.us) || syllablesLost(row.g, row.uk)) row.flags.push('syllables');
+  }
+  return row.flags;
+}
+
+const FILTERS = {
+  flagged: { label: 'Flagged', test: (r) => flagsOf(r).length > 0 && !saved.marks[r.n] && !isFixed(r.n) },
+  tofix: { label: 'To fix', test: (r) => saved.marks[r.n] === 'wrong' && !isFixed(r.n) },
+  all: { label: 'All', test: () => true },
+  fixed: { label: 'Fixed', test: (r) => isFixed(r.n) },
+  right: { label: 'Sounds right', test: (r) => saved.marks[r.n] === 'right' && !isFixed(r.n) },
+};
+
+/** What's on screen, in order. Kept apart so a mark doesn't move the row you're looking at. */
+let shown = [];
+let openName = null;
+
+function renderChips() {
+  const host = $('chips');
+  host.textContent = '';
+  for (const [key, filter] of Object.entries(FILTERS)) {
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (saved.filter === key ? ' on' : '');
+    chip.innerHTML = `${filter.label}<b>${rows.filter(filter.test).length.toLocaleString()}</b>`;
+    chip.onclick = () => {
+      saved.filter = key;
+      $('search').value = '';
+      save();
+      renderList();
+    };
+    host.append(chip);
+  }
+  const fixed = rows.filter((r) => isFixed(r.n)).length;
+  const right = rows.filter(FILTERS.right.test).length;
+  $('summary').textContent =
+    `${rows.length.toLocaleString()} names, most used first. ${fixed} fixed, ${right} sound right. ` +
+    'Nothing here changes Read Aloud yet.';
+}
+
+function rowHtml(row) {
+  const name = row.n;
+  const mark = saved.marks[name];
+  const fixed = isFixed(name);
+  const says = plainLetters(finalSounds(name, saved.readWith));
+  const flags = flagsOf(row);
+  const tags = [];
+  if (fixed) tags.push('<span class="tag fixed">fixed</span>');
+  else if (mark === 'wrong') tags.push('<span class="tag wrong">to fix</span>');
+  else if (mark === 'right') tags.push('<span class="tag right">sounds right</span>');
+  if (!fixed && !mark) {
+    if (flags.includes('stress')) tags.push('<span class="tag flag" title="The voice leans on a different syllable from ISBE">stress</span>');
+    if (flags.includes('syllables')) tags.push('<span class="tag flag" title="The voice says fewer syllables than ISBE">syllables</span>');
+  }
+  return `
+    <div class="row" data-row>
+      <button class="play" data-act="hear" title="Hear it" aria-label="Hear ${esc(name)}">▶</button>
+      <div class="info" data-act="open">
+        <span class="name">${esc(name)}</span><span class="count">${row.c ? row.c.toLocaleString() : ''}</span>${tags.join('')}
+        <div class="lines">
+          <span class="says">${esc(says)}</span>
+          ${row.g ? `<span class="guide">ISBE ${esc(guideLetters(row.g))}</span>` : ''}
+        </div>
+      </div>
+      <div class="acts">
+        <button data-act="right" class="${mark === 'right' ? 'on-right' : ''}" title="Sounds right" aria-label="${esc(name)} sounds right">✓</button>
+        <button data-act="wrong" class="${mark === 'wrong' ? 'on-wrong' : ''}" title="Sounds wrong" aria-label="${esc(name)} sounds wrong">✗</button>
+      </div>
+    </div>`;
+}
+
+function itemClass(name) {
+  return 'item' + (saved.marks[name] || isFixed(name) ? ' done' : '') + (openName === name ? ' open' : '');
+}
+
+function renderList() {
+  stopPlaying();
+  closeCard();
+  renderChips();
+  const query = $('search').value.trim();
+  const lower = query.toLowerCase();
+  const filter = FILTERS[saved.filter] ?? FILTERS.all;
+  shown = lower ? rows.filter((r) => r.n.toLowerCase().includes(lower)) : rows.filter(filter.test);
+
+  const parts = shown.map((r) => `<div class="${itemClass(r.n)}" data-name="${esc(r.n)}">${rowHtml(r)}</div>`);
+  if (query && !rows.some((r) => r.n.toLowerCase() === lower) && /^[\p{L}' -]+$/u.test(query)) {
+    parts.push(`<div class="more"><button data-act="try">Try “${esc(query)}”</button> <span class="hint">Not on the list. It'll be added here so you can hear and fix it.</span></div>`);
+  } else if (shown.length === 0) {
+    parts.push('<div class="more">Nothing here right now.</div>');
+  }
+  $('list').innerHTML = parts.join('');
+}
+
+function itemEl(name) {
+  return $('list').querySelector(`.item[data-name="${CSS.escape(name)}"]`);
+}
+
+/** Redraw one row in place, leaving its fix card alone. */
+function renderRow(name) {
+  const item = itemEl(name);
+  if (!item) return;
+  item.className = itemClass(name);
+  const fresh = document.createElement('div');
+  fresh.innerHTML = rowHtml(byName.get(name));
+  item.querySelector('[data-row]').replaceWith(fresh.firstElementChild);
+  if (playing && playing.queue[playing.at] === name) item.querySelector('[data-row]').classList.add('current');
+}
+
+function setMark(name, mark) {
+  if (saved.marks[name] === mark) delete saved.marks[name];
+  else saved.marks[name] = mark;
+  save();
+  renderRow(name);
+  renderChips();
+}
+
+// ─── hearing ────────────────────────────────────────────────────────────────
+
+let audioCtx = null;
+let source = null;
+let endSource = null;
+const clips = new Map();
+const CLIP_LIMIT = 300;
+
+function clip(voice, sounds) {
+  const key = `${voice.id}|${sounds}`;
+  if (clips.has(key)) return clips.get(key);
+  const made = ask({ op: 'say', engine: voice.engine, voice: voice.id, sounds }).catch((err) => {
+    clips.delete(key);
+    throw err;
+  });
+  clips.set(key, made);
+  if (clips.size > CLIP_LIMIT) clips.delete(clips.keys().next().value);
+  return made;
+}
+
+function stopAudio() {
+  if (source) {
+    try {
+      source.stop();
+    } catch {
+      // Already finished.
+    }
+    source = null;
+  }
+  endSource?.();
+  endSource = null;
+}
+
+/** Resolves when the clip ends or something else stops it. */
+function playClip({ samples, rate }) {
+  audioCtx ??= new AudioContext();
+  void audioCtx.resume();
+  stopAudio();
+  const buffer = audioCtx.createBuffer(1, samples.length, rate);
+  buffer.copyToChannel(samples, 0);
+  const node = audioCtx.createBufferSource();
+  node.buffer = buffer;
+  node.connect(audioCtx.destination);
+  source = node;
+  return new Promise((resolve) => {
+    endSource = resolve;
+    node.onended = () => {
+      if (source === node) source = null;
+      resolve();
+    };
+    node.start();
+  });
+}
+
+/** Say a set of sounds in one accent's voice, on its own turn. */
+async function sayNow(accent, sounds) {
+  const voice = voiceFor(accent);
+  if (!voice) {
+    say(`No ${ACCENTS[accent].label} voice on this device.`, true);
+    return;
+  }
+  stopPlaying();
+  worker.postMessage({ op: 'drop' });
+  try {
+    await playClip(await clip(voice, sounds));
+  } catch (err) {
+    if (!err.dropped) say(err.message, true);
+  }
+}
+
+const alone = (sounds) => `${sounds}.`;
+
+/**
+ * The name in a sentence. The spelling goes in as text, so espeak treats it as
+ * it would in a verse. A strong-syllable tap can't be typed, so that's swapped
+ * into the sounds, and if the word can't be found, stitched between the pieces.
+ */
+async function inSentence(name, accent) {
+  const fix = fixOf(name);
+  const text = fix?.spell || name;
+  const whole = await soundsOf(`${FRAME[0]} ${text} ${FRAME[1]}`, accent);
+  if (fix?.stress === undefined) return whole;
+  const edited = finalSounds(name, accent);
+  const spliced = spliceWord(whole, spelledSounds(name, accent), edited);
+  if (spliced) return spliced;
+  const [before, after] = await Promise.all([soundsOf(FRAME[0], accent), soundsOf(FRAME[1], accent)]);
+  return `${before} ${edited} ${after}`;
+}
+
+// ─── play from here ─────────────────────────────────────────────────────────
+
+let playing = null;
+
+function showCurrent(name) {
+  $('list').querySelectorAll('.row.current').forEach((el) => el.classList.remove('current'));
+  const item = itemEl(name);
+  if (item) {
+    item.querySelector('[data-row]').classList.add('current');
+    item.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  $('nowName').textContent = name;
+  $('nowSays').textContent = plainLetters(finalSounds(name, saved.readWith));
+}
+
+function firstVisibleIndex() {
+  if (openName) {
+    const open = shown.findIndex((r) => r.n === openName);
+    if (open >= 0) return open;
+  }
+  const bar = document.querySelector('.bar').getBoundingClientRect();
+  const list = $('list').getBoundingClientRect();
+  const under = document.elementFromPoint(list.left + list.width / 2, Math.max(bar.bottom, list.top) + 12);
+  const item = under?.closest?.('.item');
+  const at = item ? shown.findIndex((r) => r.n === item.dataset.name) : -1;
+  return at >= 0 ? at : 0;
+}
+
+function waitFor(seconds, run) {
+  return new Promise((resolve) => {
+    run.wake = resolve;
+    setTimeout(resolve, seconds * 1000);
+  });
+}
+
+async function playList(startAt) {
+  const voice = voiceFor(saved.readWith);
+  if (!voice) {
+    say('There is no voice on this device to read with.', true);
+    return;
+  }
+  stopPlaying();
+  closeCard();
+  worker.postMessage({ op: 'drop' });
+  const run = { queue: shown.map((r) => r.n), at: startAt, startedAt: 0, previous: null };
+  playing = run;
+  $('now').classList.add('on');
+  $('playBtn').textContent = 'Stop';
+
+  for (; playing === run && run.at < run.queue.length; run.at++) {
+    const name = run.queue[run.at];
+    showCurrent(name);
+    try {
+      const made = clip(voice, alone(finalSounds(name, saved.readWith)));
+      const next = run.queue[run.at + 1];
+      if (next) clip(voice, alone(finalSounds(next, saved.readWith))).catch(() => {});
+      const said = await made;
+      if (playing !== run) return;
+      run.startedAt = performance.now();
+      await playClip(said);
+      if (playing !== run) return;
+      await waitFor(saved.gap, run);
+      if (playing !== run) return;
+      if (saved.auto && !saved.marks[name] && !isFixed(name)) {
+        saved.marks[name] = 'right';
+        save();
+        renderRow(name);
+        renderChips();
+      }
+      run.previous = name;
+    } catch (err) {
+      if (playing !== run) return;
+      if (!err.dropped) say(`${name}: ${err.message}`, true);
+    }
+  }
+  if (playing === run) stopPlaying();
+}
+
+function stopPlaying() {
+  if (!playing) return;
+  const run = playing;
+  playing = null;
+  run.wake?.();
+  stopAudio();
+  worker.postMessage({ op: 'drop' });
+  $('now').classList.remove('on');
+  $('playBtn').textContent = 'Play from here';
+  $('list').querySelectorAll('.row.current').forEach((el) => el.classList.remove('current'));
+}
+
+/** Marks what was just heard. A tap right as the next name starts means the last one. */
+function markHeardWrong() {
+  if (!playing) return;
+  const justStarted = performance.now() - playing.startedAt < 350 && playing.previous;
+  const name = justStarted ? playing.previous : playing.queue[playing.at];
+  saved.marks[name] = 'wrong';
+  save();
+  renderRow(name);
+  renderChips();
+}
+
+// ─── the fix card ───────────────────────────────────────────────────────────
+
+/** Spellings tried this time, so two that sound the same can be pointed out. */
+let tried = [];
+let typing = 0;
+let capitalsMatter = false;
+
+function fixFor(name) {
+  saved.fixes[name] ??= {};
+  return saved.fixes[name];
+}
+
+/** Drop an empty fix, so it doesn't count as anything. */
+function tidyFix(name) {
+  const fix = saved.fixes[name];
+  if (fix && !fix.spell && fix.stress === undefined && !fix.hear?.length) delete saved.fixes[name];
+}
+
+/** The words Whistle might write instead of the name: starts with the spelling, plus any added. */
+function hearWords(name) {
+  const fix = fixOf(name);
+  if (!fix) return [];
+  const words = [...(fix.hear ?? [])];
+  const own = fix.spell?.toLowerCase();
+  if (own && /^[a-z']+$/.test(own) && !fix.dropSpellHear && !words.includes(own)) words.unshift(own);
+  return words;
+}
+
+function closeCard() {
+  if (!openName) return;
+  const name = openName;
+  openName = null;
+  const item = itemEl(name);
+  item?.querySelector('.card')?.remove();
+  if (item) item.className = itemClass(name);
+}
+
+function openCard(name) {
+  stopPlaying();
+  closeCard();
+  openName = name;
+  const row = byName.get(name);
+  const item = itemEl(name);
+  if (!item) return;
+  item.className = itemClass(name);
+  tried = [{ text: name, us: row.us, uk: row.uk }];
+  capitalsMatter = false;
+
+  const fix = fixOf(name);
+  if (fix?.spell) tried.push({ text: fix.spell, us: fix.us, uk: fix.uk });
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="field">
+      <label>Spelling the voice reads${row.g ? ` · <span class="guide">ISBE ${esc(guideLetters(row.g))}</span>` : ''}</label>
+      <input type="text" class="spell" autocomplete="off" spellcheck="false" placeholder="${esc(name)}" value="${esc(fix?.spell ?? '')}">
+      <div class="tried" data-tried></div>
+    </div>
+    <div class="accents">
+      ${['us', 'uk'].map((accent) => `
+        <div class="accent" data-accent="${accent}">
+          <h3>${ACCENTS[accent].label}${voiceFor(accent) ? ` · ${esc(voiceFor(accent).label)}` : ' · no voice on this device'}</h3>
+          <div class="plain" data-plain></div>
+          <div class="syllables" data-syllables></div>
+          <div class="row-flex">
+            <button data-say="alone">▶ Alone</button>
+            <button data-say="sentence">▶ In a sentence</button>
+            <button data-say="before">▶ As it was</button>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="hint" style="margin-top:6px">Tap a syllable to make it the strong one. Tap it again to go back.</div>
+    <div class="notes" data-notes></div>
+    <div class="field" style="margin:12px 0 0">
+      <label>Also hear it as <span class="hint">· words the listening side writes instead of the name, one word each</span></label>
+      <div class="hears" data-hears></div>
+    </div>
+    <div class="card-actions">
+      <button data-card="right">Sounds right</button>
+      <button data-card="clear">Clear fix</button>
+      <button class="primary" data-card="done">Done</button>
+    </div>`;
+  item.append(card);
+
+  card.querySelector('.spell').addEventListener('input', () => onSpelling(name, card));
+  card.querySelector('.spell').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') sayFromCard(name, saved.readWith, 'alone');
+  });
+  card.addEventListener('click', (event) => onCardClick(event, name, card));
+  refreshCard(name, card);
+  refreshHears(name, card);
+}
+
+/** Kept apart from refreshCard, so a word landing here doesn't redraw a button mid-tap. */
+function refreshHears(name, card) {
+  card.querySelector('[data-hears]').innerHTML =
+    hearWords(name).map((w) => `<span class="hear">${esc(w)}<button data-unhear="${esc(w)}" aria-label="Remove ${esc(w)}">×</button></span>`).join('') +
+    '<input type="text" data-hear-input placeholder="Add a word" autocomplete="off" spellcheck="false" style="width:130px">';
+}
+
+function refreshCard(name, card) {
+  const fix = fixOf(name);
+  for (const accent of ['us', 'uk']) {
+    const host = card.querySelector(`[data-accent="${accent}"]`);
+    const sounds = finalSounds(name, accent);
+    host.querySelector('[data-plain]').textContent = plainLetters(sounds);
+    const chips = host.querySelector('[data-syllables]');
+    chips.innerHTML = syllables(sounds)
+      .map((s, i) => `<button class="${s.strong ? 'strong' : ''}" data-syllable="${i}">${esc(s.text)}</button>`)
+      .join('');
+    const voice = voiceFor(accent);
+    host.querySelectorAll('[data-say]').forEach((b) => {
+      b.disabled = !voice;
+    });
+    host.querySelector('[data-say="before"]').hidden = !isFixed(name);
+  }
+
+  const notes = [];
+  const counts = ['us', 'uk'].map((a) => syllables(spelledSounds(name, a)).length);
+  if (counts[0] !== counts[1]) {
+    notes.push(`US says ${counts[0]} syllables and UK says ${counts[1]}, so a strong-syllable tap lands in a different place. Check both.`);
+  }
+  if (capitalsMatter) notes.push('The capitals change how this gets read. Try it with small letters.');
+  const current = { us: spelledSounds(name, 'us'), uk: spelledSounds(name, 'uk') };
+  const text = fix?.spell || name;
+  const twins = tried.filter((t) => t.text !== text && t.us === current.us && t.uk === current.uk).map((t) => t.text);
+  if (twins.length) notes.push(`Sounds exactly the same as ${twins.join(', ')}.`);
+  card.querySelector('[data-notes]').textContent = notes.join(' ');
+
+  const others = tried.filter((t) => t.text !== text);
+  card.querySelector('[data-tried]').innerHTML = others.length
+    ? `Tried: ${others.map((t) => `<button data-try="${esc(t.text)}">${esc(t.text)}</button>`).join('')}`
+    : '';
+
+  card.querySelector('[data-card="right"]').textContent = saved.marks[name] === 'right' ? 'Sounds right ✓' : 'Sounds right';
+}
+
+/** Settles once the spelling just typed has been read, so a tap on ▶ hears that one. */
+let spellingRead = Promise.resolve();
+
+function onSpelling(name, card) {
+  const job = ++typing;
+  const value = card.querySelector('.spell').value.trim();
+  spellingRead = new Promise((resolve) => {
+    setTimeout(async () => {
+      try {
+        if (job !== typing || openName !== name) return;
+        if (!value || value === name) {
+          capitalsMatter = false;
+          applySpelling(name, null, card);
+          return;
+        }
+        const [us, uk, small] = await Promise.all([
+          soundsOf(value, 'us'),
+          soundsOf(value, 'uk'),
+          // Espeak reads some capitals as letters and not others, so ask it.
+          soundsOf(value.toLowerCase(), 'us'),
+        ]);
+        if (job !== typing || openName !== name) return;
+        capitalsMatter = small !== us;
+        applySpelling(name, { text: value, us, uk }, card);
+      } catch (err) {
+        say(err.message, true);
+      } finally {
+        resolve();
+      }
+    }, 220);
+  });
+}
+
+function applySpelling(name, spelled, card) {
+  const before = syllables(spelledSounds(name, 'us')).length;
+  if (spelled) {
+    const fix = fixFor(name);
+    fix.spell = spelled.text;
+    fix.us = spelled.us;
+    fix.uk = spelled.uk;
+    delete fix.dropSpellHear;
+    if (!tried.some((t) => t.text === spelled.text)) tried.push(spelled);
+  } else if (saved.fixes[name]) {
+    delete saved.fixes[name].spell;
+    delete saved.fixes[name].us;
+    delete saved.fixes[name].uk;
+  }
+  // A tap is counted by syllable, so it only still means anything at the same count.
+  const fix = fixOf(name);
+  if (fix && fix.stress !== undefined && syllables(spelledSounds(name, 'us')).length !== before) delete fix.stress;
+  tidyFix(name);
+  save();
+  refreshCard(name, card);
+  refreshHears(name, card);
+  renderRow(name);
+  renderChips();
+}
+
+async function sayFromCard(name, accent, how) {
+  await spellingRead;
+  const row = byName.get(name);
+  try {
+    if (how === 'before') await sayNow(accent, alone(row[accent]));
+    else if (how === 'sentence') await sayNow(accent, await inSentence(name, accent));
+    else await sayNow(accent, alone(finalSounds(name, accent)));
+  } catch (err) {
+    say(err.message, true);
+  }
+}
+
+function addHearWords(name, card, text) {
+  const words = text.toLowerCase().split(/[\s,]+/).filter((w) => /^[a-z']+$/.test(w));
+  if (!words.length) return;
+  const fix = fixFor(name);
+  fix.hear = [...new Set([...(fix.hear ?? []), ...words])];
+  save();
+  refreshHears(name, card);
+}
+
+function onCardClick(event, name, card) {
+  const target = event.target.closest('button');
+  if (!target) return;
+
+  if (target.dataset.say) {
+    sayFromCard(name, target.closest('[data-accent]').dataset.accent, target.dataset.say);
+  } else if (target.dataset.syllable !== undefined) {
+    const index = +target.dataset.syllable;
+    // Read now: redrawing the card below takes this button off the page.
+    const accent = target.closest('[data-accent]').dataset.accent;
+    const fix = fixFor(name);
+    // Tapping the one that's already strong, with no tap in place, changes nothing.
+    if (fix.stress === index) delete fix.stress;
+    else if (fix.stress !== undefined || !target.classList.contains('strong')) fix.stress = index;
+    tidyFix(name);
+    save();
+    refreshCard(name, card);
+    renderRow(name);
+    renderChips();
+    sayFromCard(name, accent, 'alone');
+  } else if (target.dataset.try) {
+    const input = card.querySelector('.spell');
+    input.value = target.dataset.try === name ? '' : target.dataset.try;
+    onSpelling(name, card);
+  } else if (target.dataset.unhear) {
+    const word = target.dataset.unhear;
+    const fix = fixFor(name);
+    fix.hear = (fix.hear ?? []).filter((w) => w !== word);
+    if (word === fix.spell?.toLowerCase()) fix.dropSpellHear = true;
+    tidyFix(name);
+    save();
+    refreshHears(name, card);
+  } else if (target.dataset.card === 'right') {
+    setMark(name, 'right');
+    refreshCard(name, card);
+  } else if (target.dataset.card === 'clear') {
+    delete saved.fixes[name];
+    if (saved.marks[name] === 'wrong') delete saved.marks[name];
+    save();
+    card.querySelector('.spell').value = '';
+    refreshCard(name, card);
+    refreshHears(name, card);
+    renderRow(name);
+    renderChips();
+  } else if (target.dataset.card === 'done') {
+    closeCard();
+  }
+}
+
+// ─── any word at all ────────────────────────────────────────────────────────
+
+async function tryWord(word) {
+  try {
+    const [us, uk] = await Promise.all([soundsOf(word, 'us'), soundsOf(word, 'uk')]);
+    const row = { n: word, c: 0, us, uk };
+    saved.extra.push(row);
+    addRow(row);
+    save();
+    $('search').value = word;
+    renderList();
+    openCard(word);
+  } catch (err) {
+    say(err.message, true);
+  }
+}
+
+// ─── copy fixes ─────────────────────────────────────────────────────────────
+
+function fixesText() {
+  const lines = [];
+  for (const row of rows) {
+    const name = row.n;
+    const fix = fixOf(name);
+    const hear = hearWords(name);
+    if (!isFixed(name) && !hear.length) continue;
+    const parts = [name];
+    if (fix.spell) parts.push(`spell: ${fix.spell}`);
+    if (fix.stress !== undefined) {
+      parts.push(`strong: ${fix.stress + 1} of ${syllables(spelledSounds(name, 'us')).length}`);
+    }
+    if (isFixed(name)) {
+      const us = plainLetters(finalSounds(name, 'us'));
+      const uk = plainLetters(finalSounds(name, 'uk'));
+      parts.push(`says: ${us === uk ? us : `${us} / ${uk}`}`);
+    }
+    if (hear.length) parts.push(`hear: ${hear.join(', ')}`);
+    lines.push(parts.join(' | '));
+  }
+  const right = rows.filter(FILTERS.right.test).map((r) => r.n);
+  const out = [`Name Lab fixes: ${lines.length}`, '', ...lines];
+  if (right.length) out.push('', `Sounds right (${right.length}): ${right.join(', ')}`);
+  return out.join('\n');
+}
+
+let copyLabel = 0;
+
+async function copyFixes() {
+  const box = $('copied');
+  const text = fixesText();
+  try {
+    await navigator.clipboard.writeText(text);
+    box.hidden = true;
+    $('copyBtn').textContent = 'Copied ✓';
+    clearTimeout(copyLabel);
+    copyLabel = setTimeout(() => {
+      $('copyBtn').textContent = 'Copy fixes';
+    }, 2000);
+  } catch {
+    // Show it instead, for copying by hand.
+    box.value = text;
+    box.hidden = false;
+    box.select();
+    say('The browser would not copy it, so copy the text in this box.', true);
+  }
+}
+
+// ─── wiring ─────────────────────────────────────────────────────────────────
+
+$('list').addEventListener('click', (event) => {
+  const actEl = event.target.closest('[data-act]');
+  if (!actEl) return;
+  const act = actEl.dataset.act;
+  if (act === 'try') {
+    tryWord($('search').value.trim());
+    return;
+  }
+  const name = actEl.closest('.item').dataset.name;
+  if (act === 'hear') {
+    sayNow(saved.readWith, alone(finalSounds(name, saved.readWith)));
+  } else if (act === 'open') {
+    if (openName === name) closeCard();
+    else openCard(name);
+  } else if (act === 'right') {
+    setMark(name, 'right');
+  } else if (act === 'wrong') {
+    saved.marks[name] = 'wrong';
+    save();
+    renderRow(name);
+    renderChips();
+    // While the list reads, a tap only notes it, so the reading carries on.
+    if (!playing) openCard(name);
+  }
+});
+
+// The add-a-word box is redrawn as words land, so its Enter and blur are caught
+// here. It's emptied first: redrawing a box with focus sets off another blur.
+function takeHearWord(input) {
+  const text = input.value;
+  input.value = '';
+  const card = input.closest('.card');
+  if (openName && text.trim()) addHearWords(openName, card, text);
+  return card;
+}
+$('list').addEventListener('keydown', (event) => {
+  if (event.target.matches?.('[data-hear-input]') && event.key === 'Enter') {
+    event.preventDefault();
+    takeHearWord(event.target).querySelector('[data-hear-input]').focus();
+  }
+});
+$('list').addEventListener('focusout', (event) => {
+  if (event.target.matches?.('[data-hear-input]')) takeHearWord(event.target);
+});
+
+let searching = 0;
+$('search').addEventListener('input', () => {
+  clearTimeout(searching);
+  searching = setTimeout(renderList, 150);
+});
+
+$('playBtn').onclick = () => {
+  if (playing) stopPlaying();
+  else playList(firstVisibleIndex());
+};
+$('nowStop').onclick = stopPlaying;
+$('nowWrong').onclick = markHeardWrong;
+$('copyBtn').onclick = copyFixes;
+
+for (const accent of ['us', 'uk']) {
+  $(`${accent}Voice`).onchange = (event) => {
+    saved[`${accent}Voice`] = event.target.value;
+    save();
+    if (openName) openCard(openName);
+  };
+}
+$('readWith').onchange = (event) => {
+  saved.readWith = event.target.value;
+  save();
+  renderList();
+};
+$('auto').checked = saved.auto;
+$('auto').onchange = (event) => {
+  saved.auto = event.target.checked;
+  save();
+};
+function showGap() {
+  $('gapLabel').textContent = `${(+saved.gap).toFixed(1)} s`;
+}
+$('gap').value = saved.gap;
+$('gap').oninput = (event) => {
+  saved.gap = +event.target.value;
+  save();
+  showGap();
+};
+showGap();
+
+document.addEventListener('keydown', (event) => {
+  if (event.target.matches('input, textarea, select')) return;
+  if (event.code === 'Space') {
+    // On a button, Space already presses that button.
+    if (event.target.matches('button')) return;
+    event.preventDefault();
+    $('playBtn').click();
+  } else if (event.key === 'x' || event.key === 'X') {
+    markHeardWrong();
+  }
+});
+
+// ─── starting up ────────────────────────────────────────────────────────────
+
+(async function start() {
+  try {
+    const response = await fetch('/name-lab-names.json');
+    if (!response.ok) throw new Error(`The name list would not load (${response.status}).`);
+    for (const row of await response.json()) addRow(row);
+    for (const row of saved.extra) if (!byName.has(row.n)) addRow(row);
+    renderList();
+  } catch (err) {
+    say(err.message, true);
+    return;
+  }
+  try {
+    voices = await ask({ op: 'voices' });
+    fillVoicePickers();
+    save();
+    renderList();
+  } catch (err) {
+    say(err.message, true);
+  }
+})();
+</script>
+</body>
+</html>
