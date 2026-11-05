@@ -12,6 +12,8 @@ import { NAVBAR_TIPS } from './navbar';
 import { READER_TIPS } from './reader';
 import { PANE_TIPS } from './panes';
 import { WINDOW_TIPS } from './windows';
+import { CONNECTIONS_TIPS } from './connections';
+import { TIMELINE_TIPS } from './timeline';
 import { COMMENTARY_TIPS } from './commentary';
 import { MAP_TIPS } from './map';
 import { WRITING_TIPS } from './writing';
@@ -30,6 +32,8 @@ export const ALL_TIPS: Tip[] = [
   ...BY_HEART_TIPS,
   ...PANE_TIPS,
   ...WINDOW_TIPS,
+  ...CONNECTIONS_TIPS,
+  ...TIMELINE_TIPS,
   ...COMMENTARY_TIPS,
   ...MAP_TIPS,
   ...WRITING_TIPS,

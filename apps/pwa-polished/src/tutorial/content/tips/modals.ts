@@ -1,7 +1,7 @@
 /**
- * Dots in the big dialogs: Reading Plan, Profile, Advanced Search and the Verse
- * of the Day. The reference works' lookup card is covered by the Library tips,
- * because it is the same view as their windows.
+ * Dots in the big dialogs: Reading Plan, Profile, Advanced Search, the Verse of
+ * the Day and the Harmonies picker. The reference works' lookup card is covered
+ * by the Library tips, because it is the same view as their windows.
  *
  * Also the book color reminders on lists colored by book (reading plan rows,
  * search results), whose cards carry the color legend.
@@ -189,6 +189,13 @@ export const MODAL_TIPS: Tip[] = [
     title: 'Your journal',
     body: 'A dot means you wrote that day. Tap any day to read the entry or start one.',
   },
+  {
+    id: 'profile-your-data',
+    area,
+    target: '.your-data .setting-label',
+    title: 'Your Data',
+    body: 'Download my data saves a copy of your notes, notebooks, highlights, journal, By Heart verses, reading plans and settings to a file. Restore from file adds anything missing and updates older copies, and deletes nothing on this device. Anyone who opens the file can read it, so keep it somewhere private.',
+  },
 
   // ── Advanced search ──────────────────────────────────────────────────────
   {
@@ -243,5 +250,43 @@ export const MODAL_TIPS: Tip[] = [
     target: '.dg-card .dg-btn-primary',
     title: 'Read in context',
     body: 'Opens the verse in the reader, with the rest of its chapter around it.',
+  },
+  {
+    id: 'votd-learn',
+    area,
+    target: '.dg-card .dg-btn-secondary',
+    text: 'Learn by heart',
+    exact: true,
+    title: 'Learn by heart',
+    body: 'Takes this verse to By Heart, ready to design its card and start memorizing it.',
+  },
+
+  // ── Harmonies ────────────────────────────────────────────────────────────
+  {
+    id: 'harmony-sets',
+    area,
+    target: '.hp-tabs .hp-tab',
+    text: 'Sets',
+    exact: true,
+    title: 'Sets',
+    body: 'Books that tell the same events, opened together.',
+  },
+  {
+    id: 'harmony-sections',
+    area,
+    target: '.hp-tabs .hp-tab',
+    text: 'The Harmony',
+    exact: true,
+    title: 'The Harmony',
+    body: 'Robertson and Broadus’s Harmony of the Gospels, 185 sections in order. Pick one to read each Gospel’s telling of it together.',
+  },
+  {
+    id: 'harmony-translations',
+    area,
+    target: '.hp-tabs .hp-tab',
+    text: 'Translations',
+    exact: true,
+    title: 'Translations',
+    body: 'The same passage in two to four translations, lined up verse by verse.',
   },
 ];

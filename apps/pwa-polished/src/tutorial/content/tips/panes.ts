@@ -35,10 +35,10 @@ export const PANE_TIPS: Tip[] = [
   },
 
   // ── Settings ─────────────────────────────────────────────────────────────
-  section('Appearance', 'The theme, text size, line spacing and bar size. The Custom theme picks the reader’s own typeface and colors.'),
-  section('Reader', 'Your default translations, how the text is laid out, red letters, art icons, and whether a tapped word gets the ring or the classic popup.'),
-  section('Interlinear (Greek & Hebrew)', 'Which layers show under each Greek or Hebrew word.'),
-  section('Read Aloud (AI voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Auto-Read Alarm is here too.'),
+  section('Appearance', 'The theme, text size, line spacing, bar size and motion. The Custom theme picks the reader’s own typeface and colors.'),
+  section('Reader', 'Your default translations, how the text is laid out, what a tapped breadcrumb does, red letters, the Connections strip, art icons, passage marks, and whether a tapped word gets the ring or the classic popup.'),
+  section('Interlinear (Greek & Hebrew)', 'Which layers show under each Greek or Hebrew word, and the English verse under each verse.'),
+  section('Read Aloud (TTS Voice)', 'The voice, its speed, and what gets read and lit up as it reads. The Auto-Read Alarm is here too.'),
   section('General', 'Tutorial Mode, your time zone, the clock in the top bar, and screen rotation.'),
   section('Privacy', 'The journal lock: your fingerprint or face before the Journal opens, with your journal scrambled on this device and in the cloud.'),
   section('Storage & Updates', 'How much space irisBible takes on this device, when it last updated, checking for a new version, and getting every missing pack and update in one tap.'),
@@ -47,6 +47,12 @@ export const PANE_TIPS: Tip[] = [
   setting('settings-theme', 'Theme', 'Theme', 'Auto follows your device. Sepia and Light are easier in daylight; Custom is yours to set.', true),
   setting('settings-notify-dot', 'Notification dot', 'Notification dot', 'The dot’s size and color. It shows on the gear when packs, updates or voices are waiting, and goes away once everything is in.', true),
   setting('settings-bar-size', 'Bar size', 'Bar size', 'Small, Normal or Large: the top bar, window headers and tabs, buttons and all. Set on each device.', true),
+  setting('settings-motion', 'Motion', 'Motion', 'How much the app moves: whatever your device is set to, quick fades only, or nothing at all. Set on each device.', true),
+  setting('settings-crumb-tap', 'When you tap a breadcrumb', 'Tapping a breadcrumb', 'Auto goes there and clears the crumbs after it. Manual goes there and keeps them, faded, so you can go forward again.'),
+  setting('settings-connections-strip', 'Connections strip', 'Connections strip', 'A small picture of each chapter’s cross-references, under its title. Tap it to open them in Connections.'),
+  setting('settings-solo-marks', 'Mark passages only one Gospel tells', 'One Gospel only', 'Puts a line beside passages that only one Gospel tells, labeled “Only in Luke” and so on.'),
+  setting('settings-ot-marks', 'Mark Old Testament Quotes', 'Old Testament marks', 'A small mark beside New Testament verses that use the Old Testament: gold for a quote, silver for an echo. Tap one to read the passage in the Septuagint.'),
+  setting('settings-measurements', 'Measurements', 'Measurements', 'When you tap a cubit, shekel or talent, this picks whether it’s shown in US units or metric.'),
   setting('settings-default-translations', 'Default Old Testament translation', 'Default translations', 'Going to a book in the other testament switches the reader to your pick for it. Not set keeps whatever you’re reading.'),
   setting('settings-layout', 'Verse Layout', 'Verse layout', 'One verse per line, or flowing paragraphs, with or without verse numbers.'),
   setting('settings-pin-bar', 'Keep the top bar visible', 'Keep the top bar', 'The top bar slides away while you read and comes back when you scroll up. Tick this to keep it.'),
@@ -96,6 +102,13 @@ export const PANE_TIPS: Tip[] = [
     target: '.gp-card .gp-get',
     title: 'Get packs',
     body: 'Downloads just what this needs. Most features switch it on after a restart, and the card offers one when it’s in.',
+  },
+  {
+    id: 'pack-update-notice',
+    area,
+    target: '.pu-row .pu-get',
+    title: 'A new version',
+    body: 'A newer version of this pack is out. Update downloads it while you keep using the one you have. Not now hides this for now, and Ignore this update hides this version for good.',
   },
 
   // ── Manage Packs ─────────────────────────────────────────────────────────

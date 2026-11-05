@@ -50,7 +50,7 @@ export const MAP_TIPS: Tip[] = [
     text: 'Layers',
     exact: true,
     title: 'Layers',
-    body: 'Place names, biblical places, every place, the historical overlays, and a switch to age the map.',
+    body: 'Place names, biblical places, every place, the historical overlays, Journeys with a switch for each route, and a switch to age the map.',
   },
   {
     id: 'map-whole-world',

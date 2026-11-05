@@ -16,7 +16,8 @@ export const VOICE_TIPS: Tip[] = [
     body:
       'Hold, say what you want, let go. Try “go to Romans 6”, “open Matthew Henry in a new window”, ' +
       '“highlight verse 16 in yellow”, “word study grace”, “who was James”, “where was Jesus born”, ' +
-      '“how many sons did Jacob have” or “start reading from verse 5”. Several at once work too: ' +
+      '“how many sons did Jacob have”, “start reading from verse 5”, “play today’s reading” or ' +
+      '“today’s By Heart verses”. Several at once work too: ' +
       '“go to John 3, then open Spurgeon”. Slide off before letting go to cancel. It all runs on this device.',
   },
   {

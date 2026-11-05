@@ -164,7 +164,7 @@ export const LIBRARY_TIPS: Tip[] = [
     area,
     target: '.strongs-content .speak-btn',
     title: 'Hear it',
-    body: 'Say the Greek word aloud, in the pronunciation you chose in Settings.',
+    body: 'Say the Greek or Hebrew word aloud. Greek uses the pronunciation you chose in Settings.',
   },
   {
     id: 'strongs-lang',
@@ -193,6 +193,22 @@ export const LIBRARY_TIPS: Tip[] = [
     target: '.strongs-content .source-picker',
     title: 'Which text',
     body: 'Count the forms and occurrences in one Greek or Hebrew text, or all of them.',
+  },
+  {
+    id: 'tree-whole',
+    area,
+    target: '.family-tree .tree-btn',
+    text: 'Whole tree',
+    exact: true,
+    title: 'Whole tree',
+    body: 'Glide back out to see the whole tree.',
+  },
+  {
+    id: 'tree-stone',
+    area,
+    target: '.tribe-gem',
+    title: 'The tribe’s stone',
+    body: 'This person’s tribe, shown by its stone from the high priest’s breastplate. Tap it to light the tribe on the family tree and read about it.',
   },
   {
     id: 'tree-entrance',

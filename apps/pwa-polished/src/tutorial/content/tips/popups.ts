@@ -1,7 +1,8 @@
 /**
- * Dots inside the reader's popups: highlight, share, a note, a footnote, the
- * annotation sheet and the interlinear layers. They only show while that popup
- * is open, because only then is there anything on top to put them on.
+ * Dots inside the reader's popups: highlight, share and its card designer, a
+ * note, a footnote, the annotation sheet, the Translation card and the
+ * interlinear layers. They only show while that popup is open, because only
+ * then is there anything on top to put them on.
  */
 
 import type { Tip } from '../types';
@@ -75,6 +76,40 @@ export const POPUP_TIPS: Tip[] = [
     title: 'Share',
     body: 'Sends it with your device’s own share menu: messages, email and your other apps.',
   },
+  {
+    id: 'share-card-tab',
+    area,
+    target: '.sh-modal .sh-tab',
+    text: 'Card',
+    exact: true,
+    title: 'Card',
+    body: 'Turns the verse into a picture you design, to send or save. Text is the plain words.',
+  },
+
+  // The card designer, in Share and in By Heart
+  {
+    id: 'card-preview',
+    area,
+    target: '.sc .sc-canvas',
+    corner: 'top-left',
+    title: 'Your card',
+    body: 'Tap a word to make it bold, then the accent color, then both, then back to plain. With a picture behind it, drag to move the picture and pinch to zoom.',
+  },
+  {
+    id: 'card-sections',
+    area,
+    target: '.sc .sc-sections',
+    corner: 'top-left',
+    title: 'Design it',
+    body: 'Looks starts you from a finished style, and Font, Color, Background and Layout change the rest. The background can be a color, a gradient, a painting or your own photo, which is never uploaded.',
+  },
+  {
+    id: 'card-send',
+    area,
+    target: '.sh-modal .sc-actions',
+    title: 'Send it',
+    body: 'Copy, save or share the finished picture. Which buttons show depends on your device.',
+  },
 
   // A note
   {
@@ -126,6 +161,15 @@ export const POPUP_TIPS: Tip[] = [
     target: '.pill-card .pill-verse-text',
     title: 'Go there',
     body: 'Tap the preview to open this passage in the reader. The trail in the top bar brings you back to this sheet.',
+  },
+
+  // The card a verse number's Translation button opens
+  {
+    id: 'translation-card',
+    area,
+    target: '.tc-card .tc-head',
+    title: 'The same verses, in another Bible',
+    body: 'Pick a translation to read these verses in it, right under where you’re reading. Once one is open, the chips along the top switch to another.',
   },
 
   // Interlinear layers

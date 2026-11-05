@@ -48,11 +48,35 @@ export const WRITING_TIPS: Tip[] = [
     body: 'This is kept with your account, so it follows you from device to device.',
   },
   {
+    id: 'notes-local-shared',
+    area,
+    target: '.notes-pane .mode-toggle',
+    corner: 'top-left',
+    title: 'Local and Shared',
+    body: 'Local is your own notebooks. Shared is the ones you keep with other people.',
+  },
+  {
     id: 'notes-new',
     area,
-    target: '.notes-pane .primary-btn',
+    // The Shared side's "+ New" and "Join with a code" have their own tips below.
+    target: '.notes-pane .primary-btn:not(.shared)',
     title: 'New note',
     body: 'A note of your own, not tied to a verse. It goes in your Quick Notes notebook.',
+  },
+  {
+    id: 'notes-new-shared',
+    area,
+    target: '.notes-pane .primary-btn.shared',
+    title: 'New shared notebook',
+    body: 'Make a notebook to keep with other people, then hand out its code.',
+  },
+  {
+    id: 'notes-join',
+    area,
+    target: '.notes-pane .ghost-btn.shared',
+    text: 'Join with a code',
+    title: 'Join with a code',
+    body: 'If someone gave you a code, enter it here to join their notebook.',
   },
   {
     id: 'notes-verse-notes',
@@ -75,7 +99,7 @@ export const WRITING_TIPS: Tip[] = [
   {
     id: 'notes-new-notebook',
     area,
-    target: '.notes-pane .ghost-btn',
+    target: '.notes-pane .ghost-btn:not(.shared)',
     title: 'New notebook',
     body: 'Start a notebook for a study, a sermon series, anything.',
   },
@@ -91,7 +115,7 @@ export const WRITING_TIPS: Tip[] = [
     area,
     target: '.notes-pane .row-btn[title="Notebook options"]',
     title: 'Notebook options',
-    body: 'Rename the notebook, or delete it.',
+    body: 'Rename or delete your notebook, or use Copy to shared to start a shared one from it. On a shared notebook, this is where you Invite people and pick your badge.',
   },
   {
     id: 'notes-go-to-verse',

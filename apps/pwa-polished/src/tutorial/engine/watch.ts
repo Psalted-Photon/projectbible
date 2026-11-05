@@ -35,7 +35,8 @@ export const appQuiet = derived(
  * Popups with no store to watch, found by their markup: the highlight, share
  * and note popups, the footnote and reference cards, the annotation and book
  * introduction sheets, the lookup and search modals, the art viewer and the
- * pack info card. The tour would sit on top of these and swallow every tap
+ * pack info card, then the full-screen views, the apps menu, and the question
+ * cards and sheets. The tour would sit on top of these and swallow every tap
  * meant for them, so it steps aside while one is up.
  */
 export const OVERLAYS = [
@@ -51,6 +52,38 @@ export const OVERLAYS = [
   '.ref-popover',
   '.art-viewer',
   '.info-card',
+
+  // Full-screen views: Harmonies, the family tree, By Heart's games, the pocket
+  // screen, a devotional, and Connections or the Timeline blown up to fill the
+  // screen.
+  '.hp-backdrop',
+  '.pv-root',
+  '.family-tree',
+  '.bh-game',
+  '.bh-drill',
+  '.pocket',
+  '.devo-layer',
+  '.connections.fullscreen',
+  '.timeline.fullscreen',
+  // Connections' turn-your-phone card. Plain `.turn` is also the encyclopedia's
+  // next-and-previous bar, which sits in a window and must not hold the tour up.
+  '.turn[role="dialog"]',
+
+  // The apps menu.
+  '.wtm-layer',
+
+  // Questions and sheets: a confirm, stopping a recording, Voice Control's card,
+  // the shared notebook sheets, and the welcome card.
+  '.ac-backdrop',
+  '.stop-backdrop',
+  '.vcard-backdrop',
+  '.sn-backdrop',
+  '.sj-backdrop',
+  '.sa-backdrop',
+  '.sjl-backdrop',
+  '.cp-backdrop',
+  '.mp-backdrop',
+  '.dg-overlay',
 ];
 
 /** Some popup is showing, other than the one named in `allow`. */

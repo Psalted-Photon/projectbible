@@ -64,7 +64,7 @@ export const NAVBAR_TIPS: Tip[] = [
     area,
     target: '.pill-apps',
     title: 'Open a window',
-    body: 'Every kind of window in one list: another Bible, the Map, Timeline, Commentary, your notes and journal, the library, Art and Harmonies. It opens under the text, or beside it when the phone is sideways.',
+    body: 'Every kind of window in one list: another Bible, Harmonies, Connections, Commentary, the library, the Map, Timeline, Art, Family Tree, your notes and journal, and By Heart. It opens under the text, or beside it when the phone is sideways.',
   },
   {
     id: 'nav-interlinear',
@@ -72,7 +72,7 @@ export const NAVBAR_TIPS: Tip[] = [
     target: '.nav-il-toggle',
     needs: 'ancient-languages',
     title: 'Interlinear',
-    body: 'Shows the English meaning under each Greek or Hebrew word. The arrow beside it picks which layers show.',
+    body: 'Shows the English meaning under each Greek or Hebrew word. The arrow beside it picks which layers show, and can add the English verse under each verse.',
   },
   {
     id: 'nav-read-aloud',
@@ -86,14 +86,22 @@ export const NAVBAR_TIPS: Tip[] = [
     area,
     target: '.repeat-pill',
     title: 'A word you’re tracking',
-    body: 'Counts how often the word comes up. Tap to highlight every time it appears in the chapter or book, or to clear it.',
+    body: 'Counts how often the word comes up. Tap to highlight every time it appears in the chapter or book, list the verses that have it with Show verses, or clear it. It crosses languages too: an English word also lights up the Greek or Hebrew word behind it, and the other way around.',
   },
   {
     id: 'nav-search',
     area,
     target: '.pill-search-icon-btn',
     title: 'Search',
-    body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once. Type a reference like 1 Cor 5 and press Enter to go straight there. Once you type something, Advanced search appears beside it.',
+    body: 'Search the Bible, your notes and journal, people, the encyclopedia and the commentaries, all at once. Type a reference like 1 Cor 5 and press Enter to go straight there. Suggestions appear as you type, a misspelling gets a Did you mean, and plain questions work, like “who was Boaz” or “verses about anxiety”. Once you type something, Advanced search appears beside it.',
+  },
+  {
+    id: 'nav-search-suggestions',
+    area,
+    target: '.search-results-dropdown .suggestions',
+    corner: 'top-left',
+    title: 'Suggestions',
+    body: 'Bible words that finish what you’re typing, then people, places, topics and books. Tap one to search for it. On a keyboard, the arrow keys walk the list.',
   },
   {
     id: 'nav-power-search',

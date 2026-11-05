@@ -38,7 +38,11 @@ export const WINDOW_TIPS: Tip[] = [
   },
 
   tile('bible', 'Bible', 'Another Bible beside this one: a different translation, or a second passage to compare.'),
+  tile('harmony', 'Harmonies', 'Fills the screen with books that tell the same events, side by side, like the four Gospels. It can also line up translations verse by verse.'),
+  tile('connections', 'Connections', 'Every cross-reference in the Bible on one screen, arching from where it is written to where it is answered.', 'connections'),
   tile('map', 'Map', 'The Historical Map: every place the Bible names, across sixteen eras.', 'atlas-map'),
+  tile('timeline', 'Timeline', 'The Bible’s events in order, with kings, prophets, world powers and lives beside them.', 'timeline'),
+  tile('tree', 'Family Tree', 'The Bible’s family lines as one big tree, full screen. Tap a person to trace their line.'),
   tile('commentaries', 'Commentary', 'Read the commentators on the chapter you’re in. It can follow along as you read.', 'commentaries'),
   tile('notes', 'Notes', 'All your notes on verses, in one place.'),
   tile('journal', 'Journal', 'A dated journal with a calendar. Verse references you type become links.'),

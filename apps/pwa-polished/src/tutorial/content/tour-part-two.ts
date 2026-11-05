@@ -338,6 +338,18 @@ export const PART_TWO: TourStep[] = [
     body: 'Spurgeon’s Morning and Evening, his Faith’s Checkbook, and Daily Light: a reading for every day of the year. They’re in the Devotionals tab here, and the Verse of the Day opens today’s.',
   },
 
+  // ── The newer windows ────────────────────────────────────────────────────
+  // No pack check: each of these windows offers its own download when it opens.
+  {
+    id: 'more-windows',
+    checkpoint: true,
+    target: () => inMainReader('.pill-apps'),
+    reveal: true,
+    passThrough: false,
+    title: 'More to open',
+    body: 'This button also opens Connections, every cross-reference on one screen; the Timeline; the Family Tree; Harmonies, which line up books that tell the same events; and By Heart, for memorizing verses out loud. Voice Control can be turned on in Settings.',
+  },
+
   // ── Finale ───────────────────────────────────────────────────────────────
   {
     id: 'finale',

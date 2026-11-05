@@ -78,7 +78,7 @@ export const BY_HEART_TIPS: Tip[] = [
     id: 'byheart-game-mic',
     area,
     target: '.fmic.in-game .mic',
-    title: 'The VC button in a game',
+    title: 'The mic button in a game',
     body:
       'A quick tap leaves the mic on until you tap it again. A longer press closes it when you let go. It also closes ' +
       'by itself when the verse ends, on the red X, when you leave the app, or after about 20 seconds of silence.',
