@@ -287,7 +287,8 @@ function addRow(row) {
   byName.set(row.n, row);
 }
 
-const fixOf = (name) => saved.fixes[name] ?? null;
+/** This browser's version of a fix if it has one, else the one already in the app. An empty one means undone here. */
+const fixOf = (name) => saved.fixes[name] ?? byName.get(name)?.f ?? null;
 const isFixed = (name) => {
   const fix = fixOf(name);
   return !!fix && (!!fix.spell || fix.stress !== undefined);
@@ -348,7 +349,7 @@ function renderChips() {
   const right = rows.filter(FILTERS.right.test).length;
   $('summary').textContent =
     `${rows.length.toLocaleString()} names, most used first. ${fixed} fixed, ${right} sound right. ` +
-    'Nothing here changes Read Aloud yet.';
+    `Read Aloud already has ${rows.filter((r) => r.f).length} fixes; new ones reach it once Copy fixes goes to Claude.`;
 }
 
 function rowHtml(row) {
@@ -625,19 +626,23 @@ let typing = 0;
 let capitalsMatter = false;
 
 function fixFor(name) {
-  saved.fixes[name] ??= {};
+  // A copy, so the app's own fix stays there to compare against.
+  saved.fixes[name] ??= structuredClone(byName.get(name)?.f ?? {});
   return saved.fixes[name];
 }
 
-/** Drop an empty fix, so it doesn't count as anything. */
+/** Drop an empty fix, so it doesn't count as anything. If the app has one for this name, the empty one says it's undone here. */
 function tidyFix(name) {
   const fix = saved.fixes[name];
-  if (fix && !fix.spell && fix.stress === undefined && !fix.hear?.length) delete saved.fixes[name];
+  if (fix && !fix.spell && fix.stress === undefined && !fix.hear?.length && !byName.get(name)?.f) delete saved.fixes[name];
 }
 
 /** The words Whistle might write instead of the name: starts with the spelling, plus any added. */
 function hearWords(name) {
-  const fix = fixOf(name);
+  return hearOf(fixOf(name));
+}
+
+function hearOf(fix) {
   if (!fix) return [];
   const words = [...(fix.hear ?? [])];
   const own = fix.spell?.toLowerCase();
@@ -797,10 +802,11 @@ function applySpelling(name, spelled, card) {
     fix.uk = spelled.uk;
     delete fix.dropSpellHear;
     if (!tried.some((t) => t.text === spelled.text)) tried.push(spelled);
-  } else if (saved.fixes[name]) {
-    delete saved.fixes[name].spell;
-    delete saved.fixes[name].us;
-    delete saved.fixes[name].uk;
+  } else if (fixOf(name)) {
+    const fix = fixFor(name);
+    delete fix.spell;
+    delete fix.us;
+    delete fix.uk;
   }
   // A tap is counted by syllable, so it only still means anything at the same count.
   const fix = fixOf(name);
@@ -871,6 +877,7 @@ function onCardClick(event, name, card) {
     refreshCard(name, card);
   } else if (target.dataset.card === 'clear') {
     delete saved.fixes[name];
+    if (byName.get(name)?.f) saved.fixes[name] = {};
     if (saved.marks[name] === 'wrong') delete saved.marks[name];
     save();
     card.querySelector('.spell').value = '';
@@ -902,13 +909,22 @@ async function tryWord(word) {
 
 // ─── copy fixes ─────────────────────────────────────────────────────────────
 
+/** What a fix comes to, for telling whether this browser's differs from the app's. */
+const fixSummary = (fix) => JSON.stringify([fix?.spell ?? null, fix?.stress ?? null, [...hearOf(fix)].sort()]);
+
+/** Only what the app doesn't have yet, so a paste holds just the news. */
 function fixesText() {
   const lines = [];
+  const undone = [];
   for (const row of rows) {
     const name = row.n;
     const fix = fixOf(name);
+    if (fixSummary(fix) === fixSummary(row.f)) continue;
     const hear = hearWords(name);
-    if (!isFixed(name) && !hear.length) continue;
+    if (!isFixed(name) && !hear.length) {
+      if (row.f) undone.push(name);
+      continue;
+    }
     const parts = [name];
     if (fix.spell) parts.push(`spell: ${fix.spell}`);
     if (fix.stress !== undefined) {
@@ -924,6 +940,7 @@ function fixesText() {
   }
   const right = rows.filter(FILTERS.right.test).map((r) => r.n);
   const out = [`Name Lab fixes: ${lines.length}`, '', ...lines];
+  if (undone.length) out.push('', `Undo (${undone.length}): ${undone.join(', ')}`);
   if (right.length) out.push('', `Sounds right (${right.length}): ${right.join(', ')}`);
   return out.join('\n');
 }

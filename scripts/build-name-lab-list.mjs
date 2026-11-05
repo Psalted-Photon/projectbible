@@ -8,7 +8,8 @@
  * running it thousands of times on open.
  *
  * Names come from lib/voice/bibleNames.ts, plus ALSO below: real names that
- * list leaves out because they are everyday words too (Lot, Mark, Ai).
+ * list leaves out because they are everyday words too (Lot, Mark, Ai). Fixes
+ * already in the app (scripts/name-fixes.txt) ride along, so the lab shows them.
  *
  * ISBE's guides are a hint and not the answer. They date from 1915, and the
  * lost accent marks mean a guide says nothing about long and short vowels, so
@@ -22,7 +23,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { bibleWordCounts, soundsFor } from './lib/name-sounds.mjs';
+import { bibleWordCounts, readNameFixes, soundsFor } from './lib/name-sounds.mjs';
 import { plainLetters, stressDisagrees, syllablesLost } from '../apps/pwa-polished/public/name-lab-sounds.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -137,6 +138,25 @@ function guideFor(name) {
 const us = await soundsFor(names, 'en-us');
 const uk = await soundsFor(names, 'en-gb-x-rp');
 
+// ─── fixes already in the app ───────────────────────────────────────────────
+
+const fixes = readNameFixes();
+const spelled = fixes.filter((f) => f.spell);
+const spelledUs = await soundsFor(spelled.map((f) => f.spell), 'en-us');
+const spelledUk = await soundsFor(spelled.map((f) => f.spell), 'en-gb-x-rp');
+const inApp = new Map(
+  fixes.map((f) => {
+    const at = spelled.indexOf(f);
+    return [f.name, {
+      spell: f.spell,
+      us: spelledUs[at],
+      uk: spelledUk[at],
+      stress: f.strong ? f.strong - 1 : undefined,
+      hear: f.hear.length ? f.hear : undefined,
+    }];
+  }),
+);
+
 // ─── writing ────────────────────────────────────────────────────────────────
 
 const rows = names
@@ -144,6 +164,7 @@ const rows = names
     const row = { n: name, c: counts.get(name) || 0, us: us[i], uk: uk[i] };
     const guide = guideFor(name);
     if (guide) row.g = guide;
+    if (inApp.has(name)) row.f = inApp.get(name);
     return row;
   })
   .sort((a, b) => b.c - a.c || a.n.localeCompare(b.n));

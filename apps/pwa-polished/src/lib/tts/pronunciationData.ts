@@ -4,11 +4,90 @@
  */
 
 /** A name as written, and the spelling that gets the voices to say it right. */
-export const SPELLINGS: Record<string, string> = {};
+export const SPELLINGS: Record<string, string> = {
+  "Philistines": "Philisteens",
+  "Ephraim": "ehfra eem",
+  "Manasseh": "Manassa",
+  "Baal": "ba awl",
+  "Nebuchadnezzar": "Nebuckadnezzar",
+  "Eleazar": "Ellie eh zar",
+  "Abimelech": "Abimilleck",
+  "Asa": "ahsaw",
+  "Joash": "jo-ash",
+  "Simeon": "simee-on",
+  "Asaph": "ehsaff",
+  "Shimei": "shimmy-eye",
+  "Gibeon": "gibby-on",
+  "Ai": "Eye",
+  "Leah": "Lee-ah",
+  "Boaz": "bo-azz",
+  "Elam": "E-lahm",
+  "Abijah": "abeej-ah",
+  "Zerubbabel": "Zarrubabbell",
+  "Phinehas": "phinniyus",
+  "Manoah": "mano-ah",
+  "Beersheba": "beersheeba",
+  "Rephaim": "reh-pha-eem",
+  "Ananias": "anna-nye-ess",
+  "Philistine": "Philisteen",
+  "Baals": "ba awls",
+  "Beer-sheba": "beersheeba",
+  "Beer Sheba": "beersheeba",
+};
 
 /** A word's sounds with the stress marks taken out, and what to say instead, per accent. */
-export const STRONG_US: Record<string, string> = {};
-export const STRONG_UK: Record<string, string> = {};
+export const STRONG_US: Record<string, string> = {
+  "fɪlɪstiːnz": "fˈɪlɪstˌiːnz",
+  "mænæsə": "mænˈæsə",
+  "ɐbsæləm": "ˈæbsæləm",
+  "dʒɛhəʃæfæt": "dʒɛhˈʌʃæfæt",
+  "nɛbəkædnɪzɑːɹ": "nˌɛbəkædnˈɪzɑːɹ",
+  "æbɪmɪlɛk": "æbˈɪmɪlɛk",
+  "ɐbnɜː": "ˈæbnɜː",
+  "næftɑːli": "nˈæftɑːli",
+  "æheɪzaɪə": "ˈæheɪzˌaɪə",
+  "dʒuːdiə": "dʒuːdˈiːə",
+  "bɑːɹnɑːbəz": "bˈɑːɹnɑːbəz",
+  "hæneɪnaɪə": "hˈæneɪnˌaɪə",
+  "æbiːdʒɑː": "æbˈiːdʒɑː",
+  "zæɹuːbæbɛl": "zæɹˈuːbæbɛl",
+  "fɪnɪjəs": "fɪnˈɪjəs",
+  "mɑːnoʊɑː": "mɑːnˈoʊɑː",
+  "kæpɚnaʊm": "kæpˈɜːɹnaʊm",
+  "ɹɛfɑːiːm": "ɹˈɛfɑːˌiːm",
+  "fɪlɪstiːn": "fˈɪlɪstˌiːn",
+};
+export const STRONG_UK: Record<string, string> = {
+  "fɪlɪstiːnz": "fˈɪlɪstˌiːnz",
+  "mænæsɐ": "mænˈæsɐ",
+  "ɐbsæləm": "ˈæbsæləm",
+  "dʒɛhəʃæfæt": "dʒɛhˈʌʃæfæt",
+  "nɛbəkædnɪzɑː": "nˌɛbəkædnˈɪzɑː",
+  "æbɪmɪlɛk": "æbˈɪmɪlɛk",
+  "ɐbnɜː": "ˈæbnɜː",
+  "næftɑːlɪ": "nˈæftɑːlɪ",
+  "æheɪzaɪə": "ˈæheɪzˌaɪə",
+  "dʒuːdiə": "dʒuːdˈiːə",
+  "bɑːnɑːbəz": "bˈɑːnɑːbəz",
+  "hæneɪnaɪə": "hˈæneɪnˌaɪə",
+  "æbiːdʒɑː": "æbˈiːdʒɑː",
+  "zæɹuːbæbɛl": "zæɹˈuːbæbɛl",
+  "fɪnɪjəs": "fɪnˈɪjəs",
+  "mɑːnəʊɑː": "mɑːnˈəʊɑː",
+  "kæpənaʊm": "kæpˈʌnaʊm",
+  "ɹɛfɑːɹiːm": "ɹˈɛfɑːɹˌiːm",
+  "fɪlɪstiːn": "fˈɪlɪstˌiːn",
+};
 
 /** A word Whistle writes, and the name it stands for in a voice command. */
-export const HEARD_AS: Record<string, string> = {};
+export const HEARD_AS: Record<string, string> = {
+  "philisteens": "Philistines",
+  "manassa": "Manasseh",
+  "nebuckadnezzar": "Nebuchadnezzar",
+  "abimilleck": "Abimelech",
+  "ahsaw": "Asa",
+  "ehsaff": "Asaph",
+  "zarrubabbell": "Zerubbabel",
+  "phinniyus": "Phinehas",
+  "beersheeba": "Beersheba",
+};

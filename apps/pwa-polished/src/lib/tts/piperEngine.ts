@@ -177,6 +177,24 @@ function idsFromPhonemes(phonemes: string[], map: Record<string, number[] | numb
 }
 
 /**
+ * The same, for English with a name's stress moved. espeak gives each sentence
+ * its own start and end symbols, and a sentence always ends on one of these
+ * with no space after, so this keeps the pauses a verse would have had.
+ */
+function idsBySentence(phonemes: string[], map: Record<string, number[] | number>): number[] {
+  const ids: number[] = [];
+  let start = 0;
+  phonemes.forEach((phoneme, i) => {
+    if (/[.?!]/.test(phoneme) && i < phonemes.length - 1) {
+      ids.push(...idsFromPhonemes(phonemes.slice(start, i + 1), map));
+      start = i + 1;
+    }
+  });
+  ids.push(...idsFromPhonemes(phonemes.slice(start), map));
+  return ids;
+}
+
+/**
  * Synthesize speech for one piece of text. Returns a WAV file as ArrayBuffer
  * (transferable across the worker boundary without copying).
  */
@@ -195,7 +213,7 @@ export async function synthesize(
   const substitutions = speech?.substitutions;
   let phonemeIds = result.phonemeIds;
   if (result.edited && config.phoneme_id_map) {
-    phonemeIds = idsFromPhonemes(result.phonemes, config.phoneme_id_map);
+    phonemeIds = idsBySentence(result.phonemes, config.phoneme_id_map);
   }
   if (substitutions && Object.keys(substitutions).length > 0 && config.phoneme_id_map) {
     const rewritten = result.phonemes.map((p) => substitutions[p] ?? p);

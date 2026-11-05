@@ -3,3 +3,44 @@
 # and: node scripts/build-name-lab-list.mjs
 # A later line for a name replaces an earlier one.
 
+Philistines | spell: Philisteens | strong: 1 of 3 | says: FIL-ih-steenz | hear: philisteens
+Ephraim | spell: ehfra eem | says: AY-fruh EEM / AY-frur EEM
+Manasseh | spell: Manassa | strong: 2 of 3 | says: ma-NAS-uh | hear: manassa
+Absalom | strong: 1 of 3 | says: AB-sa-lum
+Jehoshaphat | strong: 2 of 4 | says: jeh-HUSH-a-fat
+Baal | spell: ba awl | says: BAH AWL / BAR AWL
+Nebuchadnezzar | spell: Nebuckadnezzar | strong: 4 of 5 | says: neh-buh-kad-NIZ-ar / neh-buh-kad-NIZ-ah | hear: nebuckadnezzar
+Eleazar | spell: Ellie eh zar | says: EL-ee AY ZAR / EL-ih AY ZAH
+Abimelech | spell: Abimilleck | strong: 2 of 4 | says: a-BIM-ih-lek | hear: abimilleck
+Abner | strong: 1 of 2 | says: AB-ner
+Asa | spell: ahsaw | says: AH-saw | hear: ahsaw
+Naphtali | strong: 1 of 3 | says: NAF-tah-lee / NAF-tah-lih
+Joash | spell: jo-ash | says: JOH-ASH
+Simeon | spell: simee-on | says: SIM-ee-AWN / SIM-ee-ON
+Asaph | spell: ehsaff | says: AY-saf | hear: ehsaff
+Shimei | spell: shimmy-eye | says: SHIM-ee-EYE / SHIM-ih-EYE
+Ahaziah | strong: 1 of 4 | says: AH-ay-zy-uh
+Gibeon | spell: gibby-on | says: GIB-ee-AWN / GIB-ih-ON
+Ai | spell: Eye | says: EYE | hear: eye
+Leah | spell: Lee-ah | says: LEE-AH
+Judea | strong: 2 of 3 | says: joo-DEE-uh
+Barnabas | strong: 1 of 3 | says: BAR-nah-buz / BAH-nah-buz
+Boaz | spell: bo-azz | says: BOH-AZ
+Hananiah | strong: 1 of 4 | says: HAN-ay-ny-uh
+Elam | spell: E-lahm | says: EE-LAHM
+Abijah | spell: abeej-ah | strong: 2 of 3 | says: a-BEE-jah
+Zerubbabel | spell: Zarrubabbell | strong: 2 of 4 | says: za-ROO-ba-bel | hear: zarrubabbell
+Phinehas | spell: phinniyus | strong: 2 of 3 | says: fih-NIY-us | hear: phinniyus
+Manoah | spell: mano-ah | strong: 2 of 3 | says: mah-NOH-ah
+Beersheba | spell: beersheeba | says: beer-SHEE-buh | hear: beersheeba
+Capernaum | strong: 2 of 3 | says: ka-PER-nowm / ka-PUN-owm
+Rephaim | spell: reh-pha-eem | strong: 1 of 3 | says: REF-ah-eem / REF-ah-reem
+Ananias | spell: anna-nye-ess | says: AN-uh-NY-ES
+
+# The same names in other forms, so they match what the translations print.
+Philistine | spell: Philisteen | strong: 1 of 3
+Baals | spell: ba awls
+Beer-sheba | spell: beersheeba
+Beer Sheba | spell: beersheeba
+
+Sounds right (24): Israel, Samuel, Chaldeans, Rehoboam, Jehoiada, Ishmael, Gideon, Sheol, Israelite, Seir, Jezreel, Jehoiakim, Asherah, Baasha, Darius, Naomi, Ahasuerus, Joel, Eden, Asia, Midianites, Michael, Haggai, Iscariot
