@@ -15,6 +15,7 @@
   import RecordingChipMenu from '../../components/RecordingChipMenu.svelte';
   import { navigationStore } from '../../stores/navigationStore';
   import { IndexedDBTextStore } from '../../adapters/TextStore';
+  import { cleanVersePreviewText } from '../verseRendering';
   import type { EditorSurface } from '../../adapters/settings';
   import type { TranscriptBlock, TranscriptTail } from '../voice/transcriptSink';
 
@@ -111,14 +112,18 @@
       // Whatever the reader is on — expanding copies what you're looking at,
       // and the text is frozen into the note once inserted.
       const translation = get(navigationStore).translation;
-      const text = await textStore.getVerse(translation, target.book, target.chapter, target.verse);
+      const stored = await textStore.getVerse(translation, target.book, target.chapter, target.verse);
       if (hit !== target) return;
+      // The printed verse is plain text, and a pack stores poetry markers, tags
+      // and whole footnotes inline, so none of that may reach the note.
+      const text = cleanVersePreviewText(stored ?? '');
       if (text) {
         editorRef?.expandRef(target.key, text);
         close();
       } else {
-        // Pack not installed for this book, or no such verse in it. Say so and
-        // leave the menu open so Go to is still available.
+        // Pack not installed for this book, no such verse in it, or a verse that
+        // is nothing but a note. Say so and leave the menu open so Go to is still
+        // available.
         console.warn('[RefAwareEditor] No verse text for', target.ref, 'in', translation);
         unavailable = true;
       }

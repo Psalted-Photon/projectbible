@@ -37,6 +37,7 @@
   import { navigationStore } from '../stores/navigationStore';
   import { IndexedDBTextStore } from '../adapters/TextStore';
   import { formatVerseSuffix, VERSE_SUFFIX_RE } from '../lib/lexical/bibleRefTransforms';
+  import { cleanVersePreviewText } from '../lib/verseRendering';
   import { sanitizeNoteHtml } from '../lib/shared/sanitizeNoteHtml';
   import { splitPageBlocks } from '../lib/shared/paragraphStamp';
   import AuthorPill from './AuthorPill.svelte';
@@ -156,7 +157,10 @@
     try {
       // Whatever the reader is on — expanding copies what you're looking at.
       const translation = get(navigationStore).translation;
-      const text = await textStore.getVerse(translation, hit.book, hit.chapter, hit.verse);
+      const stored = await textStore.getVerse(translation, hit.book, hit.chapter, hit.verse);
+      // Plain text, the same as a note: a pack stores poetry markers, tags and
+      // whole footnotes inline, and none of that may reach the page.
+      const text = cleanVersePreviewText(stored ?? '');
       if (text) {
         const verse = document.createElement('span');
         verse.textContent = formatVerseSuffix(text);
@@ -165,8 +169,9 @@
         hit.el.setAttribute('data-expanded', 'true');
         close();
       } else {
-        // Pack not installed for this book, or no such verse in it. Say so and
-        // leave the menu open so Go to is still available.
+        // Pack not installed for this book, no such verse in it, or a verse that
+        // is nothing but a note. Say so and leave the menu open so Go to is still
+        // available.
         console.warn('[SharedPageView] No verse text for', hit.ref, 'in', translation);
         unavailable = true;
       }

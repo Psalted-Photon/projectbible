@@ -163,9 +163,12 @@ export function findVerseEl(
  *
  * A Range is used rather than the element box because a verse is frequently
  * several lines tall, and in paragraph layout it is an inline box whose own
- * rect is the union of every line it touches. `getClientRects()` hands back one
- * rect per line fragment, which is exactly the set of lines the fade has to be
- * laid across — the first rect starts where the verse starts, whatever the
+ * rect is the union of every line it touches. `getClientRects()` does not hand
+ * back one rect per line, though. It hands back one per stretch of text, plus
+ * one for each element wrapped around that text, so an italic word, a run of
+ * red letters, a note marker or a Repeats word all add their own, and interlinear
+ * adds several per word. The fade has to be laid across lines, so they are folded
+ * into lines first — the first one starts where the verse starts, whatever the
  * typeface, size, spacing or wrapping.
  */
 function measureLines(verseEl: HTMLElement, origin: HTMLElement): DOMRect[] {
@@ -186,9 +189,36 @@ function measureLines(verseEl: HTMLElement, origin: HTMLElement): DOMRect[] {
   }
   if (raw.length === 0) return [];
   const originRect = origin.getBoundingClientRect();
-  return raw.map(
+  return foldIntoLines(raw).map(
     (r) => new DOMRect(r.left - originRect.left, r.top - originRect.top, r.width, r.height),
   );
+}
+
+/**
+ * Fold a verse's boxes into one per line, top to bottom: from the first word to
+ * the last, as tall as the line's tallest box.
+ *
+ * A box joins a line when its middle falls inside that line, which holds for a
+ * raised note marker but not for the line above or below, even at tight spacing.
+ * The tallest go first because of interlinear: a whole stacked word has to set
+ * its row before its small layers ask which row they sit in, or each layer would
+ * start a row of its own.
+ */
+function foldIntoLines(rects: DOMRect[]): DOMRect[] {
+  const lines: { left: number; right: number; top: number; height: number }[] = [];
+  for (const r of [...rects].sort((a, b) => b.height - a.height)) {
+    const middle = r.top + r.height / 2;
+    const line = lines.find((l) => middle >= l.top && middle <= l.top + l.height);
+    if (line) {
+      line.left = Math.min(line.left, r.left);
+      line.right = Math.max(line.right, r.right);
+    } else {
+      lines.push({ left: r.left, right: r.right, top: r.top, height: r.height });
+    }
+  }
+  return lines
+    .sort((a, b) => a.top - b.top)
+    .map((l) => new DOMRect(l.left, l.top, l.right - l.left, l.height));
 }
 
 function textContainerOf(verseEl: HTMLElement): HTMLElement | null {
