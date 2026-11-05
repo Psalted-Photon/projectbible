@@ -41,7 +41,8 @@ export const BY_HEART_TIPS: Tip[] = [
     title: 'Sword Drill',
     body:
       'The one timed game. A phrase from any saved verse appears and you say the next 3 words. Right answers add ' +
-      'seconds, misses take them away, and it keeps your best.',
+      'seconds and misses take them away. At the end, every phrase shows the words you said in green and the ones ' +
+      'you missed in red, with a % score, and your top 10 runs are kept.',
   },
   {
     id: 'byheart-more',

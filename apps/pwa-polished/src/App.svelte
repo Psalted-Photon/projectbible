@@ -507,7 +507,7 @@
     <!-- A By Heart game, over everything. Loaded only when one opens. -->
     {#if gameSession?.drill}
       {#await import('./components/byHeart/ByHeartDrill.svelte') then drill}
-        <svelte:component this={drill.default} />
+        <svelte:component this={drill.default} session={gameSession} />
       {/await}
     {:else if gameSession}
       {#await import('./components/byHeart/ByHeartGame.svelte') then game}

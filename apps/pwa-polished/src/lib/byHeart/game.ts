@@ -10,6 +10,7 @@
 
 import { writable } from 'svelte/store';
 import { getSettings, updateSettings } from '../../adapters/settings';
+import type { DrillRun, DrillScore } from './drill';
 
 /** How a verse is played. Silent study is the one with no voice. */
 export type GameMode = 'focus' | 'build' | 'recital' | 'flashcards' | 'call' | 'weak' | 'silent';
@@ -36,6 +37,8 @@ export interface GameSession {
   today?: boolean;
   /** Sword Drill, which has its own screen and no steps. */
   drill?: boolean;
+  /** Sword Drill's finished run, on the session so its scorecard survives unfolding. */
+  drillRun?: DrillRun;
 }
 
 /** The game on screen. Null is none, and nothing of it is loaded. */
@@ -47,6 +50,11 @@ export function openGame(verseId: string, mode: GameMode = 'focus'): void {
 
 export function openDrill(): void {
   byHeartGame.set({ id: Date.now(), steps: [], at: 0, drill: true });
+}
+
+/** Puts Sword Drill's finished run on the session, or takes it off for the next one. */
+export function setDrillRun(drillRun: DrillRun | undefined): void {
+  byHeartGame.update((game) => game && { ...game, drillRun });
 }
 
 export function closeGame(): void {
@@ -123,8 +131,14 @@ export interface GamePrefs {
   blur: number;
   cover: GameCover;
   reference: SpokenRefMode;
-  /** Sword Drill's most right answers in one go. */
-  drillBest: number;
+  /** Sword Drill's top runs, best first. */
+  drillTop: DrillScore[];
+}
+
+/** The saved list, checked since any build or device may have written it. A best from before lists comes in as the first entry. */
+function drillTopOf(saved: ReturnType<typeof getSettings>['byHeartGame']): DrillScore[] {
+  if (Array.isArray(saved?.drillTop)) return saved.drillTop.filter((s) => Number.isInteger(s?.right) && s.right > 0);
+  return saved?.drillBest ? [{ right: saved.drillBest }] : [];
 }
 
 export function gamePrefs(): GamePrefs {
@@ -136,7 +150,7 @@ export function gamePrefs(): GamePrefs {
         : DEFAULT_BLUR,
     cover: saved?.cover === 'box' ? 'box' : 'wordblur',
     reference: saved?.reference ?? 'off',
-    drillBest: saved?.drillBest ?? 0,
+    drillTop: drillTopOf(saved),
   };
 }
 

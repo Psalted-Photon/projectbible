@@ -8,20 +8,37 @@
    *
    * The clock only runs while the mic is listening, so holding the button down to
    * speak is as fair as leaving it on.
+   *
+   * Every phrase is kept as it goes. The end screen shows them as tiles, word by
+   * word, and the finished run rides on the session so it survives unfolding.
    */
   import { onDestroy, onMount } from 'svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
   import { syncedByHeartStore } from '../../adapters/SyncedByHeartStore';
-  import { DRILL_CLOCK, canDrill, drillPrompt, type DrillPrompt } from '../../lib/byHeart/drill';
-  import { closeGame, gamePrefs, setGamePrefs } from '../../lib/byHeart/game';
+  import {
+    DRILL_CLOCK,
+    canDrill,
+    drillDateLabel,
+    drillLine,
+    drillPercent,
+    drillPrompt,
+    rankDrillScore,
+    type DrillPrompt,
+    type DrillResult,
+  } from '../../lib/byHeart/drill';
+  import { closeGame, gamePrefs, setDrillRun, setGamePrefs, type GameSession } from '../../lib/byHeart/game';
   import { createGameMic } from '../../lib/byHeart/gameMic';
   import { Recitation } from '../../lib/byHeart/recitation';
+  import { scoreColor } from '../../lib/byHeart/scoring';
   import { upcomingWords } from '../../lib/byHeart/wordMatch';
-  import { translationLabel } from '../../lib/bibleData';
+  import { getBookColor, translationLabel } from '../../lib/bibleData';
   import { portal } from '../../lib/portal';
+  import { localDateStr } from '../../stores/clockStore';
   import { pauseReading, readingState } from '../../lib/tts/readingEngine';
   import { gameTalk, micReadyToListen, setGameMic, voiceCard, watchVoiceReady } from '../../lib/voice/holdToTalk';
   import CloseX from '../CloseX.svelte';
+
+  export let session: GameSession;
 
   /** How many spoken wrong words on one word make a miss. */
   const WRONG_WORDS = 2;
@@ -38,8 +55,9 @@
   let cursor = 0;
   let clock = DRILL_CLOCK.start;
   let right = 0;
-  let best = gamePrefs().drillBest;
-  let newBest = false;
+  let top = gamePrefs().drillTop;
+  /** The phrases so far this run, in the order played. */
+  let played: DrillResult[] = [];
   /** The answer up between phrases, and whether it was got. */
   let answered: 'right' | 'miss' | null = null;
   let answerTimer: ReturnType<typeof setTimeout> | null = null;
@@ -71,7 +89,13 @@
     cursor = 0;
   }
 
+  /** Keeps the phrase on screen with how far the user got. Called before the answer is revealed. */
+  function record(cutOff: boolean) {
+    if (prompt) played = [...played, { ...prompt, said: rec?.cursor ?? 0, cutOff }];
+  }
+
   function answer(how: 'right' | 'miss') {
+    record(false);
     answered = how;
     cursor = rec?.words.length ?? 0;
     if (how === 'right') {
@@ -101,8 +125,9 @@
 
   function start() {
     if (!micReadyToListen(start)) return;
+    setDrillRun(undefined);
+    played = [];
     right = 0;
-    newBest = false;
     clock = DRILL_CLOCK.start;
     rec = null;
     phase = 'playing';
@@ -123,13 +148,25 @@
     clock = 0;
     stopClock();
     mic.close();
+    // A miss can take the last seconds, and that phrase is already kept.
+    if (!answered) record(true);
+    const percent = drillPercent(played);
+    const before = gamePrefs().drillTop;
+    const ranked = rankDrillScore(before, { right, percent: percent ?? undefined, date: localDateStr(new Date()) });
+    if (ranked.place !== null) setGamePrefs({ drillTop: ranked.top });
+    top = ranked.top;
+    setDrillRun({
+      results: played,
+      right,
+      percent,
+      line: drillLine(before[0]?.right ?? 0, right, ranked.place),
+      place: ranked.place,
+    });
     phase = 'over';
-    if (right > best) {
-      best = right;
-      newBest = true;
-      setGamePrefs({ drillBest: right });
-    }
   }
+
+  const wordState = (result: DrillResult, i: number) =>
+    i < result.said ? 'word-said' : result.cutOff ? 'word-unreached' : 'word-lost';
 
   function close() {
     closeGame();
@@ -153,7 +190,7 @@
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', mic.close);
     verses = await syncedByHeartStore.list();
-    phase = canDrill(verses) ? 'ready' : 'none';
+    phase = session.drillRun ? 'over' : canDrill(verses) ? 'ready' : 'none';
   });
 
   onDestroy(() => {
@@ -164,10 +201,36 @@
     window.removeEventListener('pagehide', mic.close);
   });
 
-  $: isNet = prompt?.translation.toLowerCase() === 'net';
+  $: run = session.drillRun ?? null;
 </script>
 
 <svelte:window on:keydown|capture={onKey} />
+
+{#snippet translationTag(translation: string)}
+  {#if translation.toLowerCase() === 'net'}
+    <a href="http://netbible.org" target="_blank" rel="noopener noreferrer">({translationLabel(translation)})</a>
+  {:else}
+    ({translationLabel(translation)})
+  {/if}
+{/snippet}
+
+{#snippet topScores(mine: number | null)}
+  <div class="top-scores">
+    <p class="top-title">Top scores</p>
+    <ol>
+      {#each top as score, i}
+        <li class:mine={i === mine}>
+          <span class="place">{i + 1}</span>
+          <span class="right">{score.right} right</span>
+          <span class="percent" style:color={score.percent === undefined ? null : scoreColor(score.percent)}>
+            {score.percent === undefined ? '' : `${score.percent}%`}
+          </span>
+          <span class="date">{score.date ? drillDateLabel(score.date) : ''}</span>
+        </li>
+      {/each}
+    </ol>
+  </div>
+{/snippet}
 
 <div class="bh-drill no-edge-gesture" use:portal>
   <div class="top">
@@ -180,46 +243,65 @@
     <CloseX label="Close Sword Drill" on:click={close} />
   </div>
 
-  <div class="middle">
-    {#if phase === 'none'}
-      <p class="say">Sword Drill needs a saved verse of at least 6 words in English.</p>
-    {:else if phase === 'ready'}
-      <p class="say">
-        A phrase from one of your verses appears. Say the next 3 words. A right answer adds {DRILL_CLOCK.right} seconds
-        and a miss takes away {DRILL_CLOCK.miss}.
-      </p>
-      {#if best}<p class="say small">Your best is {best} right.</p>{/if}
-      <button class="go" on:click={start}>Start</button>
-    {:else if phase === 'playing' && prompt}
-      <p class="phrase">… {prompt.phrase}</p>
-      <p class="blanks" class:got={answered === 'right'} class:lost={answered === 'miss'}>
-        {#each prompt.answer as word, i}
-          <span class="blank">{i < cursor ? word : ' '}</span>
-        {/each}
-      </p>
-      <p class="reference">
-        {prompt.reference}
-        {#if isNet}
-          <a href="http://netbible.org" target="_blank" rel="noopener noreferrer">({translationLabel(prompt.translation)})</a>
-        {:else}
-          ({translationLabel(prompt.translation)})
+  {#if phase === 'over' && run}
+    <div class="head">
+      <p class="total">
+        {run.right} right
+        {#if run.percent !== null}
+          <span class="run-percent" style:color={scoreColor(run.percent)}>{run.percent}%</span>
         {/if}
       </p>
-      {#if !answered}
-        <button class="skip" on:click={() => answer('miss')}>Skip</button>
-      {/if}
-      {#if !$gameTalk?.on}
-        <p class="say small">The clock waits until the mic is on.</p>
-      {/if}
-    {:else if phase === 'over'}
-      <p class="total">{right} right</p>
-      <p class="say small">{newBest ? 'That is your new best.' : `Your best is ${best} right.`}</p>
+      {#if run.line}<p class="say small">{run.line}</p>{/if}
       <div class="row">
         <button class="go" on:click={start}>Again</button>
         <button class="skip" on:click={close}>Done</button>
       </div>
-    {/if}
-  </div>
+    </div>
+    <div class="scorecard">
+      <div class="tiles">
+        {#each run.results as result}
+          <div class="tile">
+            <p class="tile-words">… {result.phrase}{#each result.answer as word, i}{' '}<span class={wordState(result, i)}>{word}</span>{/each}</p>
+            <p class="tile-reference">
+              <span class="tile-book" style:color={getBookColor(result.book)}>{result.reference}</span>
+              <span class="tile-translation">{@render translationTag(result.translation)}</span>
+            </p>
+          </div>
+        {/each}
+      </div>
+      {#if top.length}{@render topScores(run.place)}{/if}
+    </div>
+  {:else}
+    <div class="middle">
+      {#if phase === 'none'}
+        <p class="say">Sword Drill needs a saved verse of at least 6 words in English.</p>
+      {:else if phase === 'ready'}
+        <p class="say">
+          A phrase from one of your verses appears. Say the next 3 words. A right answer adds {DRILL_CLOCK.right} seconds
+          and a miss takes away {DRILL_CLOCK.miss}.
+        </p>
+        {#if top.length}{@render topScores(null)}{/if}
+        <button class="go" on:click={start}>Start</button>
+      {:else if phase === 'playing' && prompt}
+        <p class="phrase">… {prompt.phrase}</p>
+        <p class="blanks" class:got={answered === 'right'} class:lost={answered === 'miss'}>
+          {#each prompt.answer as word, i}
+            <span class="blank">{i < cursor ? word : ' '}</span>
+          {/each}
+        </p>
+        <p class="reference">
+          {prompt.reference}
+          {@render translationTag(prompt.translation)}
+        </p>
+        {#if !answered}
+          <button class="skip" on:click={() => answer('miss')}>Skip</button>
+        {/if}
+        {#if !$gameTalk?.on}
+          <p class="say small">The clock waits until the mic is on.</p>
+        {/if}
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -232,6 +314,9 @@
     flex-direction: column;
     background: #0c0c0e;
     color: #f0f0f0;
+    --word-got: #4ade80;
+    --word-lost: #f87171;
+    --mine: #f472b6;
     font-size: calc(15px * var(--bar-scale, 1));
     overscroll-behavior: contain;
     touch-action: manipulation;
@@ -275,12 +360,20 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     gap: 14px;
     min-height: 0;
     padding: 16px 20px calc(env(safe-area-inset-bottom, 0px) + 72px);
     box-sizing: border-box;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     text-align: center;
+  }
+
+  /* Centers what fits, and what doesn't can still scroll to its top. */
+  .middle::before,
+  .middle::after {
+    content: '';
+    flex: 1;
   }
 
   .say {
@@ -319,12 +412,12 @@
 
   .blanks.got .blank {
     border-color: #22c55e;
-    color: #4ade80;
+    color: var(--word-got);
   }
 
   .blanks.lost .blank {
     border-color: #ef4444;
-    color: #fca5a5;
+    color: var(--word-lost);
   }
 
   .reference {
@@ -341,6 +434,150 @@
     margin: 0;
     font-size: 2.4em;
     font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .run-percent {
+    margin-left: 0.25em;
+  }
+
+  /* The end screen: the score stays put and everything under it scrolls. */
+  .head {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 16px 12px;
+    text-align: center;
+  }
+
+  .scorecard {
+    flex: 1;
+    min-height: 0;
+    padding: 0 12px calc(env(safe-area-inset-bottom, 0px) + 72px);
+    box-sizing: border-box;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* Two columns on a folded phone's cover screen, more as the screen widens. */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: #1a1a1f;
+    font-size: 0.85em;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .tile-words {
+    margin: 0;
+    color: #fff;
+  }
+
+  .word-said,
+  .word-lost {
+    font-weight: 600;
+  }
+
+  .word-said {
+    color: var(--word-got);
+  }
+
+  .word-lost {
+    color: var(--word-lost);
+  }
+
+  .word-unreached {
+    color: #8e8e96;
+  }
+
+  .tile-reference {
+    margin: 0;
+    font-size: 0.85em;
+  }
+
+  .tile-book {
+    font-weight: 600;
+  }
+
+  .tile-translation {
+    opacity: 0.7;
+  }
+
+  .tile-translation a {
+    color: inherit;
+  }
+
+  .top-scores {
+    width: 100%;
+    max-width: 22em;
+    margin: 0 auto;
+    box-sizing: border-box;
+  }
+
+  .scorecard .top-scores {
+    margin-top: 20px;
+  }
+
+  .top-title {
+    margin: 0 0 6px;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-align: center;
+    opacity: 0.8;
+  }
+
+  .top-scores ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.85em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .top-scores li {
+    display: grid;
+    grid-template-columns: 1.6em 1fr 3em 6.5em;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-align: left;
+  }
+
+  .top-scores li.mine {
+    background: rgba(244, 114, 182, 0.16);
+    color: var(--mine);
+    font-weight: 600;
+  }
+
+  .place {
+    opacity: 0.6;
+  }
+
+  .top-scores .percent {
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .date {
+    opacity: 0.7;
+    text-align: right;
   }
 
   .row {

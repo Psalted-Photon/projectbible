@@ -874,7 +874,7 @@ The method comes from the research on memory: recall rather than rereading, spea
 - **Flashcards:** the reference and you say the verse, or the opening words and you say the reference and then the rest.
 - **Call and Response:** the app's voice reads a random part of the verse, then you recite all of it. The mic stays closed while it speaks.
 - **Weak Spots:** the phrases around the words you miss most, across all your verses.
-- **Sword Drill:** the one timed game. A phrase from any saved verse appears and you say the next 3 words. A right answer adds seconds and a miss takes them away. It keeps your best.
+- **Sword Drill:** the one timed game. A phrase from any saved verse appears and you say the next 3 words. A right answer adds seconds and a miss takes them away. The end screen shows every phrase as a tile, with the words you said in green and the ones you missed in red, plus a % score for the run. A phrase the clock cut off comes last, with the words you never reached in gray, and those don't count against the %. It keeps your top 10 runs with their % and dates, ranked by how many you got right.
 - **Silent study:** for when you can't speak out loud, or have no mic. The Out loud / Silent study toggle sits at the top of the game settings. Recall it in your head, reveal it, then pick Missed, Barely, Almost, Pretty Much or Got It. These feed the same schedule and can reach Known, with a small marker on the score since voice is stricter. Today runs this way where there's no mic, and verses in Greek or Hebrew are always silent.
 
 ### 28.5 Your Own Voice
