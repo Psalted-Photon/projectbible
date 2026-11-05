@@ -19,7 +19,7 @@
   export let canSpeak = false;
   /**
    * A verse-number selection. It is about the verse, so the Word/Verse toggle
-   * and the one-word buttons go, and Translation comes in.
+   * and the one-word buttons go.
    */
   export let verseLocked = false;
   /**
@@ -45,7 +45,8 @@
 
   // Define/Bio/More Info and Repeats look up a single term, so they only appear
   // for a one-word selection. Search, Highlight, Save and Notes work on a phrase.
-  $: singleWord = !verseLocked && (mode === 'verse' || wordCount <= 1);
+  // A whole verse isn't about the word it was reached from, and Word brings them back.
+  $: singleWord = !verseLocked && mode === 'word' && wordCount <= 1;
 
   function handleAction(action: string) {
     dispatch('action', { action, text: selectedText });
@@ -81,7 +82,7 @@
       </button>
     {/if}
 
-    {#if canSpeak && !verseLocked}
+    {#if canSpeak && !verseLocked && mode === 'word'}
       <button class="action-btn" on:click={() => handleAction('speak')}>
         Speak
       </button>
@@ -91,7 +92,7 @@
       Search
     </button>
 
-    {#if isPlace && !verseLocked}
+    {#if isPlace && !verseLocked && mode === 'word'}
       <button class="action-btn" on:click={() => handleAction('map')}>
         Map
       </button>
@@ -109,13 +110,10 @@
       Notes
     </button>
 
-    {#if verseLocked}
+    {#if verseLocked || mode === 'verse'}
       <button class="action-btn" on:click={() => handleAction('translation')}>
         Translation
       </button>
-    {/if}
-
-    {#if verseLocked || mode === 'verse'}
       <button class="action-btn" on:click={() => handleAction('connections')}>
         Connections
       </button>

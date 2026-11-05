@@ -225,7 +225,7 @@ A window that draws every cross-reference in the Bible at once: 344,799 links fr
 - **Save as image** — any tab as a large picture with its title and the irisBible mark, to save or share.
 - **Black or cream** behind the picture, whatever the theme. Pan, zoom, and full screen too.
 - **Connections strip in the reader** — under each chapter title, a thin line of the whole Bible with an arc to everywhere that chapter reaches. Tap it to open the Arcs tab with that chapter already lit. It shows only when the pack is installed, and Settings has a switch to turn it off.
-- **Connections button on a selected verse** — select a whole verse (tap its number, or tap a word and choose Verse) and the ring has a Connections button. It opens the Arcs tab with only that verse lit, showing every arc that leaves it or lands on it, whatever their votes. Select several verses and they light together.
+- **Connections button on a selected verse** — select a whole verse (tap its number, hold a word, or tap a word and choose Verse) and the ring has a Connections button. It opens the Arcs tab with only that verse lit, showing every arc that leaves it or lands on it, whatever their votes. Select several verses and they light together.
 
 ## 9. Search
 
@@ -306,6 +306,8 @@ While you're choosing a highlight, the **Meanings** button in the popup's top co
 - **Tap a word** to select it.
 - **Drag across words** to select a phrase.
 - **Tap again to extend** a selection you've already made.
+- **Hold a word**, with a finger or the mouse, to select its whole verse. The verse lights while you're still holding and the menu opens when you let go, with **Word** to go back to the word you held. Move instead of letting go and it becomes a phrase starting from that word.
+- **Tap a verse number** to select the whole verse. The space just beside and under the number counts too, so it's easier to hit with a finger.
 
 Selection snaps to whole words, so you never end up with half of one.
 
@@ -316,6 +318,8 @@ Selecting text brings up everything you can do to it:
 **Dissect** (word study) · **Search** · **Map** (for places) · **Highlight** · **Save** · **Notes** · **Repeats**
 
 The Map button only appears when what you selected is actually a place, and it opens the real map.
+
+On a whole verse, the one-word buttons (Define, Bio, Info, Map, Speak, Repeats) go away and **Translation** and **Connections** come in, however you selected it.
 
 Under a Greek or Hebrew word, the ring shows its dictionary form and Strong's number. Tap the number to open the word in Strong's.
 

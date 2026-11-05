@@ -1255,6 +1255,12 @@
   let dragSelecting = false;
   /** Set once a gesture has committed to selecting rather than scrolling. */
   let dragArmed = false;
+  /**
+   * A press held still on a word has lit its verse and is waiting to see what
+   * the finger does: lifting selects the verse, moving starts a phrase instead.
+   * dragArmed is set alongside it, which is what stops the page scrolling.
+   */
+  let heldVerse = false;
   /** Next tap extends the selection instead of replacing it (the Extend chip). */
   let extendArmed = false;
   /**
@@ -1266,7 +1272,7 @@
 
   const ARM_PX = 8;          // finger travel before a touch gesture picks a lane
   const MOUSE_ARM_PX = 3;    // mouse has no scroll to protect, so it commits sooner
-  const HOLD_MS = 300;       // holding still also starts a selection
+  const HOLD_MS = 400;       // holding still on a word selects its verse; a slower tap than this is still a tap
   const AUTOSCROLL_EDGE = 60;
   const AUTOSCROLL_PX = 8;
 
@@ -1278,6 +1284,8 @@
     lastX: number;
     lastY: number;
     holdTimer: number | null;
+    /** Started on a verse number, which is only ever tapped. */
+    onNumber: boolean;
   }
   let wordDrag: WordDrag | null = null;
   let dragFrame: number | null = null;
@@ -1687,9 +1695,20 @@
   }
 
   // --- Translation card ---------------------------------------------------
-  // A verse-number selection's Translation button: the same verses in another
+  // A whole-verse selection's Translation button: the same verses in another
   // installed translation, in a card under them. Placed and kept in place the
   // way the OT quotation card is.
+
+  /**
+   * The verses a whole-verse ring is about. A verse-number tap holds its verses
+   * in the segments; a word turned to Verse holds just its own.
+   */
+  function wholeVerseNumbers(): number[] {
+    if (selectionMode === "verse") {
+      return selectedVerseNumber !== null ? [selectedVerseNumber] : [];
+    }
+    return [...new Set(selectedSegments.map((s) => s.verse))];
+  }
 
   let translationHit: {
     book: string;
@@ -4228,6 +4247,10 @@
     wordDrag = null;
     dragArmed = false;
     dragSelecting = false;
+    if (heldVerse) {
+      heldVerse = false;
+      clearHighlights();
+    }
     stopAutoScroll();
   }
 
@@ -4297,7 +4320,7 @@
     const target = e.target as HTMLElement;
     if (isSelectionExempt(target)) return;
     // A verse number takes the same press so a tap on it can select the verse.
-    // It never resolves to a word, so a hold or drag from it simply cancels.
+    // Only a tap: a slow one still counts, and a drag from it simply cancels.
     if (!target.closest(".verse-text") && !target.closest(".verse-number")) return;
 
     // The Extend chip turns the next tap into "stretch to here" — no drag
@@ -4341,7 +4364,7 @@
 
     // Suppress the OS text-selection UI (magnifier, callout, blue handles)
     // for the whole gesture. Must be set now, not on arming, because iOS
-    // decides to show the callout well before our 300ms hold elapses.
+    // decides to show the callout well before our hold elapses.
     dragSelecting = true;
     dragArmed = false;
 
@@ -4356,21 +4379,67 @@
       lastX: e.clientX,
       lastY: e.clientY,
       holdTimer: null,
+      onNumber: !!target.closest(".verse-number"),
     };
 
-    // Holding still also starts a selection. That is the escape hatch for a
-    // phrase that begins at the end of a line and continues on the next one,
-    // where the first movement is downward and would otherwise scroll.
-    if (e.pointerType !== "mouse") {
+    // Holding still on a word lights its verse, for a finger or a mouse.
+    if (!wordDrag.onNumber) {
       wordDrag.holdTimer = window.setTimeout(() => {
-        if (wordDrag && !dragArmed) armWordDrag();
+        if (wordDrag && !dragArmed) armHeldVerse();
       }, HOLD_MS);
+    }
+  }
+
+  /**
+   * The hold came due: light the verse while the finger is still down. The ring
+   * waits for release. Moving from here gives up the verse for a phrase from the
+   * held word, which is the escape hatch for a phrase that begins at the end of
+   * a line and continues on the next one, where the first movement is downward
+   * and would otherwise scroll.
+   */
+  function armHeldVerse() {
+    if (!wordDrag) return;
+
+    const el = document.elementFromPoint(wordDrag.startX, wordDrag.startY);
+    const verseEl = el?.closest<HTMLElement>(".verse[data-verse]");
+    if (!verseEl) {
+      cancelWordDrag();
+      return;
+    }
+
+    dragArmed = true;
+    heldVerse = true;
+    wordDrag.holdTimer = null;
+
+    // Read before the tint goes on: its edge bar moves the text over. A hold in
+    // a gap has no word here, and still selects the verse on release.
+    const pos = resolveWordAt(wordDrag.startX, wordDrag.startY, {
+      interlinear: isInterlinearActive,
+    });
+    selAnchor = pos;
+    selFocus = pos;
+
+    verseEl.classList.add("verse-highlighted");
+    highlightedElements.push(verseEl);
+    haptic(15);
+
+    try {
+      readerElement?.setPointerCapture(wordDrag.pointerId);
+    } catch {
+      /* capture is a nicety — the document-level fallbacks still work */
     }
   }
 
   /** Commit the gesture to selecting. From here on, direction stops mattering. */
   function armWordDrag() {
     if (!wordDrag) return;
+
+    // The pad around a number lies over the margin, where the nearest word can
+    // be on another line. A number never starts a phrase.
+    if (wordDrag.onNumber) {
+      cancelWordDrag();
+      return;
+    }
 
     const pos = resolveWordAt(wordDrag.startX, wordDrag.startY, {
       interlinear: isInterlinearActive,
@@ -4404,6 +4473,24 @@
 
     wordDrag.lastX = e.clientX;
     wordDrag.lastY = e.clientY;
+
+    if (heldVerse) {
+      // A finger resting on the glass wobbles, and that shouldn't lose the verse.
+      const moved = Math.max(
+        Math.abs(e.clientX - wordDrag.startX),
+        Math.abs(e.clientY - wordDrag.startY),
+      );
+      if (moved <= ARM_PX) return;
+
+      heldVerse = false;
+      clearHighlights();
+      if (!selAnchor) {
+        cancelWordDrag();
+        return;
+      }
+      refreshSelectionFromPair();
+      haptic(8);
+    }
 
     if (!dragArmed) {
       const dx = Math.abs(e.clientX - wordDrag.startX);
@@ -4458,6 +4545,7 @@
 
     const { startX, startY, pointerId } = wordDrag;
     const armed = dragArmed;
+    const held = heldVerse;
     const releaseX = e.clientX;
     const releaseY = e.clientY;
 
@@ -4472,7 +4560,13 @@
     }
     wordDrag = null;
     dragArmed = false;
+    heldVerse = false;
     dragSelecting = false;
+
+    if (held) {
+      selectHeldVerse(startX, startY);
+      return;
+    }
 
     if (!armed) {
       // Never committed to a drag: this was a plain tap. Same path as before,
@@ -4516,11 +4610,36 @@
   }
 
   /**
-   * Verse-number tap: select the whole verse. It is a verse selection, not a
-   * long phrase: no Word/Verse toggle, and Extend follows extendVerseSel.
+   * Lifted after a still hold: the same as tapping the word and then Verse, so
+   * Word goes back to the word that was held. Where there is no word to go back
+   * to, or no Word button to do it with (By Heart's simple reader), it selects
+   * the verse the way its number does.
    */
-  function selectWholeVerse(numberEl: HTMLElement, x: number, y: number) {
-    const verseEl = numberEl.closest<HTMLElement>(".verse[data-verse]");
+  function selectHeldVerse(x: number, y: number) {
+    // The hold's tint moved the text over, and the word is found where it was
+    // pressed. Taking it off now means it never gets a frame to flicker.
+    clearHighlights();
+
+    if (!pickOnly) {
+      selectionRange = null;
+      selectWordAtPoint(x, y);
+      if (showToast && selectionRange) {
+        setSelectionMode("verse");
+        return;
+      }
+    }
+
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (el) selectWholeVerse(el, x, y);
+  }
+
+  /**
+   * Select the whole verse `inside` belongs to, from a verse-number tap. It is a
+   * verse selection, not a long phrase: no Word/Verse toggle, and Extend follows
+   * extendVerseSel.
+   */
+  function selectWholeVerse(inside: HTMLElement, x: number, y: number) {
+    const verseEl = inside.closest<HTMLElement>(".verse[data-verse]");
     const whole = verseEl ? wholeVersePos(verseEl) : null;
     if (!whole) return;
 
@@ -6598,20 +6717,14 @@
       case "translation":
         // The selection stays painted under the card, so you can see which
         // verses it is showing. Closing the card clears it.
-        openTranslationCard([...new Set(selectedSegments.map(s => s.verse))]);
+        openTranslationCard(wholeVerseNumbers());
         showToast = false;
         extendArmed = false;
         return;
       case "connections": {
-        // Only the whole-verse rings offer this. A verse-number tap holds its
-        // verses in the segments; a word turned to Verse holds just its own.
+        // Only the whole-verse rings offer this.
         if (!verseSel && selectionMode !== 'verse') break;
-        const readerVerses =
-          selectionMode === 'verse'
-            ? selectedVerseNumber !== null
-              ? [selectedVerseNumber]
-              : []
-            : [...new Set(selectedSegments.map(s => s.verse))];
+        const readerVerses = wholeVerseNumbers();
         // Connections are counted in English numbering, which this translation
         // may not share: Hebrew Malachi 3:19 is English 4:1.
         const englishRefs = readerVerses.map(verse => {
@@ -6651,7 +6764,11 @@
   }
 
   function handleModeChange(event: CustomEvent) {
-    selectionMode = event.detail;
+    setSelectionMode(event.detail);
+  }
+
+  function setSelectionMode(mode: "word" | "verse") {
+    selectionMode = mode;
 
     // Going back to Word: repaint from the anchor/focus pair, not from the
     // Range. A phrase spanning verses has no single Range that survives the
@@ -8031,6 +8148,26 @@
     vertical-align: super;
     margin-inline-end: 0.1rem;
     cursor: pointer;
+    position: relative;
+  }
+
+  /* An invisible pad, because the number alone is too small for a finger. It
+     reaches into the empty margin and the blank space under the number, and
+     stops at the number's own far edge: the diamond, the other marks and the
+     first word all sit that side, so it never covers them. The sizes are px
+     because a finger doesn't grow with the text. */
+  .verse-number::after {
+    content: "";
+    position: absolute;
+    inset-block: -5px -10px;
+    inset-inline: -16px 0;
+  }
+
+  /* Mid-line in a paragraph there is no margin: the previous verse's last word
+     sits right against the number. */
+  .verses.paragraph-layout:not(.interlinear-active) .verse:not(.para-start):not(.stanza-break):not(.poetry-1):not(.poetry-2) .verse-number::after {
+    inset-block: -2px;
+    inset-inline: -3px 0;
   }
 
   .verse-text {

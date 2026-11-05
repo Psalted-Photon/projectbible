@@ -102,7 +102,7 @@ export const SELECTION_TIPS: Tip[] = [
     target: BUTTONS,
     text: 'Translation',
     title: 'Translation',
-    body: 'Only when you tap a verse number. Read the same verses in another translation, in a card right under them.',
+    body: 'Only on a whole verse. Read the same verses in another translation, in a card right under them.',
   },
   {
     id: 'ring-connections',

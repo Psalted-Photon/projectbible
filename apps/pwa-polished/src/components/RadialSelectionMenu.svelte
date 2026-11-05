@@ -183,8 +183,9 @@
   }
   $: number = strongs ? displayId(strongs) : '';
   /** A Strong's number makes the pill a link to its entry. A measure doesn't. */
-  $: strongsLink = !pickOnly && !measure && !!strongs;
-  $: originLabel = pickOnly ? '' : measure || [headword, number, meaning].filter(Boolean).join(' · ');
+  $: strongsLink = !pickOnly && mode === 'word' && !measure && !!strongs;
+  // The pill under the word is about that one word, so a whole verse goes without.
+  $: originLabel = pickOnly || mode === 'verse' ? '' : measure || [headword, number, meaning].filter(Boolean).join(' · ');
 
   function openStrongs() {
     dispatch('action', { action: 'strongs', text: selectedText });

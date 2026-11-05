@@ -163,7 +163,7 @@ export const POPUP_TIPS: Tip[] = [
     body: 'Tap the preview to open this passage in the reader. The trail in the top bar brings you back to this sheet.',
   },
 
-  // The card a verse number's Translation button opens
+  // The card a whole verse's Translation button opens
   {
     id: 'translation-card',
     area,

@@ -166,8 +166,7 @@ export interface RadialItemOpts {
   canSpeak?: boolean;
   /**
    * The selection came from a verse-number tap. It is about the verse, not a
-   * word, so the scope toggle and every one-word button go, and Translation
-   * comes in.
+   * word, so the scope toggle and every one-word button go.
    */
   verseLocked?: boolean;
   /** By Heart's simple reader: the short ring, Select and Extend. */
@@ -217,9 +216,10 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
     ];
   }
 
-  // Same rule as the classic toast: single-term lookups only make sense for one
-  // word, and verse mode is a single term by definition.
-  const singleWord = o.mode === 'verse' || o.wordCount <= 1;
+  // Same rule as the classic toast: single-term buttons only make sense for one
+  // word. A whole verse isn't about the word it was reached from, and Word brings
+  // them back.
+  const singleWord = o.mode === 'word' && o.wordCount <= 1;
 
   const actions: RadialItem[] = [];
 
@@ -233,18 +233,19 @@ export function radialItems(o: RadialItemOpts): RadialItem[] {
           : { kind: 'action', id: 'dissect', label: 'Define', icon: 'define', accent: '#fb7185' },
     );
   }
-  if (o.isPlace) {
+  if (o.mode === 'word' && o.isPlace) {
     actions.push({ kind: 'action', id: 'map', label: 'Map', icon: 'map', accent: '#f2893e' });
   }
-  if (o.canSpeak) {
+  if (o.mode === 'word' && o.canSpeak) {
     actions.push({ kind: 'action', id: 'speak', label: 'Speak', icon: 'speak', accent: '#34d399' });
   }
   actions.push({ kind: 'action', id: 'highlight', label: 'Highlight', icon: 'highlight', accent: '#fde047' });
   actions.push({ kind: 'action', id: 'notes', label: 'Notes', icon: 'notes', accent: '#d1e3f5' });
   actions.push({ kind: 'action', id: 'share', label: 'Share', icon: 'share', accent: '#7dd3fc' });
-  // A verse's connections, so only once the whole verse is selected. A word or
-  // a phrase has none of its own to show.
+  // A verse's other translations and its connections, so only once the whole
+  // verse is selected. A word or a phrase has none of its own to show.
   if (o.mode === 'verse') {
+    actions.push({ kind: 'action', id: 'translation', label: 'Translation', icon: 'translation', accent: '#e879f9' });
     actions.push({ kind: 'action', id: 'connections', label: 'Connections', icon: 'connections', accent: '#a3e635' });
   }
   if (singleWord) {
