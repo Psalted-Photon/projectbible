@@ -66,6 +66,8 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'measureUnits',
   // Whether a breadcrumb tap clears the crumbs after it: a reading habit too.
   'crumbTap',
+  // One-column book dropdown: how you like to scan the books, on any screen.
+  'bookListOneColumn',
   // Which devotional the Verse of the Day opens, morning/evening, and the
   // reminder times — the reminders themselves live on the server per account.
   'devotionals',

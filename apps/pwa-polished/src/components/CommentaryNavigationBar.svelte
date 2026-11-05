@@ -12,6 +12,7 @@
   import { portal } from "../lib/portal";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import ReadAloudTextButton from "./ReadAloudTextButton.svelte";
+  import { getBookListOneColumn } from "../adapters/settings";
 
   export let windowId: string | undefined = undefined;
   export let style: string = "";
@@ -291,12 +292,20 @@
     }
   }
 
+  /** Reader setting: the book dropdown as one list even where two columns fit. */
+  let bookListOneColumn = getBookListOneColumn();
+  function onSettingsUpdated() {
+    bookListOneColumn = getBookListOneColumn();
+  }
+
   onMount(() => {
     document.addEventListener("click", closeDropdowns, true);
+    window.addEventListener("settingsUpdated", onSettingsUpdated);
   });
 
   onDestroy(() => {
     document.removeEventListener("click", closeDropdowns, true);
+    window.removeEventListener("settingsUpdated", onSettingsUpdated);
   });
 </script>
 
@@ -423,7 +432,7 @@
   {#if referenceDropdownOpen && !isEnoch}
     <!-- book-tree carries the two-column layout; .tree-menu is shared with the
          Enoch picker above, which must stay a single block. -->
-    <div class="dropdown-menu tree-menu book-tree commentary-reference-dropdown" use:portal bind:this={referenceMenuEl} out:fadeAway>
+    <div class="dropdown-menu tree-menu book-tree commentary-reference-dropdown" class:one-column={bookListOneColumn} use:portal bind:this={referenceMenuEl} out:fadeAway>
       {#each REFERENCE_COLUMNS as column}
         <div class="book-column book-column-{column.testament}">
           <div class="book-column-title">{column.label}</div>
@@ -1061,5 +1070,33 @@
       border: none;
       box-shadow: none;
     }
+  }
+
+  /* Reader setting "Book list in one column": the same single list as above on
+     any screen. The min-width fits the 7-wide chapter grid, so the box doesn't
+     widen and shrink as books open and close - book names alone are narrower. */
+  .book-tree.one-column {
+    display: block;
+    min-width: min(340px, 92vw);
+  }
+
+  .book-tree.one-column .book-column-nt {
+    background: none;
+    border-left: none;
+    border-top: 12px solid #000;
+  }
+
+  .book-tree.one-column .book-column-nt .book-column-body {
+    justify-content: normal;
+  }
+
+  .book-tree.one-column .chapters-container,
+  .book-tree.one-column .book-column-nt .chapters-container {
+    position: static;
+    width: fit-content;
+    grid-template-columns: repeat(var(--chapter-columns, 7), 40px);
+    justify-content: start;
+    border: none;
+    box-shadow: none;
   }
 </style>

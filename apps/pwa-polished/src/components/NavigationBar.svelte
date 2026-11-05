@@ -130,7 +130,7 @@
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightScope } from "../stores/repeatBulkStore";
   import { REPEAT_COLORS } from "../lib/repeatColors";
-  import { getInterlinearSettings, updateInterlinearSettings, getNavBarPinned, setNavBarPinned, getNavBarClock, getSettings } from "../adapters/settings";
+  import { getInterlinearSettings, updateInterlinearSettings, getNavBarPinned, setNavBarPinned, getNavBarClock, getBookListOneColumn, getSettings } from "../adapters/settings";
   import { localDateStr } from "../stores/clockStore";
   import { wallClockIn } from "../lib/alarm/alarmSchedule";
   import type { InterlinearSettings } from "../adapters/settings";
@@ -329,6 +329,7 @@
   function onSettingsUpdated() {
     interlinearSettings = getInterlinearSettings();
     showClock = getNavBarClock();
+    bookListOneColumn = getBookListOneColumn();
   }
 
   // Scroll nav-content instantly so the button is visible before we measure its position
@@ -1764,6 +1765,8 @@
   let wedgeH = 0;
 
   let showClock = getNavBarClock();
+  /** Reader setting: the book dropdown as one list even where two columns fit. */
+  let bookListOneColumn = getBookListOneColumn();
   /**
    * A harmony follower never shows the time, whatever the setting says.
    *
@@ -3539,7 +3542,7 @@
   {/if}
 
   {#if referenceDropdownOpen}
-    <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned} out:fadeAway>
+    <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned} class:one-column={bookListOneColumn} out:fadeAway>
       {#each REFERENCE_COLUMNS as column}
         <div class="book-column book-column-{column.testament}">
           <div class="book-column-title">{column.label}</div>
@@ -5434,5 +5437,33 @@
       border: none;
       box-shadow: none;
     }
+  }
+
+  /* Reader setting "Book list in one column": the same single list as above on
+     any screen. The min-width fits the 7-wide chapter grid, so the box doesn't
+     widen and shrink as books open and close - book names alone are narrower. */
+  .tree-menu.one-column {
+    display: block;
+    min-width: min(340px, 92vw);
+  }
+
+  .tree-menu.one-column .book-column-nt {
+    background: none;
+    border-left: none;
+    border-top: 8px solid #000;
+  }
+
+  .tree-menu.one-column .book-column-nt .book-column-body {
+    justify-content: normal;
+  }
+
+  .tree-menu.one-column .chapters-container,
+  .tree-menu.one-column .book-column-nt .chapters-container {
+    position: static;
+    width: fit-content;
+    grid-template-columns: repeat(var(--chapter-columns, 7), 40px);
+    justify-content: start;
+    border: none;
+    box-shadow: none;
   }
 </style>

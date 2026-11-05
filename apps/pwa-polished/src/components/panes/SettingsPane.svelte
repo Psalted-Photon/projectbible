@@ -173,6 +173,7 @@
   let showOtQuotes: boolean = true;
   let selectionMenu: 'classic' | 'radial' = 'radial';
   let crumbTap: 'auto' | 'manual' = 'auto';
+  let bookListOneColumn: boolean = false;
   let measureUnits: 'us' | 'metric' = 'us';
   // Moved here from Profile → Settings. Empty means not set.
   let defaultOT = "";
@@ -285,6 +286,7 @@
       showOtQuotes,
       selectionMenu,
       crumbTap,
+      bookListOneColumn,
       measureUnits,
       // "" rather than left out, so Not set reaches the account's other
       // devices too. The old single setting goes now that the pair is set.
@@ -629,6 +631,7 @@
     showOtQuotes = settings.showOtQuotes !== false;
     selectionMenu = settings.selectionMenu === 'classic' ? 'classic' : 'radial';
     crumbTap = settings.crumbTap === 'manual' ? 'manual' : 'auto';
+    bookListOneColumn = settings.bookListOneColumn === true;
     measureUnits = settings.measureUnits === 'metric' ? 'metric' : 'us';
     defaultOT = settings.dailyDriverEnglishOT || "";
     defaultNT = settings.dailyDriverEnglishNT || "";
@@ -949,6 +952,7 @@
     showOtQuotes;
     selectionMenu;
     crumbTap;
+    bookListOneColumn;
     measureUnits;
     defaultOT;
     defaultNT;
@@ -1250,6 +1254,13 @@
           <option value="auto">Go there and clear the ones after it (Auto)</option>
           <option value="manual">Go there and keep the ones after it, faded (Manual)</option>
         </select>
+      </label>
+    </div>
+
+    <div class="setting-group">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={bookListOneColumn} />
+        <span class="label-text">Book list in one column on wide screens too</span>
       </label>
     </div>
 

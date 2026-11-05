@@ -237,6 +237,9 @@ export interface UserSettings {
   // What tapping a breadcrumb does with the crumbs after it. 'auto' drops them,
   // as a tap always used to; 'manual' keeps them, faded, to go forward again.
   crumbTap?: 'auto' | 'manual'; // default 'auto' (synced)
+  // The navbar's book dropdown as one top-to-bottom list on every screen, the
+  // way upright phones always show it, instead of OT and NT side by side.
+  bookListOneColumn?: boolean; // default false (synced)
   themedTitles?: boolean; // Theme-colored 3D shadow on reader titles/headings (default true)
   measureUnits?: 'us' | 'metric'; // What a tapped cubit or shekel is converted into (default 'us', synced)
   interlinear?: InterlinearSettings; // Interlinear view prefs for Greek/Hebrew (default: disabled, gloss-only)
@@ -532,6 +535,11 @@ export function setRecorderPos(pos: { x: number; y: number }): void {
 /** Is the shoulder clock showing? Defaults to on. */
 export function getNavBarClock(): boolean {
   return getSettings().navBarClock !== false;
+}
+
+/** Is the book dropdown one column on every screen? Defaults to off. */
+export function getBookListOneColumn(): boolean {
+  return getSettings().bookListOneColumn === true;
 }
 
 /**
