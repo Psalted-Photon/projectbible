@@ -1,6 +1,15 @@
+<script lang="ts" context="module">
+  /** The list as it was left: which tab, which sort, which category groups folded. */
+  export interface SavedListView {
+    tab: 'verses' | 'notes';
+    sort: 'recent' | 'bible' | 'categories';
+    folded: string[];
+  }
+</script>
+
 <script lang="ts">
   import { CaretDown, PencilSimple } from "phosphor-svelte";
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount, tick, createEventDispatcher } from 'svelte';
   import { get } from 'svelte/store';
   import { navigationStore } from '../stores/navigationStore';
   import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
@@ -15,19 +24,25 @@
   import { reveal } from '../lib/motion';
   import { getBookColor } from '../lib/bibleData';
 
-  const dispatch = createEventDispatcher<{ close: void }>();
+  /** The list a crumb back to Profile is putting back. Read once, as this mounts. */
+  export let initialView: SavedListView | null = null;
+  /** What a link's crumb carries, given this list as it is now, so walking it back reopens Profile here. */
+  export let crumbOrigin: ((view: SavedListView) => unknown) | null = null;
+
+  // `ready` fires once both lists are on the page, for Profile to put its scroll back.
+  const dispatch = createEventDispatcher<{ close: void; ready: void }>();
 
   const userDataStore = syncedUserDataStore;
 
   // ─── sub-tab state ──────────────────────────────────────────────────────────
-  type SubTab = 'verses' | 'notes';
-  let activeTab: SubTab = 'verses';
+  type SubTab = SavedListView['tab'];
+  let activeTab: SubTab = initialView?.tab ?? 'verses';
 
   // ─── sort state ─────────────────────────────────────────────────────────────
   // 'categories' groups Highlights by the color code; Notes have no marks,
   // so on that tab it reads as Bible order.
-  type SortOrder = 'recent' | 'bible' | 'categories';
-  let sortOrder: SortOrder = 'recent';
+  type SortOrder = SavedListView['sort'];
+  let sortOrder: SortOrder = initialView?.sort ?? 'recent';
 
   // ─── data ───────────────────────────────────────────────────────────────────
   interface SavedVerse {
@@ -99,7 +114,7 @@
         .filter((g) => g.verses.length > 0)
     : [];
 
-  let folded = new Set<string>();
+  let folded = new Set<string>(initialView?.folded ?? []);
   function toggleFold(key: string) {
     if (folded.has(key)) folded.delete(key);
     else folded.add(key);
@@ -208,14 +223,16 @@
     }
   }
 
-  onMount(() => {
-    loadSavedVerses();
-    loadNotes();
+  onMount(async () => {
+    await Promise.all([loadSavedVerses(), loadNotes()]);
+    await tick();
+    dispatch('ready');
   });
 
   // ─── navigation ──────────────────────────────────────────────────────────────
   function navigateTo(book: string, chapter: number, verse: number) {
-    navigationStore.pushHistory(get(navigationStore), 'notes');
+    const view: SavedListView = { tab: activeTab, sort: sortOrder, folded: [...folded] };
+    navigationStore.pushHistory(get(navigationStore), 'notes', crumbOrigin?.(view));
     const at = landingIn($navigationStore.translation, { book, chapter, verse });
     navigationStore.navigateTo($navigationStore.translation, book, at.chapter, at.verse);
     dispatch('close');

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { profileModalStore } from '../stores/profileModalStore';
   import { parallelStore } from '../stores/parallelStore';
   import { userProfileStore } from '../stores/userProfileStore';
   import { supabaseAuthService } from '../services/SupabaseAuthService';
   import { passwordRecovery, authLinkError, finishPasswordRecovery } from '../stores/passwordRecoveryStore';
   import { readingPlanModalStore } from '../stores/readingPlanModalStore';
-  import { navigationStore } from '../stores/navigationStore';
+  import { navigationStore, pendingRestore } from '../stores/navigationStore';
   import { readingProgressStore, getChapterKey } from '../stores/ReadingProgressStore';
   import { readingProgressVersion } from '../stores/readingProgressVersionStore';
   import { getDaysAheadBehind, calculateStreak, planDayDateStr } from '@projectbible/core';
@@ -14,7 +14,7 @@
   import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
   import { pendingWork, describePending, type PendingWork } from '../lib/sync/clearPersonalData';
   import { localDateStr, todayStore } from '../stores/clockStore';
-  import SavedVersesPanel from './SavedVersesPanel.svelte';
+  import SavedVersesPanel, { type SavedListView } from './SavedVersesPanel.svelte';
   import JournalCalendar from './JournalCalendar.svelte';
   import YourDataPanel from './YourDataPanel.svelte';
   import BrandSpinner from './BrandSpinner.svelte';
@@ -28,7 +28,74 @@
   $: isOpen = $profileModalStore;
 
   type TabKey = 'reading' | 'notes' | 'journal' | 'settings';
+  const TABS: TabKey[] = ['reading', 'notes', 'journal', 'settings'];
   let currentTab: TabKey = 'reading';
+
+  /** The scrolling box: everything under the header scrolls with it. */
+  let contentEl: HTMLDivElement | null = null;
+
+  /**
+   * What a link's crumb carries out of Profile, so walking it back reopens
+   * Profile on the same tab, scrolled where it was — and on Highlights/Notes,
+   * the same list, sort and folded groups.
+   */
+  interface ProfileOrigin {
+    surface: 'profile';
+    tab: TabKey;
+    scrollTop: number;
+    saved?: SavedListView;
+  }
+
+  function profileOrigin(saved?: SavedListView): ProfileOrigin {
+    const origin: ProfileOrigin = { surface: 'profile', tab: currentTab, scrollTop: contentEl?.scrollTop ?? 0 };
+    if (saved) origin.saved = saved;
+    return origin;
+  }
+
+  /** The Highlights/Notes list a crumb is putting back, handed over as it mounts. */
+  let restoringSaved: SavedListView | null = null;
+  /** The scroll a crumb is putting back, once the tab's content is on the page. */
+  let restoreScrollTop: number | null = null;
+
+  // The crumb back from a Profile link. Profile is closed when it is tapped, so
+  // this opens it on the tab it was left on. The scroll waits for that tab's
+  // content: Highlights/Notes says when its lists are in (onSavedReady), and
+  // the reading plan card is read first.
+  $: {
+    const p = $pendingRestore as Partial<ProfileOrigin> | null;
+    if (p?.surface === 'profile') {
+      pendingRestore.set(null);
+      void restoreProfile(p);
+    }
+  }
+
+  async function restoreProfile(p: Partial<ProfileOrigin>) {
+    const tab = p.tab && TABS.includes(p.tab) ? p.tab : 'reading';
+    currentTab = tab;
+    restoringSaved = tab === 'notes' ? p.saved ?? null : null;
+    restoreScrollTop = p.scrollTop ?? 0;
+    profileModalStore.open();
+    if (tab === 'notes') return;
+    if (tab === 'reading') await loadReadingPlan();
+    await tick();
+    if (currentTab === tab) applyRestoreScroll();
+  }
+
+  function applyRestoreScroll() {
+    if (restoreScrollTop != null && contentEl) contentEl.scrollTop = restoreScrollTop;
+    restoreScrollTop = null;
+    restoringSaved = null;
+  }
+
+  function onSavedReady() {
+    if (restoreScrollTop != null && currentTab === 'notes') applyRestoreScroll();
+  }
+
+  // Closed before the content came in: a later, ordinary open starts fresh.
+  $: if (!isOpen) {
+    restoreScrollTop = null;
+    restoringSaved = null;
+  }
 
   let authMode: 'login' | 'signup' | 'forgot' | 'sent' = 'login';
   let authEmail = '';
@@ -666,7 +733,7 @@
     // Going through navigateTo makes history behave like every other link, and
     // the mark goes on verse 1 without a scroll target so the chapter title
     // stays in view.
-    navigationStore.pushHistory($navigationStore, 'history');
+    navigationStore.pushHistory($navigationStore, 'history', profileOrigin());
     navigationStore.navigateTo($navigationStore.translation, book, chapter);
     navigationStore.setLinkHighlight(book, chapter, 1);
     profileModalStore.close();
@@ -698,7 +765,7 @@
   <div class="modal-overlay" class:over-parallel={$parallelStore.active} on:click={close}>
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="modal-content" on:click|stopPropagation>
+    <div class="modal-content" bind:this={contentEl} on:click|stopPropagation>
       <div class="modal-header">
         <div class="profile-header">
           <div class="profile-icon" aria-hidden="true">
@@ -994,7 +1061,12 @@
               {/if}
             </div>
           {:else if currentTab === 'notes'}
-            <SavedVersesPanel on:close={close} />
+            <SavedVersesPanel
+              on:close={close}
+              on:ready={onSavedReady}
+              initialView={restoringSaved}
+              crumbOrigin={(view) => profileOrigin(view)}
+            />
           {:else if currentTab === 'journal'}
             <JournalCalendar on:close={close} />
           {:else}
