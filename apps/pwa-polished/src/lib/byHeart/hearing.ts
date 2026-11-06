@@ -233,6 +233,14 @@ export class LiveHearing {
     return words.map((w) => ({ ...w, start: w.start + this.streamFrom, end: w.end + this.streamFrom }));
   }
 
+  /**
+   * Starts a fresh stream at the next feed, for a new stretch. Whistle slows as
+   * one stream grows, so a game that moves on to new words can start it over.
+   */
+  fresh(): void {
+    if (!this.closed) this.freshDue = true;
+  }
+
   /** Ends this stream, hearing what it still held. The next feed starts a new one. */
   private async startFresh(): Promise<void> {
     this.freshDue = false;

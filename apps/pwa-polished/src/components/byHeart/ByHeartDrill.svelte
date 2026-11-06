@@ -9,6 +9,15 @@
    * The clock only runs while the mic is listening, so holding the button down to
    * speak is as fair as leaving it on.
    *
+   * A line under the blanks says what the mic is doing: Listening, Thinking while
+   * the user speaks or Whistle is still unsure, and the wrong word it heard, so a
+   * word isn't said twice for want of knowing it was heard. It only reads what
+   * each reply already carries, so it costs Whistle nothing. A word already on
+   * screen before the blank, said again, isn't a wrong one.
+   *
+   * Each phrase starts Whistle on a fresh stream while the answer is up, as one
+   * stream slows the longer it runs and a run is one long take.
+   *
    * Every phrase is kept as it goes. The end screen shows them as tiles, word by
    * word, and the finished run rides on the session so it survives unfolding.
    */
@@ -30,7 +39,8 @@
   import { createGameMic } from '../../lib/byHeart/gameMic';
   import { Recitation } from '../../lib/byHeart/recitation';
   import { scoreColor } from '../../lib/byHeart/scoring';
-  import { upcomingWords } from '../../lib/byHeart/wordMatch';
+  import { heardAs, splitWords, upcomingWords } from '../../lib/byHeart/wordMatch';
+  import type { TimedWord } from '../../lib/voice/engine';
   import { getBookColor, translationLabel } from '../../lib/bibleData';
   import { portal } from '../../lib/portal';
   import { localDateStr } from '../../stores/clockStore';
@@ -47,6 +57,13 @@
   const TICK_MS = 100;
   /** Under this the clock turns red. */
   const LOW_SECONDS = 10;
+  /**
+   * How long a wrong word has to stand before it shows, as a guess changing can
+   * flash one. Half a game's beat, as the clock is running. Thinking shows meanwhile.
+   */
+  const WRONG_BEAT_MS = 600;
+  /** How long after the mic last heard speech it still says Thinking. */
+  const SPEECH_HOLD_MS = 700;
 
   let verses: DBByHeartVerse[] = [];
   let phase: 'loading' | 'none' | 'ready' | 'playing' | 'over' = 'loading';
@@ -63,6 +80,19 @@
   let answerTimer: ReturnType<typeof setTimeout> | null = null;
   let ticker: ReturnType<typeof setInterval> | null = null;
   let lastTick = 0;
+
+  // What the line under the blanks goes by, kept up by each reply and the clock's tick.
+  /** The mic heard speech a moment ago. */
+  let speaking = false;
+  /** Whistle has heard words past the place it can't settle yet. */
+  let unsure = false;
+  /** The last wrong word heard on the blank, and when, waiting out its beat. */
+  let wrongWord = '';
+  let wrongSince = 0;
+  /** The wrong word on show, once it stood for its beat. */
+  let heardWrong = '';
+  /** What was heard instead, on a miss by wrong words. */
+  let missHeard = '';
 
   // Audio stays paused for as long as the game is up, a timer or alarm starting
   // it in the meantime included.
@@ -81,13 +111,50 @@
       }
       rec.update(u);
       cursor = rec.cursor;
-      if (rec.done) answer('right');
-      else if (rec.wrongNow.filter((w) => mic.wasSpoken(w)).length >= WRONG_WORDS) answer('miss');
+      unsure = rec.unsure;
+      if (rec.done) {
+        answer('right');
+        return;
+      }
+      const wrong = spokenWrong(rec);
+      if (wrong.length >= WRONG_WORDS) answer('miss', wrong.slice(-3).map(shownWord).join(' '));
+      else watchWrong(wrong);
     },
   });
 
+  /**
+   * Wrong words someone really said on the blank the user is on. A word already
+   * on screen before it, said again (the end of the phrase read over, or a word
+   * just got said twice), isn't one.
+   */
+  function spokenWrong(r: Recitation): TimedWord[] {
+    const before = [...splitWords(prompt?.phrase), ...r.words.slice(0, r.cursor)];
+    return r.wrongNow.filter((w) => mic.wasSpoken(w) && !before.some((word) => heardAs(w.word, word)));
+  }
+
+  /** A heard word as it shows, without the recognizer's punctuation. */
+  const shownWord = (w: TimedWord) => w.word.trim().replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, '');
+
+  /** A new wrong word starts its beat. None left (a word passed, or a new take) clears what showed. */
+  function watchWrong(wrong: TimedWord[]) {
+    const text = wrong.length ? shownWord(wrong[wrong.length - 1]) : '';
+    if (text === wrongWord) return;
+    wrongWord = text;
+    wrongSince = performance.now();
+    if (!text) heardWrong = '';
+  }
+
+  function clearFeedback() {
+    speaking = false;
+    unsure = false;
+    wrongWord = '';
+    heardWrong = '';
+    missHeard = '';
+  }
+
   function nextPrompt() {
     answered = null;
+    clearFeedback();
     prompt = drillPrompt(verses, prompt?.verseId ?? null);
     // Carries on with the mic open, and what was heard before this phrase doesn't count.
     rec = prompt ? new Recitation(prompt.answer, {}, rec ?? undefined) : null;
@@ -99,10 +166,14 @@
     if (prompt) played = [...played, { ...prompt, said: rec?.cursor ?? 0, cutOff }];
   }
 
-  function answer(how: 'right' | 'miss') {
+  /** `heard` is what was heard instead, on a miss by wrong words. */
+  function answer(how: 'right' | 'miss', heard = '') {
     record(false);
     answered = how;
+    missHeard = heard;
     cursor = rec?.words.length ?? 0;
+    // The next phrase is heard on a fresh stream, started while this answer is up.
+    mic.fresh();
     if (how === 'right') {
       right += 1;
       clock += DRILL_CLOCK.right;
@@ -124,9 +195,39 @@
     const passed = (now - lastTick) / 1000;
     lastTick = now;
     if (phase !== 'playing' || answered || !$gameTalk?.on || $gameTalk.starting) return;
+    speaking = now - mic.speechAt() < SPEECH_HOLD_MS;
+    if (wrongWord && heardWrong !== wrongWord && now - wrongSince >= WRONG_BEAT_MS) heardWrong = wrongWord;
     clock -= passed;
     if (clock <= 0) finish();
   }
+
+  type Feedback = { text: string; kind: 'quiet' | 'busy' | 'again' | 'lost' } | null;
+
+  /** The line under the blanks. */
+  function feedbackOf(
+    how: typeof answered,
+    on: boolean,
+    starting: boolean,
+    busy: boolean,
+    again: string,
+    lost: string,
+  ): Feedback {
+    if (how) return how === 'miss' && lost ? { text: `Heard “${lost}”`, kind: 'lost' } : null;
+    if (!on) return { text: 'The clock waits until the mic is on.', kind: 'quiet' };
+    if (starting) return { text: 'Starting the mic…', kind: 'quiet' };
+    if (busy) return { text: 'Thinking…', kind: 'busy' };
+    if (again) return { text: `Heard “${again}”. Try again`, kind: 'again' };
+    return { text: 'Listening…', kind: 'quiet' };
+  }
+
+  $: feedback = feedbackOf(
+    answered,
+    !!$gameTalk?.on,
+    !!$gameTalk?.starting,
+    speaking || unsure || (!!wrongWord && heardWrong !== wrongWord),
+    heardWrong,
+    missHeard,
+  );
 
   function start() {
     if (!micReadyToListen(start)) return;
@@ -294,15 +395,23 @@
             <span class="blank">{i < cursor ? word : ' '}</span>
           {/each}
         </p>
+        <!-- Always there, so nothing moves as it changes. -->
+        <p
+          class="status"
+          class:quiet={feedback?.kind === 'quiet'}
+          class:busy={feedback?.kind === 'busy'}
+          class:again={feedback?.kind === 'again'}
+          class:lost={feedback?.kind === 'lost'}
+          aria-live="polite"
+        >
+          {feedback?.text ?? ''}
+        </p>
         <p class="reference">
           {prompt.reference}
           {@render translationTag(prompt.translation)}
         </p>
         {#if !answered}
           <button class="skip" on:click={() => answer('miss')}>Skip</button>
-        {/if}
-        {#if !$gameTalk?.on}
-          <p class="say small">The clock waits until the mic is on.</p>
         {/if}
       {/if}
     </div>
@@ -423,6 +532,31 @@
   .blanks.lost .blank {
     border-color: #ef4444;
     color: var(--word-lost);
+  }
+
+  .status {
+    min-height: 1.5em;
+    margin: 0;
+    font-size: 0.95em;
+    line-height: 1.5;
+  }
+
+  .status.quiet {
+    opacity: 0.6;
+  }
+
+  .status.busy {
+    opacity: 0.85;
+  }
+
+  .status.again {
+    color: #fbbf24;
+    font-weight: 600;
+  }
+
+  .status.lost {
+    color: var(--word-lost);
+    font-weight: 600;
   }
 
   .reference {

@@ -64,6 +64,11 @@ export class Recitation {
     return this.cursor >= this.words.length && !this.refStart && !this.refEnd;
   }
 
+  /** Heard words past the place are still a guess, so whether they're right isn't known yet. */
+  get unsure(): boolean {
+    return this.settled.length + splitWords(this.pending).length > Math.max(this.place.next, this.settled.length);
+  }
+
   /** Changes whenever anything was done, for noticing when nothing is. */
   get mark(): number {
     return this.cursor * 3 + (this.refStart ? 0 : 1) + (this.refEnd ? 0 : 1);

@@ -36,6 +36,10 @@ export interface GameHearing {
 export interface GameMicControl extends GameMic {
   /** Whether someone was speaking when the last take heard this word. */
   wasSpoken: (word: TimedWord) => boolean;
+  /** When this take last heard someone speaking, in performance.now() time, or 0 for not yet. */
+  speechAt: () => number;
+  /** Whistle starts over on a fresh stream at its next feed, for new words. */
+  fresh: () => void;
   /** When what the last take still held has been heard. */
   closed: () => Promise<void>;
   /** The game's over: let go of everything, without hearing what's left. */
@@ -47,6 +51,8 @@ export function createGameMic(o: GameHearing): GameMicControl {
   let last: LiveHearing | null = null;
   let closing: Promise<void> = Promise.resolve();
   let lastSound = 0;
+  /** Only real sound, unlike lastSound, which opening the mic also sets. */
+  let lastSpeech = 0;
 
   function letGo(): void {
     take = null;
@@ -72,7 +78,7 @@ export function createGameMic(o: GameHearing): GameMicControl {
       onLevel: (level) => {
         if (take !== t) return;
         const now = performance.now();
-        if (level > SOUND_LEVEL) lastSound = now;
+        if (level > SOUND_LEVEL) lastSound = lastSpeech = now;
         if (now - lastSound >= SILENCE_CLOSE_MS) {
           close();
           return;
@@ -83,6 +89,7 @@ export function createGameMic(o: GameHearing): GameMicControl {
     take = t;
     last = t;
     lastSound = performance.now();
+    lastSpeech = 0;
     stayAwake(AWAKE);
     gameTalk.update((s) => s && { ...s, on: true, starting: true, level: 0 });
     // After the last take has let go of Whistle, so the two streams don't run together.
@@ -113,6 +120,8 @@ export function createGameMic(o: GameHearing): GameMicControl {
     close,
     isOpen: () => take !== null,
     wasSpoken: (word) => last?.wasSpoken(word) ?? false,
+    speechAt: () => (take ? lastSpeech : 0),
+    fresh: () => take?.fresh(),
     closed: () => closing,
     dispose: () => {
       const t = take;
