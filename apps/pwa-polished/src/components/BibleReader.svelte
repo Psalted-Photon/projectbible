@@ -853,6 +853,12 @@
         chapter: number;
         verse: number;
         tab: 'references' | 'commentary';
+        /**
+         * The tab showing when you left, which is not the one it opened on if
+         * you switched. `tab` stays the opened one, so the icon you tapped is
+         * the one breathing again. Missing on crumbs saved before it was kept.
+         */
+        shownTab?: 'references' | 'commentary';
         author: string;
         /** How far down the panel was read, so it comes back at that spot. */
         scrollTop: number;
@@ -867,6 +873,7 @@
   let annotationPanelRef: AnnotationPanel | null = null;
   let bookIntroPanelRef: BookIntroPanel | null = null;
   let _reopenAnnotationScrollTop = 0;
+  let _reopenAnnotationShownTab: 'references' | 'commentary' = 'commentary';
 
   /**
    * Is this icon the one whose panel is currently open?
@@ -893,24 +900,41 @@
     );
   }
 
-  function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
-    const { book, chapter, verse } = e.detail;
-    const origin: ReaderOrigin = {
+  type AnnotationOrigin = Extract<ReaderOrigin, { surface: 'annotation' }>;
+
+  /**
+   * The commentary panel as it is now, for a crumb to save: the tab showing
+   * (asked of the panel, since switching tabs happens inside it) and how far
+   * down it was read.
+   */
+  function annotationOrigin(): AnnotationOrigin {
+    return {
       surface: 'annotation',
       book: annotationPanelBook,
       chapter: annotationPanelChapter,
       verse: annotationPanelVerse,
       tab: annotationPanelTab,
+      shownTab: annotationPanelRef?.currentTab() ?? annotationPanelTab,
       // Kept so the badge you actually tapped can be identified on the way back.
       author: annotationPanelTargetAuthor,
       scrollTop: annotationPanelRef?.bodyScrollTop() ?? 0,
     };
+  }
+
+  /** The crumb's icon is for the tab that comes back. */
+  function annotationCrumbKind(origin: AnnotationOrigin): CrumbKind {
+    return (origin.shownTab ?? origin.tab) === 'commentary' ? 'commentary' : 'crossref';
+  }
+
+  function handleAnnotationNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
+    const { book, chapter, verse } = e.detail;
+    const origin = annotationOrigin();
     annotationPanelOpen = false;
     // Anchored to the verse the panel was opened on. The panel stays open
     // while the reader scrolls, so by the time a link inside it is tapped the
     // reader can be a long way from the icon that opened it.
     pushCrumb(
-      annotationPanelTab === 'commentary' ? 'commentary' : 'crossref',
+      annotationCrumbKind(origin),
       origin,
       { book: annotationPanelBook, chapter: annotationPanelChapter, verse: annotationPanelVerse },
     );
@@ -946,6 +970,7 @@
     _reopenAnnotationTab = origin.tab;
     _reopenAnnotationAuthor = origin.author;
     _reopenAnnotationScrollTop = origin.scrollTop ?? 0;
+    _reopenAnnotationShownTab = origin.shownTab ?? origin.tab;
     // Same problem for the commentary panel: with its chapter already on
     // screen and its annotations already loaded, open it now. Otherwise the
     // chapter load opens it once the annotations are in.
@@ -969,17 +994,9 @@
       priority: 1,
       capture: () => {
         if (annotationPanelOpen) {
-          const origin: ReaderOrigin = {
-            surface: 'annotation',
-            book: annotationPanelBook,
-            chapter: annotationPanelChapter,
-            verse: annotationPanelVerse,
-            tab: annotationPanelTab,
-            author: annotationPanelTargetAuthor,
-            scrollTop: annotationPanelRef?.bodyScrollTop() ?? 0,
-          };
+          const origin = annotationOrigin();
           return {
-            kind: annotationPanelTab === 'commentary' ? 'commentary' : 'crossref',
+            kind: annotationCrumbKind(origin),
             origin,
             anchor: { book: annotationPanelBook, chapter: annotationPanelChapter, verse: annotationPanelVerse },
           };
@@ -3552,21 +3569,23 @@
   }
 
   /**
-   * Reopen the panel a crumb came from, at the spot in it you had read to.
-   * The panel scrolls itself to the top (or to an author) as it opens, so the
-   * saved offset is applied after that has settled.
+   * Reopen the panel a crumb came from, on the tab that was showing and at the
+   * spot in it you had read to. Opening queues the panel's own scroll to the
+   * top (or to an author), which used to run after the saved spot was put back
+   * and wipe it out; once it is open, restoreView calls that scroll off. A
+   * saved spot at the very top goes through it too, or the author jump wins.
    */
   async function reopenAnnotationFromCrumb(book: string, chapter: number) {
     const verse = _reopenAnnotationVerse;
     if (verse === null) return;
     const top = _reopenAnnotationScrollTop;
+    const shown = _reopenAnnotationShownTab;
     openAnnotationPanel(verse, _reopenAnnotationTab, book, chapter, _reopenAnnotationAuthor);
     _reopenAnnotationVerse = null;
     _reopenAnnotationAuthor = '';
     _reopenAnnotationScrollTop = 0;
-    if (!top) return;
     await tick();
-    annotationPanelRef?.scrollBodyTo(top);
+    await annotationPanelRef?.restoreView(shown, top);
   }
 
   function openAnnotationPanel(verse: number, tab: "references" | "commentary", book = currentBook, chapter = currentChapter, targetAuthor = '') {

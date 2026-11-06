@@ -83,8 +83,33 @@
     return bodyEl?.scrollTop ?? 0;
   }
 
-  export function scrollBodyTo(top: number): void {
+  /** Which tab is showing: the one you switched to, not the one it opened on. */
+  export function currentTab(): "references" | "commentary" {
+    return activeTab;
+  }
+
+  /**
+   * Put the panel back the way a crumb saved it, on the tab that was showing
+   * and at the spot read to. Called once it has opened, by which time opening
+   * has queued its own scroll to the top (or to an author); that is called
+   * off here, because it ran after the saved spot and wiped it out.
+   */
+  export async function restoreView(tab: "references" | "commentary", top: number): Promise<void> {
+    scrollTurn++;
+    activeTab = tab;
+    await tick();
     if (bodyEl) bodyEl.scrollTop = top;
+  }
+
+  /** Bumped by each scroll queued below, and by a crumb putting the panel back, so only the latest one runs. */
+  let scrollTurn = 0;
+
+  /** Scroll to the top, or to an author, once the newly opened content is on the page. */
+  function queueScrollToTarget(author: string) {
+    const turn = ++scrollTurn;
+    tick().then(() => {
+      if (turn === scrollTurn) scrollToTarget(author);
+    });
   }
 
   /** Scrolls the panel body to the top, then (if an author is given) into that author's section. */
@@ -110,7 +135,7 @@
       displayTskEntries = tskEntries;
       displayCommentaryEntries = commentaryEntries;
       // Bug 1: always reset scroll; Bug 2: jump to clicked author if provided
-      tick().then(() => scrollToTarget(targetAuthor));
+      queueScrollToTarget(targetAuthor);
     } else if (!open && lastPropsKey !== '') {
       lastPropsKey = '';
       lastTargetAuthor = '';
@@ -121,7 +146,7 @@
   // Secondary reactive: same verse but a different author icon was clicked
   $: if (open && targetAuthor !== lastTargetAuthor) {
     lastTargetAuthor = targetAuthor;
-    tick().then(() => scrollToTarget(targetAuthor));
+    queueScrollToTarget(targetAuthor);
   }
 
   /** The translation the pill's verse was read in. */
