@@ -44,6 +44,7 @@
     shelfName,
     type StrongsEntryData,
     type EntryTab,
+    type EntryView,
   } from "../../lib/strongs/entry";
   import CloseX from "../CloseX.svelte";
 
@@ -66,6 +67,10 @@
   export let onSnapshot: ((snap: Snapshot) => void) | null = null;
   export let initialTab: EntryTab | null = null;
   export let initialScrollTop = 0;
+  /** The entry the saved scroll and view were measured on. */
+  export let initialScrollFor: string | null = null;
+  /** How its tabs stood: edition, open form and books, verses followed. */
+  export let initialView: EntryView | null = null;
   /** Entries walked through on the way to this one, for Back. */
   export let initialTrail: TrailStop[] = [];
   /** Open on the contents already searched for this — an English word that
@@ -73,7 +78,7 @@
   export let search: string | null = null;
 
   type TrailStop = { id: string; name: string };
-  type Snapshot = { strongsId: string; tab: EntryTab; scrollTop: number; trail: TrailStop[] };
+  type Snapshot = { strongsId: string; tab: EntryTab; scrollTop: number; trail: TrailStop[]; view?: EntryView };
 
   $: docked = !!windowId;
   /** The reader a verse tap goes to, and so the English shown under each preview.
@@ -88,8 +93,14 @@
   /** A window saved on the old Arc tab opens on Spread, the nearest one left. */
   let activeTab: EntryTab = (initialTab as string) === "arc" ? "spread" : initialTab ?? "definition";
   let bodyEl: HTMLDivElement | null = null;
-  /** The saved scroll belongs to the first entry shown, not to the next one. */
-  let restoreScroll = initialScrollTop;
+  let entryPane: StrongsEntry | null = null;
+  /** The saved place belongs to the entry it was measured on, and only to the
+   *  first entry shown: following a link from there starts at the top. */
+  let comeBack: { id: string | null; scrollTop: number; view: EntryView } | null =
+    initialScrollTop || initialView ? { id: initialScrollFor, scrollTop: initialScrollTop, view: initialView ?? {} } : null;
+  /** Handed to the entry coming back, then spent. */
+  let arrivalView: EntryView | null = null;
+  let restoreScroll = 0;
 
   /** Which side is up: the contents, or an entry. */
   let showContents = strongsId == null;
@@ -113,9 +124,22 @@
     const found = await loadStrongsEntry(id);
     // A slower lookup must not land over a word opened since.
     if (strongsId !== id) return;
+    // Only where it was measured. Restoring one entry's offset onto another's
+    // lands you halfway down a stranger.
+    const back = comeBack && found && (!comeBack.id || comeBack.id === found.id) ? comeBack : null;
+    comeBack = null;
+    arrivalView = back?.view ?? null;
+    restoreScroll = back?.scrollTop ?? 0;
     entry = found;
     loading = false;
+    if (back) return;
     await tick();
+    if (bodyEl) bodyEl.scrollTop = 0;
+  }
+
+  /** One coming back waits for its tab's lists and verse text, and the entry
+   *  says when: putting the offset back over a half-filled tab lands short. */
+  function entryFilled() {
     if (bodyEl) bodyEl.scrollTop = restoreScroll;
     restoreScroll = 0;
   }
@@ -363,7 +387,13 @@
   /** Everything needed to put this entry back exactly as it is now. */
   export function viewSnapshot(): Snapshot | null {
     if (!entry) return null;
-    return { strongsId: entry.id, tab: activeTab, scrollTop: bodyEl?.scrollTop ?? 0, trail };
+    return {
+      strongsId: entry.id,
+      tab: activeTab,
+      scrollTop: bodyEl?.scrollTop ?? 0,
+      trail,
+      view: entryPane?.viewState(),
+    };
   }
 
   onDestroy(() => {
@@ -464,12 +494,15 @@
         <div class="muted show-late">Loading…</div>
       {:else if entry}
         <StrongsEntry
+          bind:this={entryPane}
           {entry}
           bind:activeTab
           onVerse={goToVerse}
           {readerTranslation}
           onOpenEntry={followEntry}
           onTab={persistTab}
+          initialView={arrivalView}
+          onRestored={entryFilled}
         />
       {:else if strongsId}
         {#await packInstallFinished("lexical").catch(() => false) then installed}

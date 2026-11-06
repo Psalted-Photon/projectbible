@@ -66,6 +66,20 @@ export async function loadHebrewRelated(id: string): Promise<RelatedWords | unde
 export type EntryTab = 'definition' | 'forms' | 'occurrences' | 'spread' | 'related';
 
 /**
+ * How an entry's tabs stood, so a crumb or a work-tab switch puts them back:
+ * the edition studied (null is All; left out when none was picked yet), the
+ * open form, the verses already followed, and which books and testaments the
+ * verse list on screen had open.
+ */
+export type EntryView = {
+  source?: string | null;
+  openForm?: string | null;
+  visited?: string[];
+  books?: string[];
+  corpora?: string[];
+};
+
+/**
  * The entry for an id, kept under the id asked for. A split meaning with no
  * row of its own falls back to its number's row, but stays named as asked, so
  * its usage still counts that one meaning.

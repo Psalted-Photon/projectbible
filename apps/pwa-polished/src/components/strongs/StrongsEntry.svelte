@@ -1,5 +1,6 @@
 <script lang="ts">
   import { CaretRight } from "phosphor-svelte";
+  import { tick } from "svelte";
   import { get } from "svelte/store";
   import StrongsVerseList from "../StrongsVerseList.svelte";
   import EnglishChip from "../EnglishChip.svelte";
@@ -27,6 +28,7 @@
     parseKjvUsage,
     type StrongsEntryData,
     type EntryTab,
+    type EntryView,
     type Meaning,
   } from "../../lib/strongs/entry";
   import type { RelatedWords } from "../../adapters/lexicon-lookup";
@@ -50,6 +52,10 @@
   export let onTab: ((tab: EntryTab) => void) | null = null;
   /** The translation a verse tap lands in, which picks the English under each preview. */
   export let readerTranslation: string | null = null;
+  /** How the tabs stood when this entry was last left. Put back, and once the
+   *  tab has filled in, `onRestored` lets the frame put its scroll back. */
+  export let initialView: EntryView | null = null;
+  export let onRestored: (() => void) | null = null;
 
   function selectTab(tab: EntryTab) {
     activeTab = tab;
@@ -113,13 +119,19 @@
   // meanings are listed, so either can be studied on its own.
   let meanings: Meaning[] = [];
   let meaningsFor = "";
+  let meaningsReady = false;
   $: if (entry.id !== meaningsFor) {
     meaningsFor = entry.id;
     meanings = [];
+    meaningsReady = false;
     const id = entry.id;
-    loadMeanings(id).then((found) => {
-      if (meaningsFor === id) meanings = found;
-    });
+    loadMeanings(id)
+      .catch(() => [] as Meaning[])
+      .then((found) => {
+        if (meaningsFor !== id) return;
+        meanings = found;
+        meaningsReady = true;
+      });
   }
 
   // A different word, whether by a related link or the host swapping it:
@@ -132,10 +144,17 @@
   }
 
   function resetUsage() {
+    // A saved view belongs to the entry it was saved on; another word drops it.
+    if (entry.id !== restoreFor) {
+      restoring = false;
+      usageArrival = null;
+      listArrival = null;
+    }
     usage = null;
     usageLoadedFor = "";
     source = null;
-    visitedRefs = new Set();
+    // Coming back, the verses already followed are still dimmed.
+    visitedRefs = new Set(entry.id === restoreFor ? initialView?.visited ?? [] : []);
     openForm = null;
   }
 
@@ -159,7 +178,13 @@
     if (entry.id === id) {
       usage = found;
       usageLoadedFor = id;
-      source = defaultSource(found.sources);
+      // Set with the uses rather than after them: the list opens on the
+      // edition it draws with, and a later switch would close its books.
+      const back = usageArrival;
+      usageArrival = null;
+      const saved = back?.source;
+      source = saved !== undefined && keptSource(saved, found.sources) ? saved : defaultSource(found.sources);
+      if (back?.openForm) openForm = back.openForm;
     } else if (needsUsage) {
       // A slower scan must not land on a word opened since — and that word
       // still needs its own, which waited on this one.
@@ -180,6 +205,65 @@
     const want = isOriginalLanguage(reading) ? reading : greekPartnerFor(reading);
     const match = sources.find((s) => s.toLowerCase() === want);
     return match ?? null;
+  }
+
+  /** A saved edition still on offer. All (null) is, whenever there is a choice. */
+  function keptSource(saved: string | null, sources: string[]): boolean {
+    if (sources.length < 2) return false;
+    return saved === null || sources.includes(saved);
+  }
+
+  // --- Coming back -------------------------------------------------------
+  // The frame's scroll was measured over this tab as it stood, and the tab
+  // fills in after the entry is up: its meanings, the word's uses, a Hebrew
+  // word's related words, the verse text and English of the open books. So the
+  // tab is put back and filled first, and the frame told once it is at full
+  // height. Only for the entry the view was saved on, and only once.
+  const restoreFor = entry.id;
+  let restoring = !!initialView;
+  /** The edition and open form, spent when the uses first load, whichever tab
+   *  that is on. */
+  let usageArrival: EntryView | null = initialView;
+  /** The books of the list on screen, spent once that list is drawn. */
+  let listArrival: { books: string[]; corpora: string[] } | null = initialView
+    ? { books: initialView.books ?? [], corpora: initialView.corpora ?? [] }
+    : null;
+  /** The verse list on screen, on Forms (the open form's) or Occurrences. */
+  let list: StrongsVerseList | null = null;
+
+  $: if (restoring && tabFilled(activeTab, entry, meaningsFor, meaningsReady, usageLoadedFor, hebrewRelatedFor, relatedLoading))
+    finishRestore();
+
+  function tabFilled(tab: EntryTab, e: StrongsEntryData, ..._watched: unknown[]): boolean {
+    if (tab === "definition") return meaningsReady && meaningsFor === e.id;
+    if (tab === "related") return !!e.related || !isRtl(e.language) || (hebrewRelatedFor === e.id && !relatedLoading);
+    return usageLoadedFor === e.id;
+  }
+
+  async function finishRestore() {
+    restoring = false;
+    const id = entry.id;
+    // The tab's rows are on the page, and a list on it has taken its books.
+    await tick();
+    listArrival = null;
+    await list?.opened();
+    if (entry.id !== id) return;
+    await tick();
+    onRestored?.();
+  }
+
+  /** How the tabs stand now, for the frame's snapshot. Before the uses have
+   *  loaded this visit, the edition and form are still the saved ones. */
+  export function viewState(): EntryView {
+    const loaded = usageLoadedFor === entry.id;
+    const showing = activeTab === "forms" || activeTab === "occurrences" ? list?.openState() : null;
+    return {
+      ...(loaded ? { source } : usageArrival?.source !== undefined ? { source: usageArrival.source } : {}),
+      openForm: loaded ? openForm : usageArrival?.openForm ?? null,
+      visited: [...visitedRefs],
+      books: showing?.books ?? [],
+      corpora: showing?.corpora ?? [],
+    };
   }
 
   function handleVerseClick(use: VerseUse) {
@@ -449,6 +533,8 @@
               {#if openForm === f.key}
                 <div class="form-verses" in:reveal>
                   <StrongsVerseList
+                    bind:this={list}
+                    initialOpen={listArrival}
                     uses={f.uses}
                     {rtl}
                     variantBaseline={activeBaseline}
@@ -478,6 +564,8 @@
           <EnglishChip />
         </div>
         <StrongsVerseList
+          bind:this={list}
+          initialOpen={listArrival}
           uses={verseUses}
           {rtl}
           variantBaseline={activeBaseline}

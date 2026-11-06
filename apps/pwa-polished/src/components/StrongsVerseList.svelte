@@ -1,5 +1,6 @@
 <script lang="ts">
   import { CaretRight } from "phosphor-svelte";
+  import { tick } from "svelte";
   /**
    * The verse list shared by the word study's Forms and Occurrences tabs.
    *
@@ -22,6 +23,7 @@
     type Token,
   } from "../lib/strongsUsage";
   import { reveal } from "../lib/motion";
+  import { companionSettled } from "../lib/companion";
   import CompanionLine from "./CompanionLine.svelte";
 
   export let uses: VerseUse[] = [];
@@ -41,6 +43,9 @@
   /** Refs already visited, dimmed on return. Owned by the parent so it survives
    *  switching tabs. */
   export let visited: Set<string> = new Set();
+  /** Books and testaments to have open when the list first draws, in place of
+   *  the usual choice: a crumb or a work-tab switch putting it back as it was. */
+  export let initialOpen: { books: string[]; corpora: string[] } | null = null;
 
   type BookGroup = { book: string; color: string; uses: VerseUse[] };
   type Corpus = { testament: "OT" | "NT"; label: string; count: number; books: BookGroup[] };
@@ -78,6 +83,11 @@
   let expandedCorpora = new Set<string>();
   let expandedBooks = new Set<string>();
 
+  /** Spent on the first draw. */
+  let arrivalOpen = initialOpen;
+  /** Settles once the books opened on arrival show their verse text and English. */
+  let arrived: Promise<void> = Promise.resolve();
+
   // A single book is its own answer: expanding it by hand would be a click that
   // could never go the other way usefully.
   let autoFor = "";
@@ -86,7 +96,14 @@
     if (signature !== autoFor) {
       autoFor = signature;
       expandedCorpora = new Set(corpora.map((c) => c.testament));
-      if (corpora.length === 1 && corpora[0].books.length === 1) {
+      const wanted = arrivalOpen;
+      arrivalOpen = null;
+      if (wanted) {
+        // One testament has no header to close it, so it stays open.
+        if (corpora.length > 1) expandedCorpora = new Set(wanted.corpora);
+        expandedBooks = new Set(wanted.books);
+        arrived = openAgain(corpora);
+      } else if (corpora.length === 1 && corpora[0].books.length === 1) {
         const group = corpora[0].books[0];
         expandedBooks = new Set([bookKey(corpora[0].testament, group.book)]);
         // Opened for you, so it has to be filled for you too — otherwise the one
@@ -98,6 +115,24 @@
     } else {
       fillOpenBooks(corpora);
     }
+  }
+
+  /** The saved books' verse text, then the English under each row. */
+  async function openAgain(list: Corpus[]) {
+    const open = list.flatMap((c) => c.books.filter((g) => expandedBooks.has(bookKey(c.testament, g.book))));
+    await Promise.all(open.map(loadBookPreviews));
+    await tick();
+    await companionSettled();
+  }
+
+  /** Resolves once the list is back at the height it was saved at. */
+  export function opened(): Promise<void> {
+    return arrived;
+  }
+
+  /** What is open now, for the host's snapshot. */
+  export function openState(): { books: string[]; corpora: string[] } {
+    return { books: [...expandedBooks], corpora: [...expandedCorpora] };
   }
 
   /**

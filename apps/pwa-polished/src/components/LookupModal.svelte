@@ -146,7 +146,7 @@
       isbeModalStore.open({ ...(pending as any).modal, tab: snap.tab ?? null });
     } else if (pending.surface === 'strongs') {
       const snap = pending.snapshot;
-      saved = { ...saved, strongs: { tab: snap.tab, scrollTop: snap.scrollTop, trail: snap.trail ?? [] } };
+      saved = { ...saved, strongs: { ...snap, trail: snap.trail ?? [] } };
       strongsModalStore.open({ strongsId: snap.strongsId });
     }
   }
@@ -406,6 +406,8 @@
           initialTrail={saved.strongs?.trail ?? []}
           initialTab={saved.strongs?.tab ?? null}
           initialScrollTop={saved.strongs?.scrollTop ?? 0}
+          initialScrollFor={saved.strongs?.strongsId ?? null}
+          initialView={saved.strongs?.view ?? null}
           onSnapshot={(snap) => remember("strongs", snap)}
           onClose={close}
           onPopOut={popOutStrongs}

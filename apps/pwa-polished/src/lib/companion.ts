@@ -129,11 +129,55 @@ async function markPieces(
 
 const installed = (id: string) => get(availableTranslations).some((t) => t.toLowerCase() === id);
 
+// --- Settling ----------------------------------------------------------------
+// The English arrives after the row it sits in and makes the row taller, so a
+// card putting its scroll back has to wait for it, or it lands short.
+let inFlight = 0;
+let settledWaiters: (() => void)[] = [];
+
+/**
+ * Resolves once no English line is still loading, checked a task later so the
+ * lines just loaded are on the page first. Never waits past `maxMs`: a read
+ * that hangs must not hold a card's scroll forever.
+ */
+export function companionSettled(maxMs = 1500): Promise<void> {
+  return new Promise((resolve) => {
+    settledWaiters.push(resolve);
+    setTimeout(resolve, maxMs);
+    checkSettled();
+  });
+}
+
+function checkSettled(): void {
+  setTimeout(() => {
+    if (inFlight || !settledWaiters.length) return;
+    const waiting = settledWaiters;
+    settledWaiters = [];
+    waiting.forEach((resolve) => resolve());
+  }, 0);
+}
+
 /**
  * `sourceTranslation`'s verse in English. Never throws: a verse that can't be
  * found comes back missing.
  */
 export async function loadCompanionVerse(
+  sourceTranslation: string,
+  book: string,
+  chapter: number,
+  verse: number,
+  readerTranslation: string | null | undefined,
+  highlight?: CompanionHighlight,
+): Promise<CompanionVerse> {
+  inFlight++;
+  try {
+    return await readCompanionVerse(sourceTranslation, book, chapter, verse, readerTranslation, highlight);
+  } finally {
+    if (--inFlight === 0) checkSettled();
+  }
+}
+
+async function readCompanionVerse(
   sourceTranslation: string,
   book: string,
   chapter: number,
