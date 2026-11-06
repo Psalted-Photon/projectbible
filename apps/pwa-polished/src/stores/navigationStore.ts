@@ -641,27 +641,35 @@ function makeReaderTrail(r: Reader): ReaderTrail {
      * Returns the new stack depth. Callers that want to come back to something
      * when this exact step is undone keep the depth as a token.
      *
+     * The crumb comes back to the exact line the reader was showing, with the
+     * "start here" mark if one was up — with an anchor too, as long as the
+     * top of the screen is still in the anchor's chapter. That is the same
+     * test crumbForHere makes for a panel tied to its verse, and for the same
+     * reason: the commentary panel reopens only once the crumb's own chapter
+     * is the one loaded. Drifted out of it, the crumb stands on the anchor's
+     * verse instead, placed near the top.
+     *
      * A new step forks the trail, the way following a link empties a
      * browser's Forward list: the crumbs ahead of you go.
      */
     pushHistory: (state, kind = 'link', origin, anchor) => {
       let depth = 0;
-      // Without an anchor the crumb is the reader as it is on screen, so it
-      // comes back scrolled exactly where you were reading.
-      const pos = anchor ? null : readerPosition(r);
+      const pos = readerPosition(r);
       trail.update(({ back: history }) => {
         const book = anchor ? normalizeBookName(anchor.book) : state.book;
         const chapter = anchor ? anchor.chapter : state.chapter;
         const verse = anchor
           ? anchor.verse ?? null
           : state.linkHighlight?.verse ?? state.scrollTargetVerse ?? null;
+        const here = pos && (!anchor || (pos.book === book && pos.chapter === chapter)) ? pos : null;
         const crumb: TrailCrumb = {
-          // The state to restore is the reader as it was, but standing where
+          // The state to restore is the reader as it was: on the line it was
+          // showing, or, if it had drifted away from the link, standing where
           // the link was rather than wherever it had drifted to.
-          nav: anchor
-            ? { ...state, book, chapter, scrollTargetVerse: verse, linkHighlight: null, restoreScroll: null }
-            : pos
-              ? navAt(state, pos, verse)
+          nav: here
+            ? navAt(state, here, verse)
+            : anchor
+              ? { ...state, book, chapter, scrollTargetVerse: verse, linkHighlight: null, restoreScroll: null }
               : { ...state, restoreScroll: null },
           kind,
           book,
