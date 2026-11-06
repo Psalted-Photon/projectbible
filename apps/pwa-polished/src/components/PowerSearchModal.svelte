@@ -13,8 +13,9 @@
     type SearchCategory,
     type SearchResult,
   } from "../lib/services/searchService";
-  import { navigationStore } from "../stores/navigationStore";
+  import { navigationStore, pendingRestore, registerScreenSurface } from "../stores/navigationStore";
   import { get } from "svelte/store";
+  import { onMount, tick } from "svelte";
   import { buildSearchTree } from "../lib/searchTree";
   import SearchResultsTree from "./SearchResultsTree.svelte";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
@@ -40,6 +41,12 @@
    *  "Search for:" each time the window opens, so the user can go on to add
    *  patterns and filters without retyping it. */
   export let initialText = "";
+  /**
+   * Set on the main reader's bar only. A verse result moves the main reader
+   * whichever bar opened this, so its crumbs are in the main trail, and this
+   * copy is the one that puts the search back when one is walked to.
+   */
+  export let answersCrumbs = false;
 
   let config: SearchConfig = createDefaultConfig();
 
@@ -152,21 +159,33 @@
       return;
     }
 
+    let query: GeneratedQuery;
+    try {
+      query = generateSafeRegex(config);
+    } catch (error) {
+      console.error("Search error:", error);
+      searchResults = [];
+      searchFailed = true;
+      return;
+    }
+    generatedQuery = query;
+    await runSearch(config.text, query.regex);
+  }
+
+  /** Fetch the results for these words, tested by this pattern. */
+  async function runSearch(text: string, pattern: RegExp) {
     isSearching = true;
     searchFailed = false;
     try {
-      const query = generateSafeRegex(config);
-      generatedQuery = query;
-
       // Always an explicit search, so run the deep categories too. The pattern
       // tests the text; the plain words are for the lookups by name or number.
-      searchResults = await searchService.search(config.text, { limit: -1, deep: true, pattern: query.regex });
+      searchResults = await searchService.search(text, { limit: -1, deep: true, pattern });
       totalResultCount = searchResults.reduce((sum, cat) => sum + cat.count, 0);
 
       // Open the Bible group so results are visible without a first click.
       const hasBible = searchResults.some((c) => c.key === 'bible' && c.count > 0);
       expandedResultNodes = new Set(hasBible ? ['bible'] : []);
-      searchedFor = config.text.trim();
+      searchedFor = text.trim();
     } catch (error) {
       console.error("Search error:", error);
       searchResults = [];
@@ -186,6 +205,157 @@
     expandedResultNodes = new Set();
     totalResultCount = 0;
   }
+
+  // --- Coming back by the crumb ---------------------------------------------
+
+  /** The parts of the window that scroll: the whole body on a narrow screen,
+   *  the two columns on a wide one, and the results list inside the right one. */
+  let bodyEl: HTMLElement | null = null;
+  let controlsEl: HTMLElement | null = null;
+  let previewEl: HTMLElement | null = null;
+  let resultsListEl: HTMLElement | null = null;
+
+  /**
+   * A result list longer than this goes on the crumb as the search itself, and
+   * runs again on the way back. The trail is saved every time it changes, and
+   * thousands of rows on a crumb would make each of those saves slow.
+   */
+  const CARRIED_ROWS = 250;
+
+  /** Everything needed to put this window back the way it was. */
+  interface AdvancedSearchOrigin {
+    surface: "advancedSearch";
+    config: SearchConfig;
+    /** Words typed into the add boxes but not added yet. */
+    drafts: { mustContain: string; mustNotContain: string; near1: string; near2: string; distance: number };
+    /** The pattern the results came from, which can be older than the settings above. */
+    pattern: { source: string; flags: string; description: string; estimatedComplexity: number; resultVolumeEstimate: GeneratedQuery["resultVolumeEstimate"]; warning: string | null; } | null;
+    /** The results, or null when there were too many to carry and the search runs again. */
+    results: SearchCategory[] | null;
+    /** The words the results came from, for running it again. */
+    searchedFor: string;
+    expanded: string[];
+    total: number;
+    failed: boolean;
+    showPattern: boolean;
+    scroll: { body: number; controls: number; preview: number; list: number };
+  }
+
+  function snapshotForCrumb(): AdvancedSearchOrigin {
+    const rows = searchResults.reduce((n, c) => n + c.results.length, 0);
+    const q = generatedQuery;
+    return {
+      surface: "advancedSearch",
+      // A copy, so later edits in the window do not change what the crumb holds.
+      config: JSON.parse(JSON.stringify(config)),
+      drafts: {
+        mustContain: mustContainInput,
+        mustNotContain: mustNotContainInput,
+        near1: proximityWord1,
+        near2: proximityWord2,
+        distance: proximityDistance,
+      },
+      pattern: q
+        ? {
+            source: q.regex.source,
+            flags: q.regex.flags,
+            description: q.description,
+            estimatedComplexity: q.estimatedComplexity,
+            resultVolumeEstimate: q.resultVolumeEstimate,
+            warning: q.warning ?? null,
+          }
+        : null,
+      results: rows <= CARRIED_ROWS ? searchResults : null,
+      searchedFor,
+      expanded: [...expandedResultNodes],
+      total: totalResultCount,
+      failed: searchFailed,
+      showPattern: showGeneratedPattern,
+      scroll: {
+        body: bodyEl?.scrollTop ?? 0,
+        controls: controlsEl?.scrollTop ?? 0,
+        preview: previewEl?.scrollTop ?? 0,
+        list: resultsListEl?.scrollTop ?? 0,
+      },
+    };
+  }
+
+  function putScrollBack(s: AdvancedSearchOrigin["scroll"]) {
+    if (bodyEl) bodyEl.scrollTop = s.body;
+    if (controlsEl) controlsEl.scrollTop = s.controls;
+    if (previewEl) previewEl.scrollTop = s.preview;
+    if (resultsListEl) resultsListEl.scrollTop = s.list;
+  }
+
+  async function restoreFromCrumb(o: AdvancedSearchOrigin) {
+    config = { ...createDefaultConfig(), ...o.config };
+    mustContainInput = o.drafts?.mustContain ?? "";
+    mustNotContainInput = o.drafts?.mustNotContain ?? "";
+    proximityWord1 = o.drafts?.near1 ?? "";
+    proximityWord2 = o.drafts?.near2 ?? "";
+    proximityDistance = o.drafts?.distance ?? 5;
+    let pattern: RegExp | null = null;
+    try {
+      pattern = o.pattern ? new RegExp(o.pattern.source, o.pattern.flags) : null;
+    } catch {
+      pattern = null;
+    }
+    generatedQuery =
+      o.pattern && pattern
+        ? {
+            regex: pattern,
+            description: o.pattern.description,
+            estimatedComplexity: o.pattern.estimatedComplexity,
+            resultVolumeEstimate: o.pattern.resultVolumeEstimate,
+            warning: o.pattern.warning ?? undefined,
+          }
+        : null;
+    showGeneratedPattern = !!o.showPattern;
+    searchFailed = !!o.failed;
+    searchedFor = o.searchedFor ?? "";
+    previewResults = [];
+    // Reopened as it was left. A fresh open would put the words typed in the
+    // bar's box over the ones being restored, and clear the results.
+    wasShown = true;
+    show = true;
+    if (o.results) {
+      searchResults = o.results;
+      totalResultCount = o.total ?? 0;
+    } else {
+      searchResults = [];
+      totalResultCount = 0;
+      if (pattern) await runSearch(o.searchedFor ?? config.text, pattern);
+    }
+    expandedResultNodes = new Set(o.expanded ?? []);
+    // Two ticks: the first draws the window, the second lets the result rows
+    // lay out. Setting scrollTop before the list has height would land at 0.
+    await tick();
+    await tick();
+    putScrollBack(o.scroll);
+    // Once more on the next frame, for the English lines under Greek and
+    // Hebrew results, which fill in just after the rows are drawn.
+    requestAnimationFrame(() => putScrollBack(o.scroll));
+  }
+
+  $: if (answersCrumbs) takeCrumb($pendingRestore);
+  function takeCrumb(pending: unknown) {
+    if ((pending as { surface?: string } | null)?.surface !== "advancedSearch") return;
+    pendingRestore.set(null);
+    void restoreFromCrumb(pending as AdvancedSearchOrigin);
+  }
+
+  // Open, for a crumb to save when you leave by the trail. It sits over
+  // everything else, so it wins over any other panel.
+  onMount(() => {
+    if (!answersCrumbs) return;
+    return registerScreenSurface({
+      priority: 4,
+      capture: () => (show ? { kind: "search", origin: snapshotForCrumb() } : null),
+      close: () => {
+        if (show) closeModal();
+      },
+    });
+  });
 
   async function handleResultClick(result: SearchResult) {
     if (!result.data) return;
@@ -244,7 +414,8 @@
 
     if (!result.data.book) return;
     const current = get(navigationStore);
-    navigationStore.pushHistory(current, 'search');
+    // The crumb carries the whole window, so walking back reopens it as it was.
+    navigationStore.pushHistory(current, 'search', snapshotForCrumb());
     const targetTranslation = result.data.translation || current.translation;
     navigationStore.navigateTo(
       targetTranslation,
@@ -312,9 +483,9 @@
       </div>
 
       <!-- Main Content -->
-      <div class="modal-body">
+      <div class="modal-body" bind:this={bodyEl}>
         <!-- Left Panel: Controls -->
-        <div class="controls-panel">
+        <div class="controls-panel" bind:this={controlsEl}>
           <!-- Word/Phrase Section -->
           <section class="control-section">
             <h3><TextT size={17} weight="bold" class="ph-inline" /> Word / phrase</h3>
@@ -504,7 +675,7 @@
         </div>
 
         <!-- Right Panel: Preview & Results -->
-        <div class="preview-panel">
+        <div class="preview-panel" bind:this={previewEl}>
           <!-- Generated pattern Display -->
           {#if generatedQuery}
             <div class="pattern-display">
@@ -550,7 +721,7 @@
                 </div>
               </div>
 
-              <div class="results-list">
+              <div class="results-list" bind:this={resultsListEl}>
                 <SearchResultsTree
                   nodes={searchTree}
                   expanded={expandedResultNodes}

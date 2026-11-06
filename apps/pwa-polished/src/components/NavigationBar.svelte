@@ -3737,7 +3737,7 @@
 </div>
 
 <!-- Advanced Search Modal -->
-<PowerSearchModal bind:show={showPowerSearchModal} initialText={powerSearchText} />
+<PowerSearchModal bind:show={showPowerSearchModal} initialText={powerSearchText} answersCrumbs={!windowId} />
 
 {#if appsMenuOpen && appsButtonRef}
   <WindowTypeMenu
