@@ -347,6 +347,7 @@
           initialTrail={saved.people?.trail ?? []}
           initialScrollTop={saved.people?.scrollTop ?? 0}
           initialScrollFor={saved.people?.personId ?? null}
+          initialVisited={saved.people?.visited ?? []}
           onSnapshot={(snap) => remember("people", snap)}
           onClose={close}
           onPopOut={popOutPerson}

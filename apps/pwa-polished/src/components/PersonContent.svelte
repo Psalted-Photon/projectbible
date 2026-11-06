@@ -7,6 +7,7 @@
   import { get } from "svelte/store";
   import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
+  import { eastonBio, type BioRef } from "../lib/eastonRefs";
   import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
   import { verseAtEnglishRef } from "../lib/companion";
   import { ENGLISH_NUMBERING } from "../lib/versification";
@@ -68,9 +69,11 @@
    *  measured on, so a different person starts at the top rather than partway
    *  down a bio of a different length. */
   export let initialScrollFor: string | null = null;
+  /** Bio links already followed on that same person, so they come back dimmed. */
+  export let initialVisited: string[] = [];
   /** Reports the view on the way out. */
   export let onSnapshot:
-    | ((snap: { personId: string | null; trail: TrailStop[]; scrollTop: number }) => void)
+    | ((snap: { personId: string | null; trail: TrailStop[]; scrollTop: number; visited: string[] }) => void)
     | null = null;
   /** Hosts that draw their own header (the word-study modal) suppress ours. */
   export let showHeader = true;
@@ -128,6 +131,7 @@
       primaryName: title,
       trail,
       scrollTop: bodyEl?.scrollTop ?? 0,
+      visited: [...visitedRefs],
     };
   }
 
@@ -184,15 +188,25 @@
     return "";
   }
 
-  /** Strip the markdown link/emphasis syntax from Easton's prose. */
-  function cleanBio(text: string | undefined): string[] {
-    if (!text) return [];
-    return text
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-      .replace(/[*_`]/g, "")
-      .split(/\n{2,}/)
-      .map((p) => p.replace(/\s+/g, " ").trim())
-      .filter(Boolean);
+  // Easton's prose as paragraphs of plain text and scripture links, tinted and
+  // followed the way the encyclopedia's are. eastonRefs keeps the references
+  // the source tagged and places the bare ones it didn't — "(17:17-31)" in
+  // Paul's bio is Acts — with eastonRefFixes.ts for the ones its rules miss.
+  $: bio = eastonBio(person?.dictText, person ?? {});
+
+  // Links already followed, dimmed so a long bio shows what you've worked
+  // through — the encyclopedia's rule. They belong to the person they were
+  // tapped on, and come back with the card when the back arrow reopens it.
+  let visitedRefs = new Set<string>(initialVisited);
+  let visitedFor: string | null = initialScrollFor;
+  $: if (person && person.id !== visitedFor) {
+    visitedFor = person.id;
+    visitedRefs = new Set();
+  }
+
+  function followBioRef(ref: BioRef) {
+    visitedRefs = new Set(visitedRefs).add(ref.key);
+    navigateToVerse(ref.book, ref.chapter, ref.verse);
   }
 
   /** Parents come from two fields but read as one row. */
@@ -793,10 +807,10 @@
           </div>
         {/if}
 
-        {#if cleanBio(person.dictText).length}
+        {#if bio.length}
           <div class="char-bio">
-            {#each cleanBio(person.dictText) as para}
-              <p>{para}</p>
+            {#each bio as para}
+              <p>{#each para as piece}{#if piece.ref}{@const ref = piece.ref}<span class="bio-ref" class:visited={visitedRefs.has(ref.key)} style="color:{getBookColor(ref.book)}" role="link" tabindex="0" on:click={() => followBioRef(ref)} on:keydown={(e) => e.key === "Enter" && followBioRef(ref)}>{piece.text}</span>{:else}{piece.text}{/if}{/each}</p>
             {/each}
           </div>
         {/if}
@@ -1123,6 +1137,16 @@
     font-size: 14px;
     line-height: 1.6;
     margin: 0 0 10px;
+  }
+  /* Scripture links in the bio, drawn as the encyclopedia draws its own: the
+     book's color from getBookColor inline, a dotted underline, and lightened
+     once followed so the book color still reads. */
+  .bio-ref {
+    cursor: pointer;
+    border-bottom: 1px dotted currentColor;
+  }
+  .bio-ref.visited {
+    opacity: 0.5;
   }
   .char-alternates {
     margin: 14px 0 4px;
