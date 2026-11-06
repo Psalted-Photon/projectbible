@@ -1,10 +1,10 @@
 <script lang="ts">
   import { CaretLeft, CaretRight } from "phosphor-svelte";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import CommentaryNavigationBar from "./CommentaryNavigationBar.svelte";
   import { ChatText } from "phosphor-svelte";
   import { get } from "svelte/store";
-  import { navigationStore } from "../stores/navigationStore";
+  import { navigationStore, registerReaderFollower } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
   import { IndexedDBCommentaryStore, type CommentaryEntry } from "../adapters/CommentaryStore";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
@@ -46,6 +46,76 @@
     $navigationStore.highlightedVerse ??
     null;
 
+  // ── Coming back by a crumb ─────────────────────────────────────────────────
+  // With no place of its own the window follows the reader, so a link that
+  // takes the reader away takes this window along, and walking the crumb back
+  // reloads the old chapter. Each crumb keeps where this window was scrolled,
+  // and the scroll goes back once that chapter's commentary is on the page. A
+  // window with a place of its own never moves with the jump, so it is left be.
+  $: following =
+    !isEnoch &&
+    windowState != null &&
+    windowState.contentState?.book === undefined &&
+    windowState.contentState?.chapter === undefined;
+
+  /** What a crumb keeps: which chapter and commentator was showing, and how far down. */
+  interface ScrollShot {
+    key: string;
+    top: number;
+  }
+
+  /** The chapter and commentator whose notes are on the page, in navKey form. */
+  let shownKey = "";
+
+  /**
+   * A crumb's scroll waiting for its chapter to load. A load of another
+   * chapter leaves it waiting, in case the reader settles on that chapter a
+   * moment later; after RESTORE_WAIT_MS it is dropped.
+   */
+  let pendingScroll: (ScrollShot & { until: number }) | null = null;
+  const RESTORE_WAIT_MS = 4000;
+
+  function commentaryKey(book: string, chapter: number, author?: string): string {
+    return `${book}-${chapter}-${author ?? 'all'}`;
+  }
+
+  function isScrollShot(v: unknown): v is ScrollShot {
+    const s = v as ScrollShot | null;
+    return !!s && typeof s === "object" && typeof s.key === "string" && typeof s.top === "number" && Number.isFinite(s.top);
+  }
+
+  function captureScroll(): ScrollShot | null {
+    if (!following || loading || !readerElement || entries.length === 0 || !shownKey) return null;
+    const top = readerElement.scrollTop;
+    // At the top already, which is where a load puts it anyway.
+    return top > 0 ? { key: shownKey, top } : null;
+  }
+
+  /** The crumb's scroll for `key`, if one is waiting for it. Taking it clears it. */
+  function takePendingScroll(key: string): number | null {
+    if (!pendingScroll) return null;
+    if (Date.now() > pendingScroll.until) {
+      pendingScroll = null;
+      return null;
+    }
+    if (pendingScroll.key !== key) return null;
+    const { top } = pendingScroll;
+    pendingScroll = null;
+    return top;
+  }
+
+  function restoreScroll(saved: unknown) {
+    if (!isScrollShot(saved) || !following) return;
+    pendingScroll = { ...saved, until: Date.now() + RESTORE_WAIT_MS };
+    // By the next tick the walk back has started a load if the chapter
+    // changed. If it did not, nothing reloads, so the scroll goes back now.
+    void tick().then(() => {
+      if (loading || !readerElement || shownKey !== saved.key) return;
+      const top = takePendingScroll(saved.key);
+      if (top !== null) readerElement.scrollTop = top;
+    });
+  }
+
   // ── Read Aloud ─────────────────────────────────────────────────────────────
   // The whole chapter for this commentator (or all of them), then it stops.
   $: readTitle = isEnoch
@@ -69,7 +139,7 @@
 
   // Load commentary when navigation changes (skipped entirely in Enoch mode)
   $: {
-    const navKey = `${currentBook}-${currentChapter}-${currentAuthor ?? 'all'}`;
+    const navKey = commentaryKey(currentBook, currentChapter, currentAuthor);
     if (!isEnoch && commentaryStore && navKey !== lastNavigationKey) {
       lastNavigationKey = navKey;
       loadCommentary(currentBook, currentChapter, currentAuthor);
@@ -184,6 +254,9 @@
 
   async function loadCommentary(book: string, chapter: number, author?: string) {
     const ticket = ++loadTicket;
+    const key = commentaryKey(book, chapter, author);
+    // Taken now, so a slow load cannot outlast the wait.
+    let backTo = takePendingScroll(key);
     loading = true;
     error = "";
     lastScrolledVerseKey = ''; // reset so new chapter allows fresh scroll-to-verse
@@ -196,10 +269,17 @@
       const loaded = await commentaryStore.getAllChapterContent(book, chapter, author);
       if (ticket !== loadTicket) return;
       entries = loaded;
-      
+      shownKey = key;
+
       console.log(`   Loaded ${entries.length} commentary entries`);
 
-      if (readerElement) {
+      // A crumb walked back while this chapter was already loading.
+      backTo ??= takePendingScroll(key);
+      if (backTo !== null) {
+        // The entries have to be on the page before there is anywhere to scroll to.
+        await tick();
+        if (ticket === loadTicket && readerElement) readerElement.scrollTop = backTo;
+      } else if (readerElement) {
         readerElement.scrollTo({ top: 0, behavior: "auto" });
       }
     } catch (err: unknown) {
@@ -259,6 +339,12 @@
   async function checkPack() {
     packMissing = !(await packInstallFinished("commentaries").catch(() => false));
   }
+
+  // The main reader's trail: that is the reader this window follows.
+  const unfollow = windowId
+    ? registerReaderFollower({ id: windowId, capture: captureScroll, restore: restoreScroll })
+    : null;
+  onDestroy(() => unfollow?.());
 
   onMount(async () => {
     commentaryStore = new IndexedDBCommentaryStore();

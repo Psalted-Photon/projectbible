@@ -163,6 +163,12 @@ export interface TrailCrumb {
   chapter: number;
   verse: number | null;
   origin?: unknown;
+  /**
+   * What each window following the reader was showing, by window id (see
+   * ReaderFollower). Separate from `origin`, which is the one panel the link
+   * was tapped in: these move with every jump, wherever the link was.
+   */
+  followers?: Record<string, unknown>;
 }
 
 /**
@@ -215,6 +221,21 @@ export interface ScreenSurface {
   } | null;
   /** Take it down. What it showed now belongs to the crumb being left. */
   close: () => void;
+}
+
+/**
+ * A window that moves when the reader moves, without being a panel on its
+ * screen: a Commentary window following the reader. A jump takes it to the
+ * new chapter too, so every crumb keeps what it was showing, and walking the
+ * crumb back hands that back.
+ */
+export interface ReaderFollower {
+  /** Its window id. */
+  id: string;
+  /** What it is showing, as plain data, or null when there is nothing to keep. */
+  capture: () => unknown | null;
+  /** A crumb is being walked to, and this is what `capture` gave when it was left. */
+  restore: (saved: unknown) => void;
 }
 
 /** The reader state to come back to, scrolled to `pos` when there is one. */
@@ -474,6 +495,8 @@ interface Reader {
   trail: Writable<Trail>;
   /** The panels on this reader's screen that a crumb can bring back. */
   surfaces: Set<ScreenSurface>;
+  /** The windows that move with this reader. */
+  followers: Set<ReaderFollower>;
   readPosition: (() => ReaderPosition | null) | null;
   /**
    * The origin snapshot from the step just walked back to, waiting for
@@ -524,6 +547,21 @@ function takeScreen(r: Reader): ReturnType<ScreenSurface['capture']> {
   return best;
 }
 
+/** What each window following the reader is showing, by id; undefined when none has anything. */
+function followerShots(r: Reader): Record<string, unknown> | undefined {
+  let shots: Record<string, unknown> | undefined;
+  for (const f of r.followers) {
+    let shot: unknown = null;
+    try {
+      shot = f.capture();
+    } catch {
+      // One window failing to answer leaves just that window out.
+    }
+    if (shot != null) (shots ??= {})[f.id] = shot;
+  }
+  return shots;
+}
+
 /**
  * The spot you are leaving by the trail, as a crumb: the screen as it is right
  * now. Where the reader is scrolled, and whichever panel is open — or none,
@@ -560,6 +598,7 @@ function crumbForHere(r: Reader, state: NavigationState, current: TrailCrumb | n
     chapter,
     verse,
     origin: panel?.origin,
+    followers: followerShots(r),
   };
 }
 
@@ -594,6 +633,18 @@ function makeReaderTrail(r: Reader): ReaderTrail {
   /** Stand where a crumb remembers, with its panel waiting to be put back. */
   function arrive(target: TrailCrumb) {
     r.driver?.arrive(target.nav);
+    // A saved trail is read back as it was written, so this is checked.
+    const saved = target.followers;
+    if (saved && typeof saved === 'object') {
+      for (const f of r.followers) {
+        if (saved[f.id] == null) continue;
+        try {
+          f.restore(saved[f.id]);
+        } catch {
+          // That window just stays where the jump put it.
+        }
+      }
+    }
     r.pendingRestore.set(target.origin ?? null);
     crumbArrival.set(target.origin === undefined ? null : { readerId: r.id, origin: target.origin });
   }
@@ -653,6 +704,8 @@ function makeReaderTrail(r: Reader): ReaderTrail {
      * browser's Forward list: the crumbs ahead of you go.
      */
     pushHistory: (state, kind = 'link', origin, anchor) => {
+      // Before the jump moves them on to the new chapter.
+      const followers = followerShots(r);
       let depth = 0;
       const pos = readerPosition(r);
       trail.update(({ back: history }) => {
@@ -676,6 +729,7 @@ function makeReaderTrail(r: Reader): ReaderTrail {
           chapter,
           verse,
           origin,
+          followers,
         };
         const back = [...history, crumb];
         depth = back.length;
@@ -747,7 +801,7 @@ function makeReaderTrail(r: Reader): ReaderTrail {
 }
 
 function makeReader(id: string, trail: Writable<Trail>, pendingRestore: Writable<unknown | null>): Reader {
-  const r = { id, trail, surfaces: new Set(), readPosition: null, pendingRestore, driver: null } as unknown as Reader;
+  const r = { id, trail, surfaces: new Set(), followers: new Set(), readPosition: null, pendingRestore, driver: null } as unknown as Reader;
   r.api = makeReaderTrail(r);
   return r;
 }
@@ -816,6 +870,13 @@ export function registerScreenSurface(surface: ScreenSurface, readerId: string =
   const r = readerFor(readerId);
   r.surfaces.add(surface);
   return () => r.surfaces.delete(surface);
+}
+
+/** Called by a window that follows a reader, as it mounts; returns the call to make as it unmounts. */
+export function registerReaderFollower(follower: ReaderFollower, readerId: string = MAIN_READER): () => void {
+  const r = readerFor(readerId);
+  r.followers.add(follower);
+  return () => r.followers.delete(follower);
 }
 
 /** A reader hands over how to measure where it is scrolled. */
