@@ -15,6 +15,11 @@
    * each reply already carries, so it costs Whistle nothing. A word already on
    * screen before the blank, said again, isn't a wrong one.
    *
+   * While the mic is on, the line under the blank being listened for turns gold
+   * and glows with how loud the mic is, where the eyes already are. It's the same
+   * loudness the VC button gets, so it shows hearing before Whistle has replied.
+   * It holds still unless Motion is full.
+   *
    * Each phrase starts Whistle on a fresh stream while the answer is up, as one
    * stream slows the longer it runs and a run is one long take.
    *
@@ -64,6 +69,9 @@
   const WRONG_BEAT_MS = 600;
   /** How long after the mic last heard speech it still says Thinking. */
   const SPEECH_HOLD_MS = 700;
+  /** The mic's 0-1 loudness the glow starts at, so room noise leaves it still, and where it's full. */
+  const GLOW_FLOOR = 0.03;
+  const GLOW_FULL = 0.38;
 
   let verses: DBByHeartVerse[] = [];
   let phase: 'loading' | 'none' | 'ready' | 'playing' | 'over' = 'loading';
@@ -219,6 +227,12 @@
     if (again) return { text: `Heard “${again}”. Try again`, kind: 'again' };
     return { text: 'Listening…', kind: 'quiet' };
   }
+
+  $: listening = phase === 'playing' && !answered && !!$gameTalk?.on && !$gameTalk.starting;
+  /** 0-1, in twentieths so a steady voice doesn't restyle it every reply. */
+  $: glow = listening
+    ? Math.round(Math.min(1, Math.max(0, (($gameTalk?.level ?? 0) - GLOW_FLOOR) / (GLOW_FULL - GLOW_FLOOR))) * 20) / 20
+    : 0;
 
   $: feedback = feedbackOf(
     answered,
@@ -390,9 +404,9 @@
         <button class="go" on:click={start}>Start</button>
       {:else if phase === 'playing' && prompt}
         <p class="phrase">… {prompt.phrase}</p>
-        <p class="blanks" class:got={answered === 'right'} class:lost={answered === 'miss'}>
+        <p class="blanks" class:got={answered === 'right'} class:lost={answered === 'miss'} style:--glow={glow}>
           {#each prompt.answer as word, i}
-            <span class="blank">{i < cursor ? word : ' '}</span>
+            <span class="blank" class:current={listening && i === cursor}>{i < cursor ? word : ' '}</span>
           {/each}
         </p>
         <!-- Always there, so nothing moves as it changes. -->
@@ -518,10 +532,35 @@
   }
 
   .blank {
+    position: relative;
     min-width: 4em;
     padding-bottom: 2px;
     border-bottom: 2px solid rgba(255, 255, 255, 0.5);
     font-weight: 600;
+  }
+
+  /* The blank being listened for: a gold line over its own, glowing with the voice. */
+  .blank.current {
+    border-color: transparent;
+  }
+
+  .blank.current::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 2px;
+    border-radius: 1px;
+    background: #e6b84a;
+    box-shadow: 0 0 calc(0.18em + var(--glow, 0) * 0.7em) calc(var(--glow, 0) * 0.13em)
+      rgba(230, 184, 74, calc(0.3 + var(--glow, 0) * 0.6));
+    transition: box-shadow 0.08s;
+  }
+
+  :global(:root:not([data-motion='full'])) .blank.current::after {
+    box-shadow: 0 0 0.25em rgba(230, 184, 74, 0.5);
+    transition: none;
   }
 
   .blanks.got .blank {
