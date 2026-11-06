@@ -348,6 +348,8 @@
           initialScrollTop={saved.people?.scrollTop ?? 0}
           initialScrollFor={saved.people?.personId ?? null}
           initialVisited={saved.people?.visited ?? []}
+          initialShowVerses={saved.people?.showVerses ?? false}
+          initialExpandedBooks={saved.people?.expandedBooks ?? []}
           onSnapshot={(snap) => remember("people", snap)}
           onClose={close}
           onPopOut={popOutPerson}

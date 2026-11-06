@@ -71,9 +71,20 @@
   export let initialScrollFor: string | null = null;
   /** Bio links already followed on that same person, so they come back dimmed. */
   export let initialVisited: string[] = [];
+  /** Whether "Appears in N verses" was open, and which of its books — the
+   *  offset was measured with them open, so they come back before it does. */
+  export let initialShowVerses = false;
+  export let initialExpandedBooks: string[] = [];
   /** Reports the view on the way out. */
   export let onSnapshot:
-    | ((snap: { personId: string | null; trail: TrailStop[]; scrollTop: number; visited: string[] }) => void)
+    | ((snap: {
+        personId: string | null;
+        trail: TrailStop[];
+        scrollTop: number;
+        visited: string[];
+        showVerses: boolean;
+        expandedBooks: string[];
+      }) => void)
     | null = null;
   /** Hosts that draw their own header (the word-study modal) suppress ours. */
   export let showHeader = true;
@@ -104,20 +115,13 @@
 
   let bodyEl: HTMLDivElement | null = null;
 
-  onMount(async () => {
+  onMount(() => {
     // Not awaited: the 🌳 badges only need familyTreeIds, which this fills in
     // once the data resolves, and People must not sit on a black screen for a
     // 130 KB fetch it might not even need this visit.
     loadFamilyTree().catch(() => {
       // No tree this session — the 🌳 badges simply never light up.
     });
-
-    if (!initialScrollTop) return;
-    // Only where it was measured. Restoring one bio's offset onto another's is
-    // how you land halfway down a stranger.
-    if (initialScrollFor && initialScrollFor !== (lookup?.person.id ?? personId)) return;
-    await tick();
-    if (bodyEl) bodyEl.scrollTop = initialScrollTop;
   });
 
   // Which person, how you got to them, and how far down — enough to put the tab
@@ -132,6 +136,8 @@
       trail,
       scrollTop: bodyEl?.scrollTop ?? 0,
       visited: [...visitedRefs],
+      showVerses: showVerseList,
+      expandedBooks: [...expandedBooks],
     };
   }
 
@@ -527,14 +533,17 @@
   }
 
   async function toggleBook(book: string, refs: { chapter: number; verse: number }[]) {
-    const next = new Set(expandedBooks);
-    if (next.has(book)) {
+    if (expandedBooks.has(book)) {
+      const next = new Set(expandedBooks);
       next.delete(book);
       expandedBooks = next;
       return;
     }
-    next.add(book);
-    expandedBooks = next;
+    await openBook(book, refs);
+  }
+
+  async function openBook(book: string, refs: { chapter: number; verse: number }[]) {
+    expandedBooks = new Set(expandedBooks).add(book);
     const translation = readerState(docked ? MAIN_READER : get(lookupReader)).translation;
     previewTranslation = translation;
     const loadedText = await Promise.all(
@@ -563,6 +572,38 @@
       }))
       .sort((a, b) => (bookOrder.get(a.book) ?? 999) - (bookOrder.get(b.book) ?? 999));
   })();
+
+  // --- Coming back ---------------------------------------------------------
+  // A crumb or a tab switch reopens the card by id, and the bio loads after the
+  // card is up — so the old restore, one tick after mount, scrolled an empty
+  // card and you landed at the top. This waits for the person to be on the
+  // page, opens the verse list and books the offset was measured with, and
+  // only then puts the offset back. Once, for the first person shown.
+  let restorePending = !!(initialScrollTop || initialShowVerses);
+  $: if (restorePending && person && !loading) restoreView(person);
+
+  async function restoreView(p: PersonRecord) {
+    restorePending = false;
+    // Only where it was measured. Restoring one bio's offset onto another's is
+    // how you land halfway down a stranger.
+    if (initialScrollFor && initialScrollFor !== p.id) return;
+    // Lets the person's first render — and its verse-list reset — land first.
+    await tick();
+    if (initialShowVerses) {
+      showVerseList = true;
+      versesLoading = true;
+      personVerses = await getPersonVerses(p.id);
+      if (person?.id !== p.id) return;
+      versesLoaded = true;
+      versesLoading = false;
+      await tick();
+      const open = versesByBook.filter((g) => initialExpandedBooks.includes(g.book));
+      await Promise.all(open.map((g) => openBook(g.book, g.refs)));
+      if (person?.id !== p.id) return;
+    }
+    await tick();
+    if (bodyEl) bodyEl.scrollTop = initialScrollTop;
+  }
 
   function navigateToVerse(book: string, chapter: number, verse: number) {
     // Same as the other works: the bio rides the crumb so walking back reopens
