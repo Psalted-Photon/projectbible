@@ -14,7 +14,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
-  import { familyTreeStore } from '../stores/familyTreeStore';
+  import {
+    familyTreeStore,
+    type TreeRestore,
+    type TreeSheetPerson,
+    type TreeSheetTribe,
+  } from '../stores/familyTreeStore';
   import { loadFamilyTree } from '../lib/familyTree/data';
   import { layout, ancestorChain, isPlaced, type TreeModel, type TreeRec } from '../lib/familyTree/layout';
   import { CROWN_LIGHT, draw, fitView, litColourOf, pick, toWorld, viewFor, type View } from '../lib/familyTree/render';
@@ -374,8 +379,10 @@
    * the boughs, roots and trunk all already know how to draw it. The focus is
    * pinned so its pulse says who you came from; with none on the tree, the
    * tribe's founding son stands in for the line and nobody pulses.
+   *
+   * `animate` false lights it at once, for a crumb putting the tree back.
    */
-  function lightTribe(tribe: string, focus: TreeRec | null = null): boolean {
+  function lightTribe(tribe: string, focus: TreeRec | null = null, animate = true): boolean {
     if (!model) return false;
     const list = model.byTribe.get(tribe);
     if (!list?.length) return false;
@@ -386,7 +393,7 @@
     tracedPath = new Set([...ancestorChain(model, line).map((r) => r.id), ...list.map((r) => r.id)]);
     selectedTribe = tribe;
     // The whole tree goes dim, then the tribe comes on in order.
-    if (entranceActive) startWave(LIGHTS.tribe, line, TREE.dimLevel);
+    if (entranceActive && animate) startWave(LIGHTS.tribe, line, TREE.dimLevel);
     pinned = line === focus ? focus : null;
     hovered = null;
     tribeLit = tribe;
@@ -691,6 +698,9 @@
   let sheetFallbackLabel = '';
   /** Set while the sheet shows a tribe's card rather than a bio. */
   let sheetTribe: string | null = null;
+  /** The sheet as a crumb saved it, for the one instance a crumb reopened.
+   *  Dropped whenever the sheet mounts anything fresh. */
+  let sheetRestore: { person?: TreeSheetPerson; tribeCard?: TreeSheetTribe } | null = null;
 
   function labelFor(id: string): string {
     return model?.nodes.get(id)?.label ?? model?.rootById.get(id)?.label ?? '';
@@ -700,6 +710,7 @@
    *  as opposed to a relative walked to from inside the bio, which uses
    *  switchSheetNoRemount instead. */
   function switchSheetFresh(id: string) {
+    sheetRestore = null;
     sheetTribe = null;
     sheetPersonId = id;
     sheetFallbackLabel = labelFor(id);
@@ -734,6 +745,7 @@
 
   /** The tribe's card, in the sheet. */
   function openTribeCard(tribe: string) {
+    sheetRestore = null;
     sheetTribe = tribe;
     sheetInstanceKey++;
     openSheet();
@@ -790,6 +802,82 @@
     leave?.();
   }
 
+  // ── Coming back by a crumb ───────────────────────────────────────────────
+  /**
+   * The tree as it is now, for the crumb of a verse link in the sheet. Asked
+   * for by the link before anything closes, with the sheet's own card
+   * (`content`) and the People card under the tree, so walking back puts all
+   * three where they were. LookupModal hears the crumb and reopens the tree.
+   */
+  function crumbOrigin(content: { person?: TreeSheetPerson; tribeCard?: TreeSheetTribe }) {
+    const snapshot: TreeRestore = {
+      pinnedId: pinned?.id ?? null,
+      tribe: tribeLit,
+      view: viewForCrumb(),
+      sheet: sheetOpen ? { personId: sheetPersonId, tribe: sheetTribe, label: sheetFallbackLabel, ...content } : null,
+    };
+    let under: unknown = null;
+    try {
+      under = get(familyTreeStore).under?.() ?? null;
+    } catch {
+      // The card under the tree has gone; the tree still comes back.
+    }
+    return { surface: 'familyTree', snapshot, under };
+  }
+
+  /**
+   * The camera for a crumb: the tree point in the middle of the screen and the
+   * zoom as a multiple of the fit, so it frames the same place on a screen of
+   * another size. A glide still under way is saved where it lands. Null when
+   * the whole tree is showing.
+   */
+  function viewForCrumb(): TreeRestore['view'] {
+    if (!model || !W || !H) return null;
+    if (atFittedView && !glide) return null;
+    const v = glide
+      ? viewFor(glide.targetWorld.x, glide.targetWorld.y, Math.exp(glide.logEnd), glide.screen.x, glide.screen.y, W, H)
+      : view;
+    const c = toWorld(W / 2, H / 2, v, W, H);
+    const ratio = fittedK ? v.k / fittedK : 1;
+    return [c.x, c.y, ratio].every(Number.isFinite) ? { x: c.x, y: c.y, ratio } : null;
+  }
+
+  /**
+   * Put the tree back as a crumb saved it: the same line traced or tribe lit,
+   * the same camera, and the sheet on the same bio or tribe card, which put
+   * back their own open lists and scroll once they have loaded. No entrance,
+   * wave or glide — it is just there, the way it was left.
+   */
+  function restoreTree(r: TreeRestore) {
+    if (!model) return;
+    const m = model;
+    const recOf = (id: string | null) => (id ? (m.nodes.get(id) ?? m.rootById.get(id) ?? null) : null);
+    const who = recOf(r.pinnedId);
+    if (r.tribe) {
+      lightTribe(r.tribe, who, false);
+    } else if (who) {
+      tracedPath = new Set(ancestorChain(m, who).map((x) => x.id));
+      selectedTribe = who.tribe || null;
+      pinned = who;
+      startPulse();
+    }
+    if (r.view) {
+      const k = Math.max(fittedK * MIN_ZOOM_OF_FIT, Math.min(MAX_ZOOM, r.view.ratio * fittedK));
+      view = viewFor(r.view.x, r.view.y, k, W / 2, H / 2, W, H);
+      markViewMoved();
+    }
+    const s = r.sheet;
+    if (s && (s.personId || s.tribe)) {
+      sheetTribe = s.tribe;
+      sheetPersonId = s.personId;
+      sheetFallbackLabel = s.label || (s.personId ? labelFor(s.personId) : '');
+      sheetRestore = { person: s.person, tribeCard: s.tribeCard };
+      sheetInstanceKey++;
+      sheetOpen = true;
+    }
+    redraw();
+  }
+
   onDestroy(() => {
     if (openerEl && document.contains(openerEl)) {
       openerEl.focus({ preventScroll: true });
@@ -839,7 +927,10 @@
       const focusId = $familyTreeStore.focusId;
       const target = focusId ? (model.nodes.get(focusId) ?? model.rootById.get(focusId)) : null;
       const tribe = $familyTreeStore.tribe;
-      if (tribe && lightTribe(tribe, target)) {
+      const restore = $familyTreeStore.restore;
+      if (restore) {
+        restoreTree(restore);
+      } else if (tribe && lightTribe(tribe, target)) {
         glideToLine(tribeFocus);
         // A beat to see the tribe light up before its card slides over it.
         setTimeout(
@@ -1170,6 +1261,8 @@
         personId={sheetPersonId}
         tribe={sheetTribe}
         onOpenTribe={handleOpenTribeFromSheet}
+        restore={sheetRestore}
+        {crumbOrigin}
         instanceKey={sheetInstanceKey}
         fallbackLabel={sheetFallbackLabel}
         onOpenPerson={handleOpenPerson}

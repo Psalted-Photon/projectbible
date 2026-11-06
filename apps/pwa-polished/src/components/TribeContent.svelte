@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { get } from "svelte/store";
   import GetPacksCard from "./GetPacksCard.svelte";
   import Gem from "./Gem.svelte";
@@ -24,6 +25,14 @@
   export let tribe: string;
   /** Leaves the tree for the reader (or another card) — the sheet's verse exit. */
   export let onClose: () => void;
+  /** What scrolls: the tree's sheet. The offset is read and put back on this. */
+  export let scrollEl: HTMLElement | null = null;
+  /** A verse link's crumb carries whatever this makes of the card's snapshot —
+   *  the tree wraps it in its own, so walking back reopens the tree on it. */
+  export let crumbOrigin: ((snap: { expanded: string[]; scrollTop: number }) => unknown) | null = null;
+  /** The verse lists that were open and the offset, from a crumb walked back to. */
+  export let initialExpanded: string[] = [];
+  export let initialScrollTop = 0;
 
   $: stone = stoneForTribe(tribe);
   /** The tree's brightened shade, so onyx's near-black still reads. */
@@ -98,11 +107,42 @@
   }
 
   // --- Leaving for the reader -------------------------------------------
+  /** The open verse lists and how far down, enough to put the card back. */
+  export function viewSnapshot() {
+    return {
+      expanded: Object.keys(expanded).filter((k) => expanded[k]),
+      scrollTop: scrollEl?.scrollTop ?? 0,
+    };
+  }
+
   function navigateToVerse(book: string, chapter: number, verse: number) {
     // The back arrow walks the reader that opened the card back to where it
-    // was. The tribe card itself isn't a saved surface, so it doesn't reopen.
-    cardJumpToVerse(get(lookupReader), book, chapter, verse, undefined, ENGLISH_NUMBERING);
+    // was, and with crumbOrigin reopens the tree on this card as it is now.
+    cardJumpToVerse(get(lookupReader), book, chapter, verse, crumbOrigin?.(viewSnapshot()), ENGLISH_NUMBERING);
     onClose();
+  }
+
+  // --- Coming back --------------------------------------------------------
+  // The history and verses load after the card is up, and each open list
+  // fetches its verse text after that, so the offset goes back only once all
+  // of it is on the page. Once, for the tribe the card first showed.
+  let restorePending = !!(initialScrollTop || initialExpanded.length);
+  $: if (restorePending && !loading && loadedFor === tribe) restoreView(tribe);
+
+  async function restoreView(t: string) {
+    restorePending = false;
+    await tick();
+    const lists = initialExpanded
+      .map((key) => {
+        const [pi, i] = key.split(".").map(Number);
+        const refs = parts[pi]?.points[i]?.refs;
+        return refs ? { key, refs } : null;
+      })
+      .filter((l): l is { key: string; refs: NavesRef[] } => !!l);
+    await Promise.all(lists.map((l) => toggleRefs(l.key, l.refs)));
+    if (loadedFor !== t) return;
+    await tick();
+    if (scrollEl) scrollEl.scrollTop = initialScrollTop;
   }
 
   /** A scripture reference. Ranges land on their first verse. */

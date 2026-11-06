@@ -13,6 +13,7 @@
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { strongsModalStore } from "../stores/strongsModalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
+  import { familyTreeStore, type TreeRestore } from "../stores/familyTreeStore";
   import {
     crumbArrival,
     lookupReader,
@@ -114,7 +115,7 @@
       arrival &&
       readerPending &&
       pending?.snapshot &&
-      ["naves", "person", "lexical", "isbe", "strongs"].includes(pending.surface ?? "") &&
+      ["naves", "person", "lexical", "isbe", "strongs", "familyTree"].includes(pending.surface ?? "") &&
       get(readerPending) === arrival.origin
     ) {
       readerPending.set(null);
@@ -125,7 +126,9 @@
   }
 
   function restoreCard(pending: { surface?: string; snapshot?: any }) {
-    if (pending.surface === 'naves') {
+    if (pending.surface === 'familyTree') {
+      restoreTree(pending.snapshot as TreeRestore, (pending as any).under ?? null);
+    } else if (pending.surface === 'naves') {
       const snap = pending.snapshot;
       saved = { ...saved, topical: snap };
       navesModalStore.open({ topicId: snap.topicId, primaryName: snap.primaryName, tab: snap.tab ?? null });
@@ -146,6 +149,35 @@
       saved = { ...saved, strongs: { tab: snap.tab, scrollTop: snap.scrollTop, trail: snap.trail ?? [] } };
       strongsModalStore.open({ strongsId: snap.strongsId });
     }
+  }
+
+  /**
+   * A crumb left from a link inside the family tree. The People card it was
+   * opened over comes back first, as it was, and the tree opens over it —
+   * so closing the tree afterwards lands on that card, as it did before.
+   * Opened from a docked bio there is no card under it (`under` is null) and
+   * the window stayed up across the jump.
+   */
+  async function restoreTree(tree: TreeRestore, under: { surface?: string; snapshot?: any } | null) {
+    if (under?.surface === "peopleIndex") openWorkIndex("people", null);
+    else if (under?.snapshot) restoreCard(under);
+    // A tree still up (a voice command walked back under it) is closed first,
+    // so the viewer mounts afresh and reads the snapshot.
+    if (get(familyTreeStore).isOpen) {
+      familyTreeStore.close();
+      await tick();
+    }
+    familyTreeStore.open({
+      restore: tree,
+      onLeave: under ? close : null,
+      under: under ? peopleUnderTree : null,
+    });
+  }
+
+  /** The People card under the tree, as a crumb origin — or its contents. */
+  function peopleUnderTree(): unknown {
+    if (work !== "people") return null;
+    return captureForCrumb()?.origin ?? { surface: "peopleIndex" };
   }
 
   function close() {

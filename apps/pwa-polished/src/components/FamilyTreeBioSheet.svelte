@@ -15,6 +15,7 @@
   import PersonContent from './PersonContent.svelte';
   import TribeContent from './TribeContent.svelte';
   import type { PersonRecord } from '../adapters/lexicon-lookup.js';
+  import type { TreeSheetPerson, TreeSheetTribe } from '../stores/familyTreeStore';
   import { motionLevel } from '../lib/motion';
   import { ArrowLeft } from 'phosphor-svelte';
 
@@ -36,6 +37,16 @@
   export let tribe: string | null = null;
   /** A tap on the stone inside the bio shown here. */
   export let onOpenTribe: (tribe: string, personId: string) => void;
+  /** The sheet as a crumb saved it, for the instance it was saved for — the
+   *  viewer drops it the moment the sheet switches to anyone else. */
+  export let restore: { person?: TreeSheetPerson; tribeCard?: TreeSheetTribe } | null = null;
+  /** Wraps a verse link's crumb in the tree's own snapshot. */
+  export let crumbOrigin: (content: { person?: TreeSheetPerson; tribeCard?: TreeSheetTribe }) => unknown;
+
+  /** The sheet's body is what scrolls, for a bio and a tribe card alike. */
+  let bodyEl: HTMLDivElement | null = null;
+
+  $: person = restore?.person;
 
   // Settings → Appearance → Motion, which follows the device's own switch by
   // default.
@@ -81,10 +92,17 @@
       <span class="sheet-name">{tribe ? `Tribe of ${tribe}` : personLabel}</span>
     </div>
   </div>
-  <div class="sheet-body">
+  <div class="sheet-body" bind:this={bodyEl}>
     {#if tribe}
       {#key instanceKey}
-        <TribeContent {tribe} {onClose} />
+        <TribeContent
+          {tribe}
+          {onClose}
+          scrollEl={bodyEl}
+          crumbOrigin={(snap) => crumbOrigin({ tribeCard: snap })}
+          initialExpanded={restore?.tribeCard?.expanded ?? []}
+          initialScrollTop={restore?.tribeCard?.scrollTop ?? 0}
+        />
       {/key}
     {:else if personId}
       {#key instanceKey}
@@ -97,6 +115,14 @@
           {onOpenTribe}
           {onClose}
           onPersonChange={handlePersonChange}
+          scrollEl={bodyEl}
+          crumbOrigin={(snap) => crumbOrigin({ person: snap })}
+          initialTrail={person?.trail ?? []}
+          initialScrollTop={person?.scrollTop ?? 0}
+          initialScrollFor={person?.personId ?? null}
+          initialVisited={person?.visited ?? []}
+          initialShowVerses={person?.showVerses ?? false}
+          initialExpandedBooks={person?.expandedBooks ?? []}
         />
       {/key}
     {/if}

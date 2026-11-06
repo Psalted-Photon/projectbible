@@ -110,6 +110,12 @@
    *  tree — the tree's bio sheet, already over the tree, lights the tribe in
    *  place rather than opening a second tree. */
   export let onOpenTribe: ((tribe: string, personId: string) => void) | null = null;
+  /** What scrolls, when it is not the card's own body: the tree's sheet, which
+   *  scrolls the whole bio. The offset is read and put back on this. */
+  export let scrollEl: HTMLElement | null = null;
+  /** When set, a verse link's crumb carries whatever this makes of the bio's
+   *  snapshot — the tree wraps it in its own, so the crumb reopens the tree. */
+  export let crumbOrigin: ((snap: ReturnType<typeof viewSnapshot>) => unknown) | null = null;
 
   $: docked = !!windowId;
 
@@ -134,7 +140,7 @@
       personId: person?.id ?? null,
       primaryName: title,
       trail,
-      scrollTop: bodyEl?.scrollTop ?? 0,
+      scrollTop: (scrollEl ?? bodyEl)?.scrollTop ?? 0,
       visited: [...visitedRefs],
       showVerses: showVerseList,
       expandedBooks: [...expandedBooks],
@@ -304,7 +310,24 @@
    * verse from a docked bio already leaves it up.
    */
   function openTreeOn(row?: LibraryRow) {
-    familyTreeStore.open({ focusId: row ? String(row.id) : null, onLeave: docked ? null : onClose });
+    familyTreeStore.open({ focusId: row ? String(row.id) : null, ...treeExit() });
+  }
+
+  /**
+   * How the tree leaves this card when a link inside it goes to a verse: the
+   * card closes (`onLeave`), and the crumb keeps what it was showing (`under`)
+   * so walking back puts it under the tree again. Docked, neither: the window
+   * stays up across the jump.
+   */
+  function treeExit() {
+    if (docked) return { onLeave: null, under: null };
+    return {
+      onLeave: onClose,
+      under: () => {
+        const snap = viewSnapshot();
+        return showContents || !snap.personId ? { surface: "peopleIndex" } : { surface: "person", snapshot: snap };
+      },
+    };
   }
 
   /** The card's own "See on the tree" link. Inside the bio sheet, the tree
@@ -317,7 +340,7 @@
       onShowOnTree(person.id);
       return;
     }
-    familyTreeStore.open({ focusId: person.id, onLeave: docked ? null : onClose });
+    familyTreeStore.open({ focusId: person.id, ...treeExit() });
   }
 
   /** A tap on the tribe's stone: the tree, lit on this tribe up to God and
@@ -325,7 +348,7 @@
   function openTribe(which: string | null = tribe) {
     if (!which || !person) return;
     if (onOpenTribe) return onOpenTribe(which, person.id);
-    familyTreeStore.open({ tribe: which, focusId: person.id, onLeave: docked ? null : onClose });
+    familyTreeStore.open({ tribe: which, focusId: person.id, ...treeExit() });
   }
 
   /** Step back to someone you came through. */
@@ -602,7 +625,8 @@
       if (person?.id !== p.id) return;
     }
     await tick();
-    if (bodyEl) bodyEl.scrollTop = initialScrollTop;
+    const scroller = scrollEl ?? bodyEl;
+    if (scroller) scroller.scrollTop = initialScrollTop;
   }
 
   function navigateToVerse(book: string, chapter: number, verse: number) {
@@ -613,12 +637,16 @@
     // so a snapshot would only put a second copy of the bio on top of it. The
     // crumb itself still goes on: it walks the reader back either way. It goes
     // in the trail of the reader that opened the card.
+    //
+    // Inside the family tree's sheet, crumbOrigin wraps the bio in the tree's
+    // own snapshot, so the crumb reopens the tree with this bio in its sheet.
+    const snap = viewSnapshot();
     cardJumpToVerse(
       docked ? MAIN_READER : get(lookupReader),
       book,
       chapter,
       verse,
-      docked ? undefined : { surface: 'person', snapshot: viewSnapshot() },
+      docked ? undefined : crumbOrigin ? crumbOrigin(snap) : { surface: 'person', snapshot: snap },
       ENGLISH_NUMBERING,
     );
     // A pinned bio stays open across the jump — reading the passage beside the
