@@ -85,14 +85,29 @@
   let localLexicalEntries: any = null;
 
   let mounted = false;
-  onMount(async () => {
+  onMount(() => {
     mounted = true;
-    if (initialScrollTop) {
-      // Only meaningful once the body has something in it to scroll.
-      await tick();
-      if (bodyEl) bodyEl.scrollTop = initialScrollTop;
-    }
   });
+
+  // --- Coming back ---------------------------------------------------------
+  // A crumb or a tab switch reopens the card with the offset it was left at,
+  // but the definitions load after the card is up — so the old restore, one
+  // tick after mount, scrolled a spinner and you landed at the top. This waits
+  // for the definitions, and for the other works' answer that adds the
+  // Strong's pointer at the foot, and only then puts the offset back. Once,
+  // for the first word shown.
+  let restorePending = initialScrollTop > 0;
+  /** The first lookup has finished, found or not. */
+  let lexSettled = false;
+  /** The works check that last finished, matched against the one asked for. */
+  let worksSettledFor = "";
+
+  async function restoreScroll() {
+    if (!restorePending || !lexSettled || worksSettledFor !== worksCheckedFor) return;
+    restorePending = false;
+    await tick();
+    if (bodyEl) bodyEl.scrollTop = initialScrollTop;
+  }
 
   // Reload whenever the subject changes. Mounted fresh per open today; keyed so
   // it also re-reads when the host swaps the word underneath it.
@@ -196,22 +211,28 @@
     if (worksCheckedFor === key) return;
     worksCheckedFor = key;
     works = null;
-    if (!key) return;
-    // Arrived here from another tab? Inherit the resolution we were opened from
-    // rather than deriving a new one from the word, which cannot tell three men
-    // called Herod apart and so returns the wrong one to People.
-    const inherited = carriedWorks("dictionary", key);
-    if (inherited) {
-      works = inherited;
-      return;
-    }
     try {
+      if (!key) return;
+      // Arrived here from another tab? Inherit the resolution we were opened from
+      // rather than deriving a new one from the word, which cannot tell three men
+      // called Herod apart and so returns the wrong one to People.
+      const inherited = carriedWorks("dictionary", key);
+      if (inherited) {
+        works = inherited;
+        return;
+      }
       const found = await resolveWorks(text);
       // A slower lookup must not light up a button for the previous word.
       if (worksCheckedFor !== key) return;
       works = found;
     } catch {
       works = null;
+    } finally {
+      // The Strong's pointer at the foot rides on this, so a restore waits for it.
+      if (worksCheckedFor === key) {
+        worksSettledFor = key;
+        restoreScroll();
+      }
     }
   }
 
@@ -310,7 +331,11 @@
       const errorMessage = err instanceof Error ? err.message : String(err);
       error = `Failed to load lexical data: ${errorMessage}`;
     } finally {
-      if (!stale()) loading = false;
+      if (!stale()) {
+        loading = false;
+        lexSettled = true;
+        restoreScroll();
+      }
     }
   }
 

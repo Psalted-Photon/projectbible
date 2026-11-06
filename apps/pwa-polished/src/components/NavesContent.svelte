@@ -1,6 +1,6 @@
 <script lang="ts">
   import { CaretRight, ArrowLeft, ArrowRight } from "phosphor-svelte";
-  import { onDestroy } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { packInstallFinished } from "../adapters/db-manager";
   import GetPacksCard from "./GetPacksCard.svelte";
   import { get } from "svelte/store";
@@ -125,6 +125,12 @@
     if (initialTab) {
       activeTab = initialTab;
       for (const book of expandedBooks) await loadBookText(book);
+      // The tab just set, and its books' text, have to be on the page before
+      // the offset fits. With every book on the Verses tab closed nothing above
+      // waited, so the offset went onto the Outline still showing and was cut
+      // short wherever the Outline was shorter.
+      await tick();
+      if (topicId !== id) return;
       if (initialScrollTop && bodyEl) bodyEl.scrollTop = initialScrollTop;
     }
   }
