@@ -857,9 +857,15 @@
         /** How far down the panel was read, so it comes back at that spot. */
         scrollTop: number;
       }
-    | { surface: 'bookIntro'; book: string };
+    | {
+        surface: 'bookIntro';
+        book: string;
+        /** How far down the introduction was read. Missing on crumbs saved before it was kept. */
+        scrollTop?: number;
+      };
 
   let annotationPanelRef: AnnotationPanel | null = null;
+  let bookIntroPanelRef: BookIntroPanel | null = null;
   let _reopenAnnotationScrollTop = 0;
 
   /**
@@ -929,6 +935,11 @@
       // in a chapter already on screen, since no load happens then.
       bookIntroPanelBook = origin.book;
       bookIntroPanelOpen = true;
+      // Its text is bundled with the app, so it is all on the page once the
+      // sheet has rendered. Set even when the saved spot is the top: the sheet
+      // stays mounted while closed and can still be scrolled from before.
+      const top = origin.scrollTop ?? 0;
+      tick().then(() => bookIntroPanelRef?.scrollBodyTo(top));
       return;
     }
     _reopenAnnotationVerse = origin.verse;
@@ -974,7 +985,11 @@
           };
         }
         if (bookIntroPanelOpen) {
-          const origin: ReaderOrigin = { surface: 'bookIntro', book: bookIntroPanelBook };
+          const origin: ReaderOrigin = {
+            surface: 'bookIntro',
+            book: bookIntroPanelBook,
+            scrollTop: bookIntroPanelRef?.bodyScrollTop() ?? 0,
+          };
           return { kind: 'library', origin };
         }
         return null;
@@ -1133,8 +1148,13 @@
 
   function handleBookIntroNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
     const { book, chapter, verse } = e.detail;
+    // Read before closing, while the sheet still shows the spot you tapped from.
+    const origin: ReaderOrigin = {
+      surface: 'bookIntro',
+      book: bookIntroPanelBook,
+      scrollTop: bookIntroPanelRef?.bodyScrollTop() ?? 0,
+    };
     bookIntroPanelOpen = false;
-    const origin: ReaderOrigin = { surface: 'bookIntro', book: bookIntroPanelBook };
     pushCrumb('library', origin, { book: bookIntroPanelBook, chapter: 1, verse: null });
     if (windowId) {
       _windowScrollTarget = verse;
@@ -7439,6 +7459,7 @@
 {/if}
 
 <BookIntroPanel
+  bind:this={bookIntroPanelRef}
   open={bookIntroPanelOpen}
   book={bookIntroPanelBook}
   panelLeft={readerLeft}

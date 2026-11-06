@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, tick } from "svelte";
   import { get } from "svelte/store";
   import bookIntroductions from "../data/book-introductions.json";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
@@ -22,6 +22,19 @@
 
   // panelLeft is a viewport coordinate; `position: fixed` may not be. See lib/fixedOrigin.ts.
   let sheetEl: HTMLDivElement;
+  let bodyEl: HTMLDivElement;
+
+  /**
+   * How far down the introduction is scrolled, and how to put it back, so a
+   * crumb back from one of its links lands on the paragraph you were reading.
+   */
+  export function bodyScrollTop(): number {
+    return bodyEl?.scrollTop ?? 0;
+  }
+
+  export function scrollBodyTo(top: number): void {
+    if (bodyEl) bodyEl.scrollTop = top;
+  }
   let originLeft = 0;
   // Re-measure whenever the reader moves or the sheet is shown; a theme change
   // swaps the containing block out from under us, and opening is the first point
@@ -70,6 +83,9 @@
   async function handleRefClick(ref: string) {
     const target = parseRefString(ref, book, 1);
     if (!target) return;
+    // The text is swapped out while the verse loads, which drops the scroll
+    // to the top; it goes back to the same spot once the text returns.
+    const savedScrollTop = bodyEl?.scrollTop ?? 0;
     panelLoading = true;
     const translation = get(navigationStore).translation;
     const text = await verseAtEnglishRef(translation, target.book, target.chapter, target.verse);
@@ -81,6 +97,8 @@
       text,
     };
     panelLoading = false;
+    await tick();
+    if (bodyEl) bodyEl.scrollTop = savedScrollTop;
   }
 
   /** Go to the previewed verse in the reader, which closes the sheet and leaves a crumb. */
@@ -122,7 +140,7 @@
   <div class="intro-source">KingComments commentary</div>
 
   <!-- Body -->
-  <div class="intro-body">
+  <div class="intro-body" bind:this={bodyEl}>
     {#if panelLoading}
       <div class="panel-loading show-late">Loading…</div>
     {:else}
