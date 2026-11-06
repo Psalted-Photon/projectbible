@@ -73,7 +73,12 @@
     progress: () => rec?.mark ?? 0,
     onTake: () => rec?.newTake(),
     onUpdate: (u) => {
-      if (phase !== 'playing' || answered || !rec) return;
+      if (phase !== 'playing' || !rec) return;
+      // While the answer is up, what is heard is still kept, so the next phrase starts after it.
+      if (answered) {
+        rec.keep(u);
+        return;
+      }
       rec.update(u);
       cursor = rec.cursor;
       if (rec.done) answer('right');

@@ -104,6 +104,16 @@ export class Recitation {
     this.advance();
   }
 
+  /**
+   * Keeps what was heard without checking it, for the pause before the next
+   * stretch. Replies only carry what is new, so one let go would leave the next
+   * stretch starting in the wrong place.
+   */
+  keep(u: HeardUpdate): void {
+    this.settled.push(...u.settled);
+    this.pending = u.pending;
+  }
+
   /** What the user is on, passed by hand. */
   tap(): void {
     if (this.refStart) this.refStart = false;

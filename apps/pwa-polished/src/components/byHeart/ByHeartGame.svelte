@@ -180,6 +180,8 @@
     onUpdate: (u) => {
       if (!rec) return;
       if (phase === 'finishing') rec.update(u);
+      // Between rounds what is heard is still kept, so the next round starts after it.
+      if (phase === 'between') rec.keep(u);
       if (phase !== 'playing') return;
       rec.update(u);
       sync();
