@@ -314,6 +314,14 @@ function saveableOrigin(origin: unknown): unknown {
   }
 }
 
+/**
+ * Whether a panel snapshot would be kept when the trail is saved, so it still
+ * comes back after the app is closed. A panel can carry less when it would not.
+ */
+export function keptAfterRestart(origin: unknown): boolean {
+  return saveableOrigin(origin) !== undefined;
+}
+
 function isSavedCrumb(c: any): c is TrailCrumb {
   return (
     c != null &&

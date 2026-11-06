@@ -13,7 +13,7 @@
     type SearchCategory,
     type SearchResult,
   } from "../lib/services/searchService";
-  import { navigationStore, pendingRestore, registerScreenSurface } from "../stores/navigationStore";
+  import { keptAfterRestart, navigationStore, pendingRestore, registerScreenSurface } from "../stores/navigationStore";
   import { get } from "svelte/store";
   import { onMount, tick } from "svelte";
   import { buildSearchTree } from "../lib/searchTree";
@@ -244,7 +244,7 @@
   function snapshotForCrumb(): AdvancedSearchOrigin {
     const rows = searchResults.reduce((n, c) => n + c.results.length, 0);
     const q = generatedQuery;
-    return {
+    const snap: AdvancedSearchOrigin = {
       surface: "advancedSearch",
       // A copy, so later edits in the window do not change what the crumb holds.
       config: JSON.parse(JSON.stringify(config)),
@@ -278,6 +278,11 @@
         list: resultsListEl?.scrollTop ?? 0,
       },
     };
+    // The saved trail only keeps a snapshot up to a set size, and one over it
+    // comes back after a restart as just the verse. Long verse or commentary
+    // rows can pass that well short of 250, so those go as the search too.
+    if (snap.results && !keptAfterRestart(snap)) snap.results = null;
+    return snap;
   }
 
   function putScrollBack(s: AdvancedSearchOrigin["scroll"]) {

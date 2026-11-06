@@ -677,9 +677,15 @@
   $: showReadAloud =
     !pickOnly && FEATURES.ttsReadAloud && (!isOriginalLanguage(currentTranslation) || canSpeakOriginal(currentTranslation));
   let bookIntroPanelBook = "";
+  /**
+   * The chapter whose button opened the intro. Every chapter has one (the (i)
+   * past chapter 1), so a link crumb stands here, not on chapter 1.
+   */
+  let bookIntroPanelChapter = 1;
 
-  function openBookIntroPanel(book: string) {
+  function openBookIntroPanel(book: string, chapter: number) {
     bookIntroPanelBook = book;
+    bookIntroPanelChapter = chapter;
     bookIntroPanelOpen = true;
   }
 
@@ -866,6 +872,8 @@
     | {
         surface: 'bookIntro';
         book: string;
+        /** The chapter it was opened from. Missing on crumbs saved before it was kept, which meant chapter 1. */
+        chapter?: number;
         /** How far down the introduction was read. Missing on crumbs saved before it was kept. */
         scrollTop?: number;
       };
@@ -958,6 +966,7 @@
       // Waiting on a chapter load left it waiting forever when the crumb was
       // in a chapter already on screen, since no load happens then.
       bookIntroPanelBook = origin.book;
+      bookIntroPanelChapter = origin.chapter ?? 1;
       bookIntroPanelOpen = true;
       // Its text is bundled with the app, so it is all on the page once the
       // sheet has rendered. Set even when the saved spot is the top: the sheet
@@ -1005,6 +1014,7 @@
           const origin: ReaderOrigin = {
             surface: 'bookIntro',
             book: bookIntroPanelBook,
+            chapter: bookIntroPanelChapter,
             scrollTop: bookIntroPanelRef?.bodyScrollTop() ?? 0,
           };
           return { kind: 'library', origin };
@@ -1169,10 +1179,13 @@
     const origin: ReaderOrigin = {
       surface: 'bookIntro',
       book: bookIntroPanelBook,
+      chapter: bookIntroPanelChapter,
       scrollTop: bookIntroPanelRef?.bodyScrollTop() ?? 0,
     };
     bookIntroPanelOpen = false;
-    pushCrumb('library', origin, { book: bookIntroPanelBook, chapter: 1, verse: null });
+    // Stands on the chapter whose button opened it, so the way back is to
+    // where you were reading, not to the top of the book.
+    pushCrumb('library', origin, { book: bookIntroPanelBook, chapter: bookIntroPanelChapter, verse: null });
     if (windowId) {
       _windowScrollTarget = verse;
       windowStore.updateContentState(windowId, { book, chapter, highlightedVerse: null });
@@ -7574,7 +7587,7 @@
               <div class="intro-row">
               <button
                 class="book-intro-btn"
-                on:click={() => openBookIntroPanel(chapterData.book)}
+                on:click={() => openBookIntroPanel(chapterData.book, chapterData.chapter)}
                 title="Introduction to {bookTitle(chapterData.book)}"
               ><Info size={15} weight="bold" />Introduction</button>
               {#each (introPillsByBook.get(chapterData.book) ?? []) as rec (rec.word)}
@@ -7618,7 +7631,7 @@
                 {/if}
                 <button
                   class="book-intro-info"
-                  on:click={() => openBookIntroPanel(chapterData.book)}
+                  on:click={() => openBookIntroPanel(chapterData.book, chapterData.chapter)}
                   title="Introduction to {bookTitle(chapterData.book)}"
                   aria-label="Introduction to {chapterData.book}"
                 ><Info size={18} weight="bold" /></button>
