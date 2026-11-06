@@ -41,6 +41,7 @@
 import { findRefs, isValidChapter, isValidVerse, resolveBook, type RefMatch } from './bibleRefs';
 import { parseOsisRef } from './parseRefString';
 import { BIBLE_BOOKS, normalizeBookName } from './bibleData';
+import { EASTON_REF_FIXES } from './eastonRefFixes';
 
 /** Which rule placed a link — shown by the check script, ignored by the app. */
 export type BioRule =
@@ -359,20 +360,22 @@ function chooseBook(item: Item, items: Item[], ctx: Ctx, named: string | null, f
 /**
  * A bare verse number: "(18)", "(5, 6, 12)", "ver. 7". It belongs to the last
  * chapter cited — unless a book is named right before it ("the book of
- * Genesis (10)"), or it directly follows a whole-chapter link, when it is a
- * chapter.
+ * Genesis (10)"), or `asChapter` says the link before it makes it a chapter.
+ * A fix with no chapter of its own reads the number as a chapter too.
  */
-function chooseVerse(item: Item, ctx: Ctx, named: string | null, afterChapterLink: boolean, fixAt: FixAt): Choice | 'plain' | null {
+function chooseVerse(item: Item, ctx: Ctx, named: string | null, asChapter: boolean, fixAt: FixAt): Choice | 'plain' | null {
   const n = item.a;
   const fix = fixAt(item.start, item.end);
   if (fix) {
     if (!fix.book) return 'plain';
-    const chapter = fix.chapter ?? ctx.chapter;
-    return exists(fix.book, chapter, n) ? { book: fix.book, chapter, verse: n, rule: 'fix' } : null;
+    if (fix.chapter == null) {
+      return exists(fix.book, n) ? { book: fix.book, chapter: n, verse: 1, rule: 'fix', chapters: true } : null;
+    }
+    return exists(fix.book, fix.chapter, n) ? { book: fix.book, chapter: fix.chapter, verse: n, rule: 'fix' } : null;
   }
   if (named && exists(named, n)) return { book: named, chapter: n, verse: 1, rule: 'named', chapters: true };
   if (!ctx.book) return null;
-  if (afterChapterLink && ctx.chapterOnly) {
+  if (asChapter) {
     return exists(ctx.book, n) ? { book: ctx.book, chapter: n, verse: 1, rule: 'chapter', chapters: true } : null;
   }
   return exists(ctx.book, ctx.chapter, n) ? { book: ctx.book, chapter: ctx.chapter, verse: n, rule: 'verse' } : null;
@@ -429,7 +432,8 @@ function placeList(
   let book = choice.book;
   let chapter = choice.chapter;
   if (!choice.single) {
-    for (const item of items.slice(1)) {
+    for (let k = 1; k < items.length; k++) {
+      const item = items[k];
       let rule: BioRule = 'list';
       const fix = fixAt(item.start, item.end);
       if (fix) {
@@ -442,7 +446,10 @@ function placeList(
         chapter = item.a;
         verse = item.b;
         chapters = false;
-      } else if (chapters) {
+      } else if (chapters || plain.slice(items[k - 1].end, item.start).includes(';')) {
+        // Easton puts a semicolon between chapters and a comma between
+        // verses, so "4:1-12; 6" is chapter 6.
+        chapters = true;
         chapter = item.a;
         verse = 1;
       } else {
@@ -471,8 +478,12 @@ const VERSE_WORD_RE = /\b(?:verses?|vers?)\.?\s*(?=\d)/gi;
 const CHAPTER_WORD_RE = /\b(?:chapters?|chaps?|chs?)\.?\s*(?=\d)/gi;
 /** Any other number. It counts only as a verse inside brackets: "(33)". */
 const NUMBER_RE = /(?<![\w:.,$/\-–])\d+/g;
-/** What a bracketed verse number follows: the bracket, a comma or semicolon, "comp.". */
-const VERSE_LEAD_RE = /(?:\(|[,;]|\b(?:comp|cf|see)\.?)\s*$/i;
+/**
+ * What a bracketed verse number follows: the bracket or "comp.". A comma or
+ * semicolon counts only straight after a link — "(Philemon 1:16, 18)" — not
+ * after other numbers, as in "Josephus, Ant. xx. 8, 9".
+ */
+const VERSE_LEAD_RE = /(?:\(|\b(?:comp|cf|see)\.?)\s*$/i;
 /** And what follows it. "(about 30 days)" or "(10 men)" isn't a reference. */
 const VERSE_TAIL_RE = /^\s*(?:[).;,\]]|$)/;
 /** No chapter has more verses than Psalm 119's 176, so a bigger number is a year or a count. */
@@ -601,12 +612,15 @@ function scanGap(p: Para, from: number, to: number, prevLinkEnd: number | null, 
       // A bare number counts only inside brackets, at the start of an item,
       // standing alone, and small enough to be a verse.
       if (first.a > MAX_VERSE || depthAt(plain, c.at) < 1) continue;
-      if (!VERSE_LEAD_RE.test(plain.slice(Math.max(0, c.at - 12), c.at))) continue;
+      const sep = lastEnd == null ? null : plain.slice(lastEnd, c.at);
+      const afterLink = sep != null && /^\s*[,;]\s*$/.test(sep);
+      if (!afterLink && !VERSE_LEAD_RE.test(plain.slice(Math.max(0, c.at - 12), c.at))) continue;
       if (!VERSE_TAIL_RE.test(plain.slice(listEnd))) continue;
       if (isMarker(plain, first, p.markers)) continue;
       const named = plain[c.at - 1] === '(' ? namedBookBefore(plain, c.at) : null;
-      const afterLink = lastEnd != null && /^\s*[,;]\s*$/.test(plain.slice(lastEnd, c.at));
-      choose = () => chooseVerse(first, ctx, named, afterLink, fixAt);
+      // After a whole-chapter link, or a semicolon, a bare number is a chapter.
+      const asChapter = afterLink && (ctx.chapterOnly || sep!.includes(';'));
+      choose = () => chooseVerse(first, ctx, named, asChapter, fixAt);
     }
 
     const spans = placeList(plain, items, c.kind === 'verse' || c.kind === 'chapter' ? c.at : first.start, ctx, fixAt, choose);
@@ -678,7 +692,7 @@ function fixesFor(person: BioPerson, fixes: BioFix[]): BioFix[] {
 export function eastonBioReport(
   text: string | undefined,
   person: BioPerson = {},
-  fixes: BioFix[] = [],
+  fixes: BioFix[] = EASTON_REF_FIXES,
 ): { paragraphs: BioPiece[][]; misses: BioMiss[] } {
   const ctx: Ctx = {
     book: null,
@@ -699,6 +713,6 @@ export function eastonBioReport(
 }
 
 /** The bio as paragraphs of plain text and scripture links. */
-export function eastonBio(text: string | undefined, person: BioPerson = {}, fixes: BioFix[] = []): BioPiece[][] {
+export function eastonBio(text: string | undefined, person: BioPerson = {}, fixes: BioFix[] = EASTON_REF_FIXES): BioPiece[][] {
   return eastonBioReport(text, person, fixes).paragraphs;
 }
