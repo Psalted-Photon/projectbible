@@ -7,6 +7,10 @@
  * never fully leaves), 60 to 89 keeps the same gap, and under 60 comes back
  * tomorrow. Known takes passes on about 3 separate days. Only recalling a whole
  * verse from memory counts here.
+ *
+ * The score is the last try. Overall is the running one: it starts at 0 and moves
+ * a third of the way toward the day's score on the first try of each day, so it
+ * builds with good days and one bad day only knocks it back a little.
  */
 
 import type { DBByHeartVerse } from '../../adapters/db';
@@ -15,7 +19,7 @@ import { localDateStr } from '../../stores/clockStore';
 import { cardWords } from '../shareCard';
 import { isOriginalLanguage } from '../translationKind';
 import type { GameMode, GameStep } from './game';
-import { isDue } from './verse';
+import { isDue, nextDateLabel } from './verse';
 import { plainWord } from './wordMatch';
 
 /** What a verse's `progress` holds. Every field is absent until it has something to say. */
@@ -36,6 +40,8 @@ export interface VerseProgress {
   built?: boolean;
   /** How many times each word was missed, by its place in the verse. Weak Spots drills these. */
   missed?: Record<string, number>;
+  /** The running score across days, before rounding for the screen. */
+  overall?: number;
 }
 
 export const progressOf = (verse: Pick<DBByHeartVerse, 'progress'>): VerseProgress => (verse.progress ?? {}) as VerseProgress;
@@ -48,6 +54,8 @@ export const PASS_SCORE = 90;
 export const HOLD_SCORE = 60;
 /** Passes on this many separate days make it Known. */
 const KNOWN_DAYS = 3;
+/** How far Overall moves toward the first score of a day. */
+const OVERALL_STEP = 1 / 3;
 
 export type Stage = 'new' | 'learning' | 'known';
 
@@ -55,6 +63,31 @@ export function stageOf(verse: DBByHeartVerse): Stage {
   if (verse.score === null) return progressOf(verse).built ? 'learning' : 'new';
   const days = progressOf(verse).passDays?.length ?? 0;
   return days >= KNOWN_DAYS && verse.score >= HOLD_SCORE ? 'known' : 'learning';
+}
+
+/** Overall for the screen, or null until a round has counted toward it. A verse scored before Overall existed shows its last score. */
+export function overallOf(verse: Pick<DBByHeartVerse, 'progress' | 'score'>): number | null {
+  const p = progressOf(verse);
+  if (p.overall !== undefined) return Math.round(p.overall);
+  return p.plays ? verse.score : null;
+}
+
+/** Overall after this day's first score. Kept unrounded, so it can still reach 100. */
+function overallAfter(verse: DBByHeartVerse, score: number): number {
+  const p = progressOf(verse);
+  const from = p.overall ?? (p.plays ? (verse.score ?? 0) : 0);
+  return Math.round((from + (score - from) * OVERALL_STEP) * 100) / 100;
+}
+
+/** One plain sentence on where a verse stands and what would move it. */
+export function standingLine(verse: DBByHeartVerse): string {
+  if (verse.score === null) return 'No score yet. Practice it to get one.';
+  const back = nextDateLabel(verse);
+  const when = back ? ` ${back}.` : '';
+  if (stageOf(verse) === 'known') return `You know this one.${when}`;
+  const left = KNOWN_DAYS - (progressOf(verse).passDays?.length ?? 0);
+  if (left <= 0) return `Get ${HOLD_SCORE}% or better to call it Known again.${when}`;
+  return `Get ${PASS_SCORE}% or better on ${left} more ${left === 1 ? 'day' : 'days'} to reach Known.${when}`;
 }
 
 function addDays(day: string, days: number): string {
@@ -80,6 +113,7 @@ export function afterRound(
     for (const at of missed) progress.missed[at] = (progress.missed[at] ?? 0) + 1;
   }
   if (p.lastRound === today) return { score, progress: progress as Record<string, unknown> };
+  progress.overall = overallAfter(verse, score);
   if (score >= PASS_SCORE) progress.passDays = [...(p.passDays ?? []), today].slice(-KNOWN_DAYS);
   if (score >= HOLD_SCORE && !isDue(verse, today)) return { score, progress: progress as Record<string, unknown> };
 
@@ -105,12 +139,16 @@ export function withHeardAs(verse: Pick<DBByHeartVerse, 'progress'>, word: strin
 }
 
 /**
- * Build has been through a verse: it isn't New any more and comes back tomorrow.
- * It doesn't count as recalling the verse, so no score, and a date already set stays.
+ * Build has been through a verse: it isn't New any more, and its last round, the
+ * whole verse from memory, is the score. The words were on screen moments before,
+ * so it can't count as a good day or move the schedule on. A new verse comes back
+ * tomorrow, and a poor score brings a later date in to tomorrow.
  */
-export function afterBuild(verse: DBByHeartVerse, today = localDateStr(new Date())): Partial<NewByHeartVerse> {
-  const progress = { ...progressOf(verse), built: true } as Record<string, unknown>;
-  return verse.nextDate === null ? { nextDate: addDays(today, 1), progress } : { progress };
+export function afterBuild(verse: DBByHeartVerse, score: number, today = localDateStr(new Date())): Partial<NewByHeartVerse> {
+  const progress = { ...progressOf(verse), built: true, silent: false } as Record<string, unknown>;
+  const tomorrow = addDays(today, 1);
+  const soon = verse.nextDate === null || (score < HOLD_SCORE && verse.nextDate > tomorrow);
+  return { score, progress, ...(soon ? { nextDate: tomorrow } : {}) };
 }
 
 /** A word got through Weak Spots without help: one less to drill. */

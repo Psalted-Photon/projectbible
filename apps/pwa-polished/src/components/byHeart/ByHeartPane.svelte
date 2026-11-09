@@ -1,22 +1,25 @@
 <script lang="ts">
   /**
-   * The By Heart window. Home is a Today button over the saved verses, each with
-   * its small card, score and next date. New verse goes on to the simple reader
-   * and the Verse of the Day list, and from either to the card step, all in this
-   * one window. A row's Edit card comes back to the card step for that verse.
+   * The By Heart window. Home has what covers every verse at the top (Today's
+   * Practice, Weak Spots, Sword Drill) over the saved verses, due ones first. A row
+   * opens that verse's page, for Study and Practice. Add verse goes on to the
+   * simple reader and the Verse of the Day list, and from either to the card step,
+   * all in this one window. A verse page's Edit card comes back to the card step
+   * for that verse.
    */
   import { onDestroy, onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { ArrowLeft, Plus } from 'phosphor-svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
   import { subscribeToByHeartChanges, syncedByHeartStore, type NewByHeartVerse } from '../../adapters/SyncedByHeartStore';
-  import { translationLabel } from '../../lib/bibleData';
+  import { getBookColor, translationLabel } from '../../lib/bibleData';
   import { cardImageOf, keepThumbs } from '../../lib/byHeart/cardThumb';
-  import { byHeartGame, openDrill, openGame, type GameMode } from '../../lib/byHeart/game';
+  import { byHeartGame, gamePrefs, openDrill, openGame, type GameMode } from '../../lib/byHeart/game';
   import { MAX_WORDS, splitParts } from '../../lib/byHeart/passage';
-  import { weakSteps } from '../../lib/byHeart/schedule';
+  import { stageOf, weakSteps, type Stage } from '../../lib/byHeart/schedule';
   import { startToday } from '../../lib/byHeart/today';
-  import { drawableStyle, isDue, referenceOf, savedCardOf, shareRefOf, type SavedCard } from '../../lib/byHeart/verse';
+  import { drawableStyle, isDue, referenceOf, savedCardOf, shareRefOf, whenBack, type SavedCard } from '../../lib/byHeart/verse';
+  import { ADD_VERSE, PRACTICE, STAGE_NAMES, STUDY, SWORD_DRILL, TODAYS_PRACTICE, WAYS } from '../../lib/byHeart/ways';
   import { formatShareRef, buildShareUrl, type PickedPassage } from '../../lib/shareText';
   import { windowStore } from '../../lib/stores/windowStore';
   import { isOriginalLanguage } from '../../lib/translationKind';
@@ -28,6 +31,8 @@
   import ShareCardPanel, { type CardDesign, type InitialCard } from '../ShareCardPanel.svelte';
   import ByHeartPicker from './ByHeartPicker.svelte';
   import ByHeartRow from './ByHeartRow.svelte';
+  import ByHeartVerse from './ByHeartVerse.svelte';
+  import TranslationTag from './TranslationTag.svelte';
 
   export let windowId: string;
   /** A passage sent from elsewhere (the Verse of the Day card), taken once. */
@@ -35,30 +40,42 @@
 
   let verses: DBByHeartVerse[] = [];
   let loaded = false;
-  let expanded: string | null = null;
+  /** The verse whose page is open. */
+  let pageId: string | null = null;
 
+  /** Due first, then soonest back. */
+  function comingUp(a: DBByHeartVerse, b: DBByHeartVerse): number {
+    return Number(isDue(b)) - Number(isDue(a)) || (a.nextDate ?? '').localeCompare(b.nextDate ?? '');
+  }
+
+  /** "3 Known, 5 Learning, 4 New", leaving out any with none. */
+  function stageCounts(list: DBByHeartVerse[]): string {
+    const stages: Stage[] = ['known', 'learning', 'new'];
+    return stages
+      .map((stage) => ({ stage, count: list.filter((v) => stageOf(v) === stage).length }))
+      .filter(({ count }) => count > 0)
+      .map(({ stage, count }) => `${count} ${STAGE_NAMES[stage]}`)
+      .join(', ');
+  }
+
+  $: ordered = [...verses].sort(comingUp);
   $: dueCount = verses.filter((v) => isDue(v)).length;
-
-  const OTHER_WAYS: { mode: GameMode; label: string }[] = [
-    { mode: 'build', label: 'Build' },
-    { mode: 'recital', label: 'Recital' },
-    { mode: 'flashcards', label: 'Flashcards' },
-    { mode: 'call', label: 'Call and Response' },
-    { mode: 'silent', label: 'Silent study' },
-  ];
+  $: soonest = ordered.find((v) => v.nextDate)?.nextDate ?? null;
+  $: weakCount = weakSteps(verses).length;
+  let drillBest: number | null = null;
+  // Read again each time a game closes, which is when it can have changed.
+  $: if (!$byHeartGame) drillBest = gamePrefs().drillTop[0]?.right ?? null;
+  $: pageVerse = verses.find((v) => v.id === pageId) ?? null;
+  // Removed here, or on another device, while its page was open.
+  $: if (view === 'verse' && loaded && !pageVerse) goHome();
 
   function play(verse: DBByHeartVerse, mode: GameMode) {
-    expanded = null;
+    stopRecital();
     openGame(verse.id, mode);
   }
 
   function openWeakSpots() {
-    const steps = weakSteps(verses);
-    if (!steps.length) {
-      showNotice('Nothing to drill yet. Words you ask to see or miss in a recital collect here.');
-      return;
-    }
-    byHeartGame.set({ id: Date.now(), steps, at: 0 });
+    byHeartGame.set({ id: Date.now(), steps: weakSteps(verses), at: 0 });
   }
 
   async function load() {
@@ -74,7 +91,6 @@
       danger: true,
     });
     if (!ok) return;
-    expanded = null;
     await syncedByHeartStore.remove(verse.id);
   }
 
@@ -124,8 +140,8 @@
 
   // ── Where the window is ────────────────────────────────────────────────────
 
-  let view: 'home' | 'pick' | 'card' = 'home';
-  /** The simple reader's window. Kept from New verse until home again. */
+  let view: 'home' | 'verse' | 'pick' | 'card' = 'home';
+  /** The simple reader's window. Kept from Add verse until home again. */
   let readerId: string | null = null;
   let pickerTab: 'read' | 'votd' = 'read';
 
@@ -148,8 +164,15 @@
 
   function goHome() {
     closeReader();
+    stopRecital();
     draft = null;
+    pageId = null;
     view = 'home';
+  }
+
+  function openPage(verse: DBByHeartVerse) {
+    pageId = verse.id;
+    view = 'verse';
   }
 
   function newVerse() {
@@ -161,8 +184,9 @@
   }
 
   function backFromCard() {
+    const fromPage = !!draft?.verseId;
     draft = null;
-    view = readerId ? 'pick' : 'home';
+    view = fromPage ? 'verse' : readerId ? 'pick' : 'home';
   }
 
   function toCard(p: PickedPassage) {
@@ -174,7 +198,7 @@
     const card = savedCardOf(verse);
     const image = await cardImageOf(verse);
     const style = drawableStyle(card, !!image);
-    expanded = null;
+    stopRecital();
     closeReader();
     draft = {
       passage: verse.passage,
@@ -227,7 +251,7 @@
       await keepPhoto(d.verseId, design);
       await syncedByHeartStore.update(d.verseId, { card: card(design.emphasis) as unknown as Record<string, unknown> });
       showNotice('Card saved.');
-      goHome();
+      backFromCard();
       return;
     }
 
@@ -269,47 +293,58 @@
 
 <div class="bh-pane">
   {#if view === 'home'}
-    <div class="bar">
-      <button class="today" disabled={dueCount === 0} on:click={() => void startToday()}>
-        <span>Today</span>
-        <span class="today-count">{dueCount === 1 ? '1 verse due' : `${dueCount} verses due`}</span>
-      </button>
-      <button class="new" on:click={newVerse}><Plus size="1em" weight="bold" /> New verse</button>
-    </div>
-    {#if verses.length}
-      <div class="bar drills">
-        <button class="drill" on:click={openWeakSpots}>Weak Spots</button>
-        <button class="drill" on:click={openDrill}>Sword Drill</button>
-      </div>
-    {/if}
-
-    <div class="list">
-      {#each verses as verse (verse.id)}
-        <ByHeartRow
-          {verse}
-          expanded={expanded === verse.id}
-          onMore={() => (expanded = expanded === verse.id ? null : verse.id)}
-        />
-        {#if expanded === verse.id}
-          <div class="actions">
-            {#each OTHER_WAYS.filter((w) => w.mode === 'silent' || !isOriginalLanguage(verse.translation)) as way (way.mode)}
-              <button class="action" on:click={() => play(verse, way.mode)}>{way.label}</button>
-            {/each}
-            <button class="action" on:click={() => editCard(verse)}>Edit or share card</button>
-            {#if recitals.has(verse.id)}
-              <button class="action" on:click={() => hearRecital(verse)}>
-                {hearing?.id === verse.id ? 'Stop your recital' : `Hear your recital (${recitals.get(verse.id)}%)`}
-              </button>
-              <button class="action" on:click={() => deleteRecital(verse)}>Delete recital</button>
-            {/if}
-            <button class="action danger" on:click={() => remove(verse)}>Remove</button>
+    <div class="home">
+      {#if verses.length}
+        <div class="home-top">
+          {#if dueCount > 0}
+            <button class="today" on:click={() => void startToday()}>
+              <span class="tile-head">
+                <span class="tile-name">{TODAYS_PRACTICE.name}</span>
+                <span class="today-count">{dueCount === 1 ? '1 verse due' : `${dueCount} verses due`}</span>
+              </span>
+              <span class="tile-line">{TODAYS_PRACTICE.line}</span>
+            </button>
+          {:else}
+            <div class="today done">
+              <span class="tile-name">All caught up</span>
+              {#if soonest}<span class="tile-line">Next verse back {whenBack(soonest)}.</span>{/if}
+            </div>
+          {/if}
+          <div class="tiles">
+            <button class="drill" disabled={weakCount === 0} on:click={openWeakSpots}>
+              <span class="tile-name">{WAYS.weak.name}</span>
+              <span class="tile-line">{weakCount ? WAYS.weak.line : 'Nothing yet. Words you miss will collect here.'}</span>
+            </button>
+            <button class="drill" on:click={openDrill}>
+              <span class="tile-name">{SWORD_DRILL.name}</span>
+              <span class="tile-line">{SWORD_DRILL.line}</span>
+              {#if drillBest}<span class="tile-best">Best {drillBest} right</span>{/if}
+            </button>
           </div>
-        {/if}
-      {:else}
-        {#if loaded}
-          <p class="empty">The verses you are memorizing live here. Tap New verse to add your first.</p>
-        {/if}
-      {/each}
+        </div>
+
+        <div class="list-head">
+          <div class="list-title">
+            <span class="list-name">Your verses</span>
+            <span class="list-count">{stageCounts(verses)}</span>
+          </div>
+          <button class="new" on:click={newVerse}><Plus size="1em" weight="bold" /> {ADD_VERSE}</button>
+        </div>
+
+        {#each ordered as verse (verse.id)}
+          <ByHeartRow {verse} onOpen={() => openPage(verse)} />
+        {/each}
+      {:else if loaded}
+        <div class="welcome">
+          <p class="welcome-title">Learn verses by heart</p>
+          <ol>
+            <li><strong>{ADD_VERSE}</strong> and design its card.</li>
+            <li><strong>{STUDY.name}</strong> it. Read it and listen to it.</li>
+            <li><strong>{PRACTICE.name}</strong> it and get a score. Verses come back when they're due, further apart as you learn them.</li>
+          </ol>
+          <button class="new" on:click={newVerse}><Plus size="1em" weight="bold" /> {ADD_VERSE}</button>
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="bar step-bar">
@@ -317,11 +352,26 @@
         <ArrowLeft size="1em" weight="bold" /> Back
       </button>
       <span class="step-title">
-        {#if view === 'pick'}New verse{:else if draft}{formatShareRef(draft.ref)}{/if}
+        {#if view === 'verse' && pageVerse}
+          <span style="color: {getBookColor(pageVerse.book)}">{referenceOf(pageVerse)}</span>
+          <TranslationTag translation={pageVerse.translation} />
+        {:else if view === 'pick'}{ADD_VERSE}{:else if draft}{formatShareRef(draft.ref)}{/if}
       </span>
     </div>
 
-    {#if view === 'pick' && readerId}
+    {#if view === 'verse' && pageVerse}
+      {@const v = pageVerse}
+      <ByHeartVerse
+        verse={v}
+        recitalScore={recitals.get(v.id) ?? null}
+        hearingRecital={hearing?.id === v.id}
+        onPlay={(mode) => play(v, mode)}
+        onEditCard={() => editCard(v)}
+        onRemove={() => remove(v)}
+        onHearRecital={() => hearRecital(v)}
+        onDeleteRecital={() => deleteRecital(v)}
+      />
+    {:else if view === 'pick' && readerId}
       <ByHeartPicker windowId={readerId} bind:tab={pickerTab} onPick={toCard} />
     {:else if view === 'card' && draft}
       <div class="card-step">
@@ -367,10 +417,8 @@
     border-bottom: 1px solid rgba(127, 127, 127, 0.25);
   }
 
-  .today,
   .new,
-  .back,
-  .drill {
+  .back {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -388,34 +436,145 @@
     cursor: pointer;
   }
 
-  .today {
+  .new {
+    flex-shrink: 0;
+  }
+
+  .home {
     flex: 1;
-    align-items: baseline;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .home-top {
+    display: flex;
+    flex-direction: column;
+    gap: calc(8px * var(--bar-scale, 1));
+    padding: calc(10px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1)) calc(4px * var(--bar-scale, 1));
+  }
+
+  .today,
+  .drill {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: calc(10px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1));
+    border: 1px solid rgba(127, 127, 127, 0.4);
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .today {
+    width: 100%;
     border-color: var(--bh-accent);
     background: rgba(244, 114, 182, 0.14);
   }
 
-  .today:disabled {
+  .today.done {
+    border-color: rgba(127, 127, 127, 0.4);
+    background: transparent;
+    cursor: default;
+  }
+
+  .tiles {
+    display: flex;
+    gap: calc(8px * var(--bar-scale, 1));
+  }
+
+  .drill {
+    flex: 1 1 0;
+  }
+
+  .drill:disabled {
     cursor: default;
     opacity: 0.7;
   }
 
+  .tile-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .tile-name {
+    font-size: calc(14.5px * var(--bar-scale, 1));
+    font-weight: 600;
+  }
+
   .today-count {
-    overflow: hidden;
-    font-size: 0.8em;
-    font-weight: 400;
-    opacity: 0.8;
-    text-overflow: ellipsis;
+    flex-shrink: 0;
+    color: var(--bh-accent);
+    font-size: calc(12.5px * var(--bar-scale, 1));
+    font-weight: 600;
   }
 
-  .drills {
-    padding-block: calc(6px * var(--bar-scale, 1));
+  .tile-line {
+    font-size: calc(12px * var(--bar-scale, 1));
+    line-height: 1.35;
+    opacity: 0.75;
   }
 
-  .drill {
-    flex: 1;
-    padding-block: calc(6px * var(--bar-scale, 1));
-    font-weight: 500;
+  .tile-best {
+    margin-top: 2px;
+    font-size: calc(12px * var(--bar-scale, 1));
+    font-weight: 600;
+  }
+
+  .list-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: calc(10px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1)) calc(4px * var(--bar-scale, 1));
+  }
+
+  .list-title {
+    min-width: 0;
+  }
+
+  .list-name {
+    display: block;
+    font-size: calc(14px * var(--bar-scale, 1));
+    font-weight: 600;
+  }
+
+  .list-count {
+    display: block;
+    font-size: calc(12px * var(--bar-scale, 1));
+    opacity: 0.75;
+  }
+
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 28px 20px;
+    line-height: 1.5;
+  }
+
+  .welcome-title {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 600;
+  }
+
+  .welcome ol {
+    margin: 0;
+    padding-left: 1.4em;
+  }
+
+  .welcome li + li {
+    margin-top: 6px;
   }
 
   .step-bar {
@@ -436,43 +595,6 @@
     font-weight: 600;
     white-space: nowrap;
     text-overflow: ellipsis;
-  }
-
-  .list {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-  }
-
-  .empty {
-    margin: 0;
-    padding: 28px 20px;
-    text-align: center;
-    line-height: 1.5;
-    opacity: 0.75;
-  }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 0 12px 10px 78px;
-  }
-
-  .action {
-    padding: 6px 12px;
-    border: 1px solid rgba(127, 127, 127, 0.4);
-    border-radius: 8px;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-size: 0.85em;
-    cursor: pointer;
-  }
-
-  .action.danger {
-    border-color: #ef4444;
-    color: #ef4444;
   }
 
   .card-step {

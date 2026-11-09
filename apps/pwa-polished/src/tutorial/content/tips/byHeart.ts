@@ -1,5 +1,5 @@
 /**
- * Dots in the By Heart window and on its game screen.
+ * Dots in the By Heart window, on a verse's page and on its game screen.
  */
 
 import type { Tip } from '../types';
@@ -11,10 +11,10 @@ export const BY_HEART_TIPS: Tip[] = [
     id: 'byheart-today',
     area,
     target: '.bh-pane .today',
-    title: 'Today',
+    title: "Today's Practice",
     body:
-      'One button for every verse due, shuffled. A new verse is built up phrase by phrase, one you are learning is ' +
-      'recited with its words blurred, and one you know takes turns through Flashcards, Call and Response and Recital.',
+      'Runs every verse that is due, shuffled, and picks the practice for each one. A new verse goes Phrase by Phrase, ' +
+      'one you are learning is Clear the Blur, and one you know takes turns through Flashcards, Call and Response and Recital.',
   },
   {
     id: 'byheart-new',
@@ -42,16 +42,48 @@ export const BY_HEART_TIPS: Tip[] = [
     body:
       'The one timed game. A phrase from any saved verse appears and you say the next 3 words. Right answers add ' +
       'seconds and misses take them away. At the end, every phrase shows the words you said in green and the ones ' +
-      'you missed in red, with a % score, and your top 10 runs are kept.',
+      'you missed in red, with a % score, and your top 10 runs are kept. It never changes your verse scores.',
   },
   {
-    id: 'byheart-more',
+    id: 'byheart-row',
     area,
-    target: '.bh-pane .more',
-    title: 'Other ways to play',
+    target: '.bh-pane .row',
+    title: 'Your verses',
     body:
-      'Tapping a verse recites it in Focus. This menu has the rest: Build, Recital, Flashcards, Call and Response and ' +
-      'Silent study, plus editing or sharing its card, and your saved recital if you have one.',
+      'Each row shows where the verse stands, your last score and when it comes back. The thin bar is Overall. Tap a ' +
+      'verse to study or practice it.',
+  },
+  {
+    id: 'byheart-standing',
+    area,
+    target: '.bh-verse .standing',
+    title: 'How well you know it',
+    body:
+      'Last try is your most recent score. Overall builds up: your first try each day moves it, so good days add up and ' +
+      'one bad day only knocks it back a little. Known takes 90% or better on 3 separate days.',
+  },
+  {
+    id: 'byheart-study',
+    area,
+    target: '.bh-verse .section-study',
+    title: 'Study',
+    body: 'Read the verse and hear it read aloud. Your saved recital is here too, if you have one. Nothing is checked or scored.',
+  },
+  {
+    id: 'byheart-practice',
+    area,
+    target: '.bh-verse .section-practice',
+    title: 'Practice',
+    body:
+      'Every way of testing yourself, from the most help to the least, and each one gets a score. Suggested is the one ' +
+      'Today’s Practice would pick for this verse.',
+  },
+  {
+    id: 'byheart-game-title',
+    area,
+    target: '.bh-game .game-title',
+    title: 'How this one works',
+    body: 'Each way explains itself the first time you play it. Tap its name up here to see that again.',
   },
   {
     id: 'byheart-game-card',
@@ -70,7 +102,7 @@ export const BY_HEART_TIPS: Tip[] = [
     corner: 'bottom-right',
     title: 'Game settings',
     body:
-      'At the top, Out loud or Silent study, for when you can’t speak out loud. Then how blurry the covers are, or ' +
+      'At the top, Out loud or In Your Head, for when you can’t speak out loud. Then how blurry the covers are, or ' +
       'black boxes instead. Whether the reference has to be said. Your Own Voice, which keeps your best recital on ' +
       'this device if you turn it on.',
   },

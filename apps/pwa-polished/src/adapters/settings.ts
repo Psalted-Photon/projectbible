@@ -204,6 +204,7 @@ export interface UserSettings {
     reference?: 'off' | 'start' | 'end' | 'both';
     drillTop?: Array<{ right: number; percent?: number; date?: string }>;
     drillBest?: number;
+    howSeen?: string[]; // The ways whose how-it-works card has been read.
   };
   // Silent study chosen on this device, which may be the one with no mic.
   byHeartSilent?: boolean;

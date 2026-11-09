@@ -2,24 +2,25 @@
   /**
    * One saved verse in the By Heart list: its small card, its reference in the
    * book's color, its score and when it comes back. The card is drawn the first
-   * time the row scrolls into view. Tapping the row opens its game.
+   * time the row scrolls into view. Tapping the row opens the verse's page.
    */
   import { onDestroy } from 'svelte';
-  import { DotsThree, MicrophoneSlash } from 'phosphor-svelte';
+  import { CaretRight, MicrophoneSlash } from 'phosphor-svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
-  import { getBookColor, translationLabel } from '../../lib/bibleData';
+  import { getBookColor } from '../../lib/bibleData';
   import { cardThumb } from '../../lib/byHeart/cardThumb';
   import { scoreColor } from '../../lib/byHeart/scoring';
-  import { openGame } from '../../lib/byHeart/game';
-  import { progressOf, stageOf } from '../../lib/byHeart/schedule';
+  import { overallOf, progressOf, stageOf } from '../../lib/byHeart/schedule';
   import { nextDateLabel, referenceOf } from '../../lib/byHeart/verse';
+  import { SILENT_MARK, STAGE_NAMES } from '../../lib/byHeart/ways';
+  import TranslationTag from './TranslationTag.svelte';
 
   export let verse: DBByHeartVerse;
-  export let expanded = false;
-  export let onMore: () => void;
+  export let onOpen: () => void;
 
-  $: label = translationLabel(verse.translation);
-  $: isNet = verse.translation.toLowerCase() === 'net';
+  $: overall = overallOf(verse);
+  $: back = nextDateLabel(verse);
+  $: overallLabel = overall === null ? 'No Overall score yet' : `Overall ${overall}%`;
 
   let thumb: HTMLElement;
   let seen = false;
@@ -44,35 +45,36 @@
 </script>
 
 <div class="row">
-  <button class="thumb" bind:this={thumb} aria-label="Recite {referenceOf(verse)}" on:click={() => openGame(verse.id)}>
+  <button class="thumb" bind:this={thumb} aria-label="Open {referenceOf(verse)}" on:click={onOpen}>
     {#if url}<img src={url} alt="" />{/if}
   </button>
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="text" on:click={() => openGame(verse.id)}>
+  <div class="text" on:click={onOpen}>
     <div class="ref">
       <span class="ref-name" style="color: {getBookColor(verse.book)}">{referenceOf(verse)}</span>
-      {#if isNet}
-        <a class="tr" href="http://netbible.org" target="_blank" rel="noopener noreferrer" on:click|stopPropagation>({label})</a>
-      {:else}
-        <span class="tr">({label})</span>
-      {/if}
+      <TranslationTag translation={verse.translation} />
     </div>
     <div class="preview">{verse.passage}</div>
     <div class="meta">
+      <span class="stage">{STAGE_NAMES[stageOf(verse)]}</span>
       {#if verse.score !== null}
         <span class="score" style="--score: {scoreColor(verse.score)}">{verse.score}%</span>
         {#if progressOf(verse).silent}
-          <span class="silent" title="Scored in silent study" aria-label="Scored in silent study"><MicrophoneSlash size="1em" weight="bold" /></span>
+          <span class="silent" title={SILENT_MARK} aria-label={SILENT_MARK}><MicrophoneSlash size="1em" weight="bold" /></span>
         {/if}
-        {#if stageOf(verse) === 'known'}<span>Known</span>{/if}
+      {:else}
+        <span>No score yet</span>
       {/if}
-      <span>{nextDateLabel(verse)}</span>
+      {#if back}<span>{back}</span>{/if}
+    </div>
+    <div class="overall" role="img" aria-label={overallLabel} title={overallLabel}>
+      {#if overall !== null}
+        <div class="overall-fill" style="width: {overall}%; background: {scoreColor(overall)}"></div>
+      {/if}
     </div>
   </div>
-  <button class="more" aria-label="More for {referenceOf(verse)}" aria-expanded={expanded} on:click={onMore}>
-    <DotsThree size="1.2em" weight="bold" />
-  </button>
+  <span class="go" aria-hidden="true"><CaretRight size="1em" weight="bold" /></span>
 </div>
 
 <style>
@@ -121,12 +123,6 @@
     font-weight: 600;
   }
 
-  .tr {
-    font-weight: 400;
-    opacity: 0.7;
-    color: inherit;
-  }
-
   .preview {
     overflow: hidden;
     font-size: 0.8em;
@@ -137,10 +133,28 @@
 
   .meta {
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 0 8px;
     margin-top: 2px;
     font-size: 0.75em;
     opacity: 0.85;
+  }
+
+  .stage {
+    font-weight: 600;
+  }
+
+  .overall {
+    height: 3px;
+    margin-top: 5px;
+    border-radius: 2px;
+    background: rgba(127, 127, 127, 0.2);
+    overflow: hidden;
+  }
+
+  .overall-fill {
+    height: 100%;
+    border-radius: inherit;
   }
 
   .score {
@@ -154,18 +168,10 @@
     opacity: 0.8;
   }
 
-  .more {
+  .go {
     flex-shrink: 0;
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border: none;
-    background: none;
-    color: inherit;
-    cursor: pointer;
-    opacity: 0.7;
+    padding-right: 8px;
+    opacity: 0.45;
   }
 </style>

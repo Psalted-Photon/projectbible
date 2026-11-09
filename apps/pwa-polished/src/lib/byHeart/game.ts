@@ -26,6 +26,8 @@ export interface GameStep {
   retry?: boolean;
   /** Weak Spots: the word to drill around. */
   word?: number;
+  /** Chosen by name, so it plays this way even with silent study left on. */
+  picked?: boolean;
 }
 
 /** What is on the game screen: the steps it runs through, and which one it is on. */
@@ -44,8 +46,8 @@ export interface GameSession {
 /** The game on screen. Null is none, and nothing of it is loaded. */
 export const byHeartGame = writable<GameSession | null>(null);
 
-export function openGame(verseId: string, mode: GameMode = 'focus'): void {
-  byHeartGame.set({ id: Date.now(), steps: [{ verseId, mode }], at: 0 });
+export function openGame(verseId: string, mode: GameMode): void {
+  byHeartGame.set({ id: Date.now(), steps: [{ verseId, mode, picked: true }], at: 0 });
 }
 
 export function openDrill(): void {
@@ -133,6 +135,8 @@ export interface GamePrefs {
   reference: SpokenRefMode;
   /** Sword Drill's top runs, best first. */
   drillTop: DrillScore[];
+  /** The ways whose how-it-works card has been read. */
+  howSeen: GameMode[];
 }
 
 /** The saved list, checked since any build or device may have written it. A best from before lists comes in as the first entry. */
@@ -151,6 +155,7 @@ export function gamePrefs(): GamePrefs {
     cover: saved?.cover === 'box' ? 'box' : 'wordblur',
     reference: saved?.reference ?? 'off',
     drillTop: drillTopOf(saved),
+    howSeen: Array.isArray(saved?.howSeen) ? (saved.howSeen as GameMode[]) : [],
   };
 }
 

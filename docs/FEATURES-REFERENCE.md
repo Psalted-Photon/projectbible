@@ -1731,10 +1731,10 @@ Progress (`TranscriptProgress`: `doneSec`, `pieces`, `tail`, `deleteAfter`, `for
 
 ## 28. By Heart
 
-Plan: `ok-i-want-to-tidy-kahan.md`. Requires sign-in: the wall is in `WindowContent.svelte`, and `App.svelte` only mounts a game while signed in.
+Plan: `ok-i-want-to-tidy-kahan.md`, reorganized around Study, Practice and Play by `i-want-you-to-compiled-sifakis.md`. Requires sign-in: the wall is in `WindowContent.svelte`, and `App.svelte` only mounts a game while signed in.
 
-Library: `src/lib/byHeart/` — `game.ts` (session, saved place, prefs), `rounds.ts`, `recitation.ts`, `wordMatch.ts`, `spokenRef.ts`, `schedule.ts`, `scoring.ts`, `today.ts`, `drill.ts`, `hearing.ts` + `hearingWorker.ts`, `gameMic.ts`, `spokenPart.ts`, `ownVoice.ts`, `verse.ts`, `passage.ts`, `cardThumb.ts`, `open.ts`.
-Components: `src/components/byHeart/` — `ByHeartPane.svelte`, `ByHeartRow.svelte`, `ByHeartPicker.svelte`, `ByHeartGame.svelte`, `ByHeartCard.svelte`, `ByHeartDrill.svelte`. Also `FloatingMic.svelte`, `lib/voice/holdToTalk.ts`, `ShareCardPanel.svelte`, `DailyGreetingModal.svelte`, `lib/verseOfTheDay.ts`.
+Library: `src/lib/byHeart/` — `game.ts` (session, saved place, prefs), `rounds.ts`, `recitation.ts`, `wordMatch.ts`, `spokenRef.ts`, `schedule.ts`, `scoring.ts`, `today.ts`, `drill.ts`, `hearing.ts` + `hearingWorker.ts`, `gameMic.ts`, `spokenPart.ts`, `ownVoice.ts`, `verse.ts`, `passage.ts`, `cardThumb.ts`, `open.ts`, `ways.ts` (every name, description and how-it-works card; mode ids stay `focus`, `build`, `silent` because saved games are stored under them).
+Components: `src/components/byHeart/` — `ByHeartPane.svelte`, `ByHeartRow.svelte`, `ByHeartVerse.svelte` (a verse's page), `TranslationTag.svelte`, `ByHeartPicker.svelte`, `ByHeartGame.svelte`, `ByHeartCard.svelte`, `ByHeartDrill.svelte`. Also `FloatingMic.svelte`, `lib/voice/holdToTalk.ts`, `ShareCardPanel.svelte`, `DailyGreetingModal.svelte`, `lib/verseOfTheDay.ts`.
 Store: `src/adapters/SyncedByHeartStore.ts`. Cloud: `supabase/migrations/019_by_heart.sql`.
 
 ### 28.1 Data
@@ -1742,11 +1742,11 @@ Store: `src/adapters/SyncedByHeartStore.ts`. Cloud: `supabase/migrations/019_by_
 | Where | What |
 |---|---|
 | `by_heart_verses` (IndexedDB + Supabase) | One row per saved verse: exact `passage`, `translation`, `part`/`parts`, `card` JSON (`SavedCard`: style, per-word emphasis, painting), `score`, `next_date`, `progress` JSON. Local first, queued for upload, covered by backup, restore, clear-data, ownership and delete-account. |
-| `progress` | `VerseProgress` in `schedule.ts`: `gap`, `passDays`, `lastRound`, `silent`, `plays`, `heardAs` (plain word → accepted mishearings), `built`, `missed` (word index → count). Games add fields here rather than a new migration. |
+| `progress` | `VerseProgress` in `schedule.ts`: `gap`, `passDays`, `lastRound`, `silent`, `plays`, `heardAs` (plain word → accepted mishearings), `built`, `missed` (word index → count), `overall` (running score, unrounded). Games add fields here rather than a new migration. |
 | `by_heart_photos` | Device only. A personal photo behind a card. |
 | `by_heart_voice` | Device only, DB version 46. `DBByHeartRecital`: the best recital per verse as a 16 kHz WAV. Only with Your Own Voice on (`projectbible_byheart_own_voice`). Cleared on sign-out with the switch. |
 | `projectbible_byheart_run` | The place in a game: mode, round, cursor, hints. On the device, cleared on sign-out. Only a finished round writes a row. |
-| `byHeartGame` setting | Synced: `blur`, `cover`, `reference`, `drillBest`. `byHeartSilent` is per device. |
+| `byHeartGame` setting | Synced: `blur`, `cover`, `reference`, `drillTop`, `drillBest` (older builds), `howSeen` (ways whose how-it-works card has been read). `byHeartSilent` is per device, and applies to what the app picks, not to a way picked by name (`GameStep.picked`). |
 
 ### 28.2 Hearing
 
@@ -1760,11 +1760,11 @@ Store: `src/adapters/SyncedByHeartStore.ts`. Cloud: `supabase/migrations/019_by_
 
 ### 28.3 Rounds
 
-`roundsFor` gives each mode its `Round`s: `from`/`to`, `shown`, `refStart`/`refEnd`, `hidden`, `label`. One screen plays them all. Focus and Call and Response are one round; Recital is one `hidden` round; Flashcards is `verse` (reference shown) or `words` (opening words shown, reference first); Build is three rounds per phrase from `phrasesOf` (two if the phrase is ≤ 3 words) plus the whole verse; Weak is the phrase around `step.word` with the rest clear. A session is `GameStep[]`, and Today is one built by `todaySteps`.
+`roundsFor` gives each mode its `Round`s: `from`/`to`, `shown`, `refStart`/`refEnd`, `hidden`, `label`. One screen plays them all. Focus and Call and Response are one round; Recital is one `hidden` round; Flashcards is `verse` (reference shown) or `words` (opening words shown, reference first); Build is three rounds per phrase from `phrasesOf` (two if the phrase is ≤ 3 words) plus the whole verse, with `hints` cleared at the start of its last round since that round is the score; Weak is the phrase around `step.word` with the rest clear. A session is `GameStep[]`, and Today is one built by `todaySteps`.
 
 ### 28.4 Schedule
 
-`afterRound(verse, score, { silent, missed })` returns the patch. `GAPS` = 1, 3, 7, 16, 35. ≥ 90 grows the gap and adds a pass day; 60–89 keeps it; < 60 is tomorrow and steps back two gaps. The first round on a day sets the schedule and later ones only change the score; a good round before the due date doesn't move it. `stageOf`: New (no score, not built), Known (3 pass days, score ≥ 60), else Learning. `afterBuild` sets tomorrow without a score.
+`afterRound(verse, score, { silent, missed })` returns the patch. `GAPS` = 1, 3, 7, 16, 35. ≥ 90 grows the gap and adds a pass day; 60–89 keeps it; < 60 is tomorrow and steps back two gaps. The first round on a day sets the schedule and later ones only change the score; a good round before the due date doesn't move it. `stageOf`: New (no score, not built), Known (3 pass days, score ≥ 60), else Learning. `afterBuild(verse, score)` writes the score and `built`, sets tomorrow for a new verse or for a score under 60 on a later date, and leaves `passDays`, `gap`, `lastRound` and `overall` alone. `overallAfter` moves `overall` a third of the way toward the day's first score, and `overallOf` rounds it for the screen. `standingLine` is the plain sentence on a verse's page and the end screen.
 
 ### 28.5 The VC button
 

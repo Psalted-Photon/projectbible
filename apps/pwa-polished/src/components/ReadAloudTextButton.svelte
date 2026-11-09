@@ -28,6 +28,8 @@
   export let paragraphs: () => string[] | Promise<string[]>;
   export let size = 16;
   export let label = 'Read aloud';
+  /** Words to show beside the icon. Without them it is the icon alone. */
+  export let text = '';
 
   type LocalState = 'idle' | 'voice-needed' | 'downloading' | 'error';
   let local: LocalState = 'idle';
@@ -124,6 +126,7 @@
         {:else}
           <SpeakerHigh size={size} weight="bold" />
         {/if}
+        {#if text}<span>{text}</span>{/if}
       </button>
     {/if}
   </span>

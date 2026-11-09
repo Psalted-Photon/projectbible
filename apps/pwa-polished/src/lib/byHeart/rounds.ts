@@ -4,7 +4,8 @@
  *
  * Focus, Recital, Call and Response and Flashcards are one round over the whole
  * verse. Build goes phrase by phrase, split at punctuation, hiding more each
- * round. Weak Spots is the one phrase around a word that keeps getting missed.
+ * round, and its last round is always the whole verse from memory, which is its
+ * score. Weak Spots is the one phrase around a word that keeps getting missed.
  */
 
 import type { FlashSide, GameMode, SpokenRefMode } from './game';

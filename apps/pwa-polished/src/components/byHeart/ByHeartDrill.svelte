@@ -43,6 +43,7 @@
   import { closeGame, gamePrefs, setDrillRun, setGamePrefs, type GameSession } from '../../lib/byHeart/game';
   import { createGameMic } from '../../lib/byHeart/gameMic';
   import { Recitation } from '../../lib/byHeart/recitation';
+  import { SWORD_DRILL } from '../../lib/byHeart/ways';
   import { scoreColor } from '../../lib/byHeart/scoring';
   import { heardAs, splitWords, upcomingWords } from '../../lib/byHeart/wordMatch';
   import type { TimedWord } from '../../lib/voice/engine';
@@ -358,9 +359,9 @@
       <span class="clock" class:low={clock < LOW_SECONDS}>{Math.ceil(clock)}</span>
       <span class="count">{right} right</span>
     {:else}
-      <span class="title">Sword Drill</span>
+      <span class="title">{SWORD_DRILL.name}</span>
     {/if}
-    <CloseX label="Close Sword Drill" on:click={close} />
+    <CloseX label="Close {SWORD_DRILL.name}" on:click={close} />
   </div>
 
   {#if phase === 'over' && run}
@@ -394,11 +395,11 @@
   {:else}
     <div class="middle">
       {#if phase === 'none'}
-        <p class="say">Sword Drill needs a saved verse of at least 6 words in English.</p>
+        <p class="say">{SWORD_DRILL.name} needs a saved verse of at least 6 words in English.</p>
       {:else if phase === 'ready'}
         <p class="say">
           A phrase from one of your verses appears. Say the next 3 words. A right answer adds {DRILL_CLOCK.right} seconds
-          and a miss takes away {DRILL_CLOCK.miss}.
+          and a miss takes away {DRILL_CLOCK.miss}. It's just a game, so it doesn't change your verse scores.
         </p>
         {#if top.length}{@render topScores(null)}{/if}
         <button class="go" on:click={start}>Start</button>

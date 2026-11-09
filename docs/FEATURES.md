@@ -846,9 +846,9 @@ The method comes from the research on memory: recall rather than rereading, spea
 
 ### 28.1 Saving a verse
 
-- **By Heart window** in the Mark it group, next to Journal. A Today button sits over your saved verses, each with its small card, reference, score and next date.
-- **New verse** opens the simple reader, with nothing on the page but the words, or a list of the Verse of the Day verses starting from today. The Verse of the Day card has Learn by heart too.
-- **The card** is the same as Share: text color, accent color, a background, a painting or photo, and bold or accent on tapped words. It's both the game screen and something you can share. A saved card can be edited and shared from its row's menu.
+- **By Heart window** in the Mark it group, next to Journal. Today's Practice, Weak Spots and Sword Drill sit over your saved verses, due ones first. Each row has its small card, reference, stage, last score, when it comes back and a thin Overall bar.
+- **Add verse** opens the simple reader, with nothing on the page but the words, or a list of the Verse of the Day verses starting from today. The Verse of the Day card has Learn by heart too.
+- **The card** is the same as Share: text color, accent color, a background, a painting or photo, and bold or accent on tapped words. It's both the game screen and something you can share. A saved card can be edited and shared from the verse's page.
 - **About 150 words** go on one card, enough for Psalm 23. A longer passage is saved in parts.
 - **Saved verses keep their exact words and translation.** A photo behind a card stays on the device it was picked on, and another device draws the card on its background color.
 
@@ -865,26 +865,30 @@ The method comes from the research on memory: recall rather than rereading, spea
 ### 28.3 Your score and schedule
 
 - **A score, not a grade:** a percent in a color that runs green, yellow, orange, red. Hints lower it, and I said it doesn't.
+- **Last try and Overall:** Last try is your most recent score. Overall starts at 0 and moves a third of the way toward your score once a day, on your first try that day, so it builds with good days and one bad day only knocks it back a little. A verse's page says in one sentence what would move it next.
 - **Next date:** 90 or better grows the gap through about 1, 3, 7, 16, then 35 days. 60 to 89 keeps the same gap. Under 60 comes back tomorrow, and is tried again in the same Today.
 - **Known** takes passes on about 3 separate days. Strong verses drop to about monthly and never fully leave.
-- **Only recalling a whole verse counts.** Build, Weak Spots and Sword Drill don't change a verse's score.
+- **Only recalling a whole verse counts.** Weak Spots and Sword Drill don't change a verse's score. Phrase by Phrase gets a score from its last round, the whole verse from memory, but you've just seen the words, so it can't count toward Known or Overall.
 
-### 28.4 Ways to play
+### 28.4 Study, Practice and Play
 
-- **Today:** one button that runs everything due, shuffled, with the way chosen by how well you know it. New goes to Build, Learning to Focus, and Known takes turns through Flashcards, Call and Response and Recital.
-- **Focus:** the blur recital. It's what tapping a verse opens. The others are in the row's menu.
-- **Build:** phrase by phrase, split at punctuation. Read it out, fill in the gaps, then say it from memory, then the whole verse.
+Tapping a verse opens its own page: New, Learning or Known, Overall and Last try, a sentence on what's next, then Study and Practice. Study is never scored and Practice always is. Every way has a line under its name saying what it is, a how-it-works card the first time it's played, and tapping the game's name brings that card back.
+
+- **Study:** the whole verse to read, a Listen button, and your saved recital if you have one.
+- **Today's Practice:** one button that runs everything due, shuffled, with the way chosen by how well you know it. New goes to Phrase by Phrase, Learning to Clear the Blur, and Known takes turns through Flashcards, Call and Response and Recital.
+- **Phrase by Phrase:** split at punctuation. Read it out, fill in the gaps, then say it from memory, then the whole verse, which is your score.
+- **Clear the Blur:** the blur recital. Words sharpen as you say them.
 - **Recital:** nothing shows until the end. Then it reads the whole thing back and lists what it missed, and tapping a word you did say corrects the score.
 - **Flashcards:** the reference and you say the verse, or the opening words and you say the reference and then the rest.
 - **Call and Response:** the app's voice reads a random part of the verse, then you recite all of it. The mic stays closed while it speaks.
 - **Weak Spots:** the phrases around the words you miss most, across all your verses.
 - **Sword Drill:** the one timed game. A phrase from any saved verse appears and you say the next 3 words. A right answer adds seconds and a miss takes them away. The end screen shows every phrase as a tile, with the words you said in green and the ones you missed in red, plus a % score for the run. A phrase the clock cut off comes last, with the words you never reached in gray, and those don't count against the %. It keeps your top 10 runs with their % and dates, ranked by how many you got right.
-- **Silent study:** for when you can't speak out loud, or have no mic. The Out loud / Silent study toggle sits at the top of the game settings. Recall it in your head, reveal it, then pick Missed, Barely, Almost, Pretty Much or Got It. These feed the same schedule and can reach Known, with a small marker on the score since voice is stricter. Today runs this way where there's no mic, and verses in Greek or Hebrew are always silent.
+- **In Your Head:** for when you can't speak out loud, or have no mic. The Out loud / In Your Head toggle sits at the top of the game settings. Recall it in your head, reveal it, then pick Missed, Barely, Almost, Pretty Much or Got It. These feed the same schedule and can reach Known, with a small marker on the score since voice is stricter. Today's Practice runs this way where there's no mic or when you've chosen it on that device, a way picked by name always plays as that way, and verses in Greek or Hebrew are always silent.
 
 ### 28.5 Your Own Voice
 
-Off by default, and the app explains it and asks first. With it on, your best recital of each verse is kept so you can listen back from the row's menu. It stays on this device: never uploaded, not in the backup file, and gone when you sign out. With it off, no audio is kept: it's held only while being heard.
+Off by default, and the app explains it and asks first. With it on, your best recital of each verse is kept so you can listen back under Study on the verse's page. It stays on this device: never uploaded, not in the backup file, and gone when you sign out. With it off, no audio is kept: it's held only while being heard.
 
 ### 28.6 Saying it
 
-"Open By Heart" or "my memory verses" to Voice Control opens the window, and "today's memory verses" starts Today.
+"Open By Heart" or "my memory verses" to Voice Control opens the window, and "today's memory verses" starts Today's Practice.

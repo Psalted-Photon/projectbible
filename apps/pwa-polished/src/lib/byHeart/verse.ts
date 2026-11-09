@@ -77,14 +77,19 @@ export function isDue(verse: DBByHeartVerse, today = localDateStr(new Date())): 
   return verse.nextDate === null || verse.nextDate <= today;
 }
 
-/** The row's line on when it comes back. */
-export function nextDateLabel(verse: DBByHeartVerse, today = localDateStr(new Date())): string {
-  if (verse.nextDate === null) return 'New';
-  if (verse.nextDate <= today) return 'Due today';
-  const next = new Date(`${verse.nextDate}T12:00:00`);
+/** When a date still to come is, for a sentence: "tomorrow" or "Nov 12". */
+export function whenBack(nextDate: string, today = localDateStr(new Date())): string {
+  const next = new Date(`${nextDate}T12:00:00`);
   const tomorrow = new Date(`${today}T12:00:00`);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  if (localDateStr(tomorrow) === verse.nextDate) return 'Next: tomorrow';
+  if (localDateStr(tomorrow) === nextDate) return 'tomorrow';
   const sameYear = next.getFullYear() === tomorrow.getFullYear();
-  return `Next: ${next.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })}`;
+  return next.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
+}
+
+/** The line on when it comes back. Empty for a verse with no date yet. */
+export function nextDateLabel(verse: Pick<DBByHeartVerse, 'nextDate'>, today = localDateStr(new Date())): string {
+  if (verse.nextDate === null) return '';
+  if (verse.nextDate <= today) return 'Due today';
+  return `Back ${whenBack(verse.nextDate, today)}`;
 }

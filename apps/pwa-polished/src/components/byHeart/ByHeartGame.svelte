@@ -20,6 +20,9 @@
    * A session runs through steps, one verse each. Today's run is every verse due,
    * and one under 60 comes around again at the end.
    *
+   * The first time a way is played it says how it works, and tapping its name at
+   * the top brings that back. The words are in lib/byHeart/ways.ts.
+   *
    * Closes by X or Escape only. Never `themed`: the theme's invert would turn the
    * card's colors into their opposites.
    *
@@ -27,7 +30,7 @@
    * or a fold's relaunch loses nothing.
    */
   import { onDestroy, onMount } from 'svelte';
-  import { Microphone, MicrophoneSlash, SlidersHorizontal } from 'phosphor-svelte';
+  import { Microphone, MicrophoneSlash, Question, SlidersHorizontal } from 'phosphor-svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
   import { getSettings, updateSettings } from '../../adapters/settings';
   import { syncedByHeartStore } from '../../adapters/SyncedByHeartStore';
@@ -58,15 +61,18 @@
     afterBuild,
     afterRound,
     formatFor,
+    overallOf,
     progressOf,
     stageOf,
+    standingLine,
     withHeardAs,
     withoutMissed,
   } from '../../lib/byHeart/schedule';
   import { scoreColor, scoreOf } from '../../lib/byHeart/scoring';
   import { SpokenPart } from '../../lib/byHeart/spokenPart';
   import { findSpokenRef, type RefTarget } from '../../lib/byHeart/spokenRef';
-  import { cardContentOf, drawableStyle, nextDateLabel, referenceOf, savedCardOf, type SavedCard } from '../../lib/byHeart/verse';
+  import { cardContentOf, drawableStyle, referenceOf, savedCardOf, type SavedCard } from '../../lib/byHeart/verse';
+  import { SILENT_MARK, STAGE_NAMES, WAYS } from '../../lib/byHeart/ways';
   import { alignHeard, heardAs, plainWord, upcomingWords, type Aligned } from '../../lib/byHeart/wordMatch';
   import { portal } from '../../lib/portal';
   import { cardWords, type CardImage, type CardStyle } from '../../lib/shareCard';
@@ -156,6 +162,10 @@
   let reference: SpokenRefMode = prefs.reference;
   let controlsOpen = false;
   let canSpeak = true;
+  /** The how-it-works card is up. The mic stays closed behind it. */
+  let howOpen = false;
+  /** Call and Response's voice starts on its own, so it waits for the card to go. */
+  let callAfterHow = false;
 
   $: readable = cover === 'wordblur' && blur < BLUR_LINE;
   $: if ($gameTalk && !!$gameTalk.hidden !== (mode === 'silent')) gameTalk.update((s) => s && { ...s, hidden: mode === 'silent' });
@@ -175,7 +185,7 @@
     },
     progress: () => (round?.hidden ? rec?.heard().length : rec?.mark) ?? 0,
     onTake: () => rec?.newTake(),
-    canOpen: () => calling !== 'getting' && calling !== 'speaking',
+    canOpen: () => !howOpen && calling !== 'getting' && calling !== 'speaking',
     onPcm: (pcm) => keeper?.add(pcm),
     onUpdate: (u) => {
       if (!rec) return;
@@ -359,6 +369,8 @@
       betweenTimer = setTimeout(() => {
         betweenTimer = null;
         roundAt += 1;
+        // Build is scored on its last round, so only help taken there counts.
+        if (mode === 'build' && roundAt === rounds.length - 1) hints = new Set();
         startRound(rounds[roundAt], null);
         savePlace();
       }, ROUND_BEAT_MS);
@@ -385,9 +397,10 @@
     const v = verse;
     if (!v) return;
     if (mode === 'build') {
-      // Build doesn't count as recalling the verse, so it leaves the score alone.
-      const patch = afterBuild(v);
+      const value = scoreOf(itemsToSay(), hints.size);
+      const patch = afterBuild(v, value);
       verse = { ...v, ...patch };
+      score = value;
       await syncedByHeartStore.update(v.id, patch);
       return;
     }
@@ -589,7 +602,7 @@
       return;
     }
     const ok = await askConfirm(
-      'Your Own Voice keeps your best recital of each verse, so you can listen back to it from the verse’s menu. It stays on this device: it is never uploaded or synced, and it is deleted when you sign out. Turn it on?',
+      'Your Own Voice keeps your best recital of each verse, so you can listen back to it under Study on the verse’s page. It stays on this device: it is never uploaded or synced, and it is deleted when you sign out. Turn it on?',
       { confirmLabel: 'Turn on' },
     );
     if (!ok) return;
@@ -646,12 +659,30 @@
     loadRounds(false);
   }
 
+  function openHow() {
+    mic.close();
+    controlsOpen = false;
+    howOpen = true;
+  }
+
+  function closeHow() {
+    howOpen = false;
+    const seen = gamePrefs().howSeen;
+    if (!seen.includes(mode)) setGamePrefs({ howSeen: [...seen, mode] });
+    if (callAfterHow) {
+      callAfterHow = false;
+      void beginCall();
+    }
+  }
+
   function loadRounds(pickUp: boolean) {
+    const saved = pickUp && verse ? readRun(verse.id, mode) : null;
+    // The first time a way is played it says how it works, unless a game is being picked up.
+    if (!saved && !gamePrefs().howSeen.includes(mode)) openHow();
     if (mode === 'silent') {
       phase = 'silent';
       return;
     }
-    const saved = pickUp && verse ? readRun(verse.id, mode) : null;
     gameReference = saved?.reference ?? reference;
     side = saved?.side ?? pickSide(words);
     rounds = roundsFor({ mode, words, reference: gameReference, side, word: steps[at].word });
@@ -666,7 +697,10 @@
       r,
       saved && { cursor: Math.min(saved.cursor, r.to - r.from), refStart: saved.refStart, refEnd: saved.refEnd },
     );
-    if (mode === 'call' && !saved) void beginCall();
+    if (mode === 'call' && !saved) {
+      if (howOpen) callAfterHow = true;
+      else void beginCall();
+    }
   }
 
   async function loadStep() {
@@ -686,10 +720,11 @@
     image = picture;
     style = drawableStyle(saved, !!picture);
     verse = got;
-    // The app only hears English, so the original languages are studied silently,
-    // and silent study chosen on this device goes for everything it plays.
+    // The app only hears English, so the original languages are studied silently.
+    // Silent study chosen on this device goes for what the app picks, not for a way picked by name.
     canSpeak = !isOriginalLanguage(got.translation);
-    mode = steps[at].mode === 'weak' ? 'weak' : !canSpeak || getSettings().byHeartSilent === true ? 'silent' : steps[at].mode;
+    const silentHere = getSettings().byHeartSilent === true && !steps[at].picked;
+    mode = steps[at].mode === 'weak' ? 'weak' : !canSpeak || silentHere ? 'silent' : steps[at].mode;
     loadRounds(true);
   }
 
@@ -746,7 +781,8 @@
     if (e.key !== 'Escape' || e.defaultPrevented || $voiceCard) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    close();
+    if (howOpen) closeHow();
+    else close();
   }
 
   function onVisibility() {
@@ -808,6 +844,10 @@
     >
       <SlidersHorizontal size="1.2em" weight="bold" />
     </button>
+    <button class="game-title" aria-label="How {WAYS[mode].name} works" on:click={openHow}>
+      <span class="game-name">{WAYS[mode].name}</span>
+      <Question size="1.15em" weight="bold" />
+    </button>
     <CloseX label={verse ? `Close ${referenceOf(verse)}` : 'Close'} on:click={close} />
   </div>
 
@@ -821,7 +861,7 @@
           </button>
           <button class:on={mode === 'silent'} aria-pressed={mode === 'silent'} on:click={() => setSilent(true)}>
             <MicrophoneSlash size="1.1em" weight="bold" />
-            Silent study
+            {WAYS.silent.name}
           </button>
         </div>
       {/if}
@@ -868,7 +908,7 @@
 
   {#if phase === 'playing' && calling === 'voice'}
     <div class="end">
-      <div class="end-note">Call and Response reads part of the verse in a Read Aloud voice ({getVoiceInfo(callVoiceId)?.approxSizeMB ?? 64} MB to download).</div>
+      <div class="end-note">{WAYS.call.name} reads part of the verse in a Read Aloud voice ({getVoiceInfo(callVoiceId)?.approxSizeMB ?? 64} MB to download).</div>
       <div class="end-row">
         <button class="end-btn" on:click={() => (calling = 'no')}>Recite without it</button>
         <button class="end-btn main" on:click={downloadCallVoice}>Download</button>
@@ -892,7 +932,7 @@
         </div>
       {:else if round?.hidden}
         {#if noMic}
-          <button class="line" on:click={() => setSilent(true)}>No mic here. Silent study</button>
+          <button class="line" on:click={() => setSilent(true)}>No mic here. Try {WAYS.silent.name}</button>
         {:else if !$gameTalk?.on && !rec?.allHeard().length}
           <span class="line">Tap the mic and say it all from memory</span>
         {:else}
@@ -903,7 +943,7 @@
       {:else if onReference}
         <span class="line">Say the reference</span>
       {:else if noMic}
-        <button class="line" on:click={() => setSilent(true)}>No mic here. Silent study</button>
+        <button class="line" on:click={() => setSilent(true)}>No mic here. Try {WAYS.silent.name}</button>
       {:else if !$gameTalk?.on && cursor === 0 && !round?.label}
         <span class="line">Tap the mic and say it from memory</span>
       {:else if round?.label}
@@ -941,19 +981,20 @@
           <span class="score" style="color: {scoreColor(score)}">{score}%</span>
           <span class="score-word">score</span>
           {#if mode === 'silent'}
-            <span class="silent" title="Scored in silent study" aria-label="Scored in silent study"><MicrophoneSlash size="1em" weight="bold" /></span>
+            <span class="silent" title={SILENT_MARK} aria-label={SILENT_MARK}><MicrophoneSlash size="1em" weight="bold" /></span>
           {/if}
         </div>
       {/if}
-      <div class="end-note">
+      {#if mode === 'weak'}
+        <div class="end-note">That's your weak spots for now.</div>
+      {:else}
+        {@const overall = overallOf(verse)}
+        <div class="end-stage">{STAGE_NAMES[stageOf(verse)]}{overall !== null ? `, Overall ${overall}%` : ''}</div>
+        <div class="end-note">{standingLine(verse)}</div>
         {#if mode === 'build'}
-          Built. {nextDateLabel(verse)}
-        {:else if mode === 'weak'}
-          That's your weak spots for now.
-        {:else}
-          {#if stageOf(verse) === 'known'}Known. {/if}{nextDateLabel(verse)}
+          <div class="end-note small">You just saw the words, so this one doesn't count toward Known or Overall.</div>
         {/if}
-      </div>
+      {/if}
       {#if missedWords.length}
         <div class="missed">
           <span class="chips-label">Missed. Tap any you did say.</span>
@@ -967,6 +1008,16 @@
           <button class="end-btn" on:click={startOver}>Again</button>
         {/if}
         <button class="end-btn main" on:click={next}>{hasNext ? 'Next' : 'Done'}</button>
+      </div>
+    </div>
+  {/if}
+
+  {#if howOpen}
+    <div class="how">
+      <div class="how-card" role="dialog" aria-label="How {WAYS[mode].name} works">
+        <div class="how-name">{WAYS[mode].name}</div>
+        <p class="how-text">{WAYS[mode].how}</p>
+        <button class="end-btn main" on:click={closeHow}>Got it</button>
       </div>
     </div>
   {/if}
@@ -1002,6 +1053,60 @@
 
   .top > :global(*) {
     pointer-events: auto;
+  }
+
+  .game-title {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(5px * var(--bar-scale, 1));
+    min-width: 0;
+    padding: calc(5px * var(--bar-scale, 1)) calc(12px * var(--bar-scale, 1));
+    border: none;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.45);
+    color: inherit;
+    font: inherit;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .game-name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .how {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  .how-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-width: 24em;
+    padding: 18px 20px;
+    border-radius: 16px;
+    background: rgba(20, 20, 20, 0.96);
+    text-align: center;
+  }
+
+  .how-name {
+    font-size: 1.15em;
+    font-weight: 700;
+  }
+
+  .how-text {
+    margin: 0;
+    line-height: 1.5;
   }
 
   .tool {
@@ -1202,10 +1307,20 @@
     opacity: 0.8;
   }
 
+  .end-stage {
+    font-weight: 600;
+    text-align: center;
+  }
+
   .end-note {
     font-size: 0.9em;
     text-align: center;
     opacity: 0.9;
+  }
+
+  .end-note.small {
+    font-size: 0.8em;
+    opacity: 0.75;
   }
 
   .missed {
