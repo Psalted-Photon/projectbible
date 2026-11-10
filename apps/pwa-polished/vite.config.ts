@@ -315,6 +315,8 @@ export default defineConfig({
         //                     models it downloads are kept in its own cache.
         //   name-lab          hears Bible names and tries spellings for them.
         //                     Its helpers and name list stay out as well.
+        //   clock-lab.html    the look gallery for the bedside clock, a separate
+        //                     app. Self-contained, like gem-lab.
         //   reset.html       the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -343,6 +345,7 @@ export default defineConfig({
           '**/voice-control-lab.html',
           '**/voice-control-lab/**',
           '**/name-lab*',
+          '**/clock-lab.html',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
@@ -357,6 +360,7 @@ export default defineConfig({
           /^\/connections-chord-lab\.html$/,
           /^\/voice-control-lab\.html$/,
           /^\/name-lab\.html$/,
+          /^\/clock-lab\.html$/,
         ],
         runtimeCaching: [
           {
