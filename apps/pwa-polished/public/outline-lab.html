@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Outline lab v1.0</title>
+<!--
+  Outline lab: tunes the thin outline behind the three book colors that are hard
+  to read on a dark background (Major Prophets, Minor Prophets, Pauline) before
+  any of it goes into the app.
+
+  Each outline is the book's own color moved toward white, drawn behind every
+  letter. The width is in px, so it stays the same however big the text is.
+  The samples copy the app's real sizes: the OT card and its chips, the nav
+  pill, verse numbers, ref rows, note links and a big heading.
+
+  Copy values prints the block for src/lib/bibleData.ts. Self-contained on
+  purpose, like motion-lab.html: nothing here imports the app.
+-->
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  :root {
+    --panel-h: 250px;
+    --stroke: 1.5px;
+    --line-major: #a583c7;
+    --line-minor: #b274ec;
+    --line-pauline: #9484dd;
+    --ring-major: none;
+    --ring-minor: none;
+    --ring-pauline: none;
+  }
+  html { background: #0d0d0f; }
+  body {
+    margin: 0;
+    background: #0d0d0f;
+    color: #e8e8e8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- Book colors (CATEGORY_COLORS in lib/bibleData.ts) ---------- */
+  .c-pent    { color: #a67c52; }
+  .c-hist    { color: #6ca0dc; }
+  .c-wisdom  { color: #f0c040; }
+  .c-major   { color: #5c1e99; }
+  .c-minor   { color: #a45be9; }
+  .c-gospels { color: #fc345c; }
+  .c-acts    { color: #ff6520; }
+  .c-pauline { color: #6048cc; }
+  .c-general { color: #f2893e; }
+  .c-rev     { color: #61f1ff; }
+
+  /* ---------- The outline, two ways ----------
+     Stroke behind: a stroke twice the width, painted under the letter fill, so
+     half of it shows outside every letter and the dot of every i. Shadow ring:
+     sixteen sharp copies of the letter in a circle, for browsers that paint the
+     stroke on top instead. */
+  .m-stroke .c-major   { -webkit-text-stroke: var(--stroke) var(--line-major);   paint-order: stroke fill; }
+  .m-stroke .c-minor   { -webkit-text-stroke: var(--stroke) var(--line-minor);   paint-order: stroke fill; }
+  .m-stroke .c-pauline { -webkit-text-stroke: var(--stroke) var(--line-pauline); paint-order: stroke fill; }
+  .m-shadow .c-major   { text-shadow: var(--ring-major); }
+  .m-shadow .c-minor   { text-shadow: var(--ring-minor); }
+  .m-shadow .c-pauline { text-shadow: var(--ring-pauline); }
+
+  /* Light and sepia themes flip the whole page in the app; this does the same. */
+  .stage.light { filter: invert(1) hue-rotate(180deg); }
+
+  /* ---------- Stage ---------- */
+  .stage {
+    min-height: 100vh;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px calc(var(--panel-h) + 24px);
+    background: #0d0d0f;
+  }
+  .stage-inner { max-width: 520px; margin: 0 auto; }
+  .lab-title {
+    margin: 0 0 2px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #e8e8e8;
+  }
+  .lab-sub {
+    margin: 0 0 14px;
+    font-size: 12px;
+    color: #8a8a8a;
+    line-height: 1.4;
+  }
+  .label {
+    margin: 18px 0 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #777;
+  }
+
+  /* ---------- OT card (OtQuoteCard.svelte) ---------- */
+  .ot-card {
+    --ot-accent: #c9a227;
+    --ot-ink: #d9b23c;
+    width: 300px;
+    max-width: 100%;
+    padding: 7px 10px 8px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-left: 3px solid var(--ot-accent);
+    border-radius: 6px;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  }
+  .ot-grade {
+    color: var(--ot-ink);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    line-height: 1.2;
+    opacity: 0.75;
+    text-transform: uppercase;
+  }
+  .ot-ref {
+    display: block;
+    margin-top: 1px;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+  .ot-others {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .ot-other {
+    background: none;
+    border: 1px solid #3f3f3f;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.68rem;
+    opacity: 0.55;
+    padding: 2px 6px;
+  }
+  .ot-other.active {
+    border-color: var(--ot-accent);
+    opacity: 1;
+  }
+  .ot-verse {
+    margin: 6px 0 0;
+    font-size: 0.8rem;
+    font-style: italic;
+    line-height: 1.45;
+    color: #d6d6d6;
+  }
+  .ot-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 7px;
+  }
+  .ot-goto {
+    background: #333;
+    border-radius: 3px;
+    color: var(--ot-ink);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    padding: 4px 8px;
+    text-transform: uppercase;
+  }
+
+  /* Every color at chip size, on the card's own gray. */
+  .chip-panel {
+    padding: 8px 10px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 6px;
+  }
+  .chip-panel .ot-others { margin-top: 0; }
+  .chip-panel .ot-others + .ot-others { margin-top: 6px; }
+
+  /* ---------- Nav pill (NavigationBar.svelte, away from home) ---------- */
+  .navbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #1a1a1a;
+    border-radius: 8px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 8px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* ---------- Reader on black (BibleReader.svelte) ---------- */
+  .reader {
+    padding: 12px 14px;
+    background: #000;
+    border-radius: 8px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 18px;
+    line-height: 1.6;
+    color: #e0e0e0;
+  }
+  .reader p { margin: 0 0 10px; }
+  .reader p:last-child { margin-bottom: 0; }
+  .vnum {
+    display: inline-block;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 9px;
+    vertical-align: super;
+    margin-inline-end: 0.1rem;
+  }
+  .stanza {
+    margin: 4px 0 4px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  /* ---------- Ref rows (VerseRefRow.svelte) and note links ---------- */
+  .rows {
+    background: #1e1e1e;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .ref-row {
+    padding: 7px 12px;
+    border-left: 3px solid #555;
+    border-bottom: 1px solid #2c2c2c;
+  }
+  .ref-row:last-child { border-bottom: none; }
+  .ref-row-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .ref-row-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 1.35;
+    color: #bdbdbd;
+  }
+  .note {
+    margin: 0;
+    padding: 10px 12px;
+    background: #1e1e1e;
+    border-radius: 8px;
+    font-size: 15px;
+    line-height: 1.55;
+    color: #d8d8d8;
+  }
+  .note a {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+
+  /* ---------- Big ---------- */
+  .big {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    padding: 8px 12px;
+    background: #000;
+    border-radius: 8px;
+    font-size: 30px;
+    font-weight: 700;
+  }
+
+  /* ---------- Controls ---------- */
+  .panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 10;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 10px);
+    background: #1e1e1e;
+    border-top: 1px solid #333;
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.5);
+  }
+  .panel-inner { max-width: 520px; margin: 0 auto; }
+  .row {
+    display: grid;
+    grid-template-columns: 70px 1fr 112px;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+  }
+  .row-name { font-size: 12px; font-weight: 600; line-height: 1.2; }
+  .row input[type=range] { width: 100%; accent-color: #4a90e2; }
+  .row-val { font-size: 12px; font-variant-numeric: tabular-nums; line-height: 1.25; text-align: right; }
+  .row-val small { display: block; font-size: 10px; color: #8a8a8a; }
+  .swatch {
+    display: inline-block;
+    width: 9px; height: 9px;
+    margin-right: 4px;
+    border-radius: 2px;
+    vertical-align: -1px;
+  }
+  .btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .btns button {
+    min-height: 32px;
+    padding: 0 10px;
+    background: #2c2c2c;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btns button.on { border-color: #4a90e2; color: #9cc4f0; }
+  .btns button.primary { background: #4a90e2; border-color: #4a90e2; color: #fff; }
+  .hint { margin: 8px 0 0; font-size: 11px; line-height: 1.4; color: #8a8a8a; }
+  .copied {
+    margin: 8px 0 0;
+    padding: 8px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    user-select: all;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage m-stroke" id="stage">
+<div class="stage-inner">
+  <h1 class="lab-title">Outline lab v1.0</h1>
+  <p class="lab-sub">Major Prophets, Minor Prophets and Pauline get a thin outline in their own color moved toward white. Go only as light and as thin as you need. The sliders are at the bottom.</p>
+
+  <div class="label">OT card, Mark 1:2–3</div>
+  <div class="ot-card">
+    <div class="ot-grade">Quotation</div>
+    <span class="ot-ref c-major">Isaiah 40:3</span>
+    <div class="ot-others">
+      <button class="ot-other c-minor">Malachi 3:1</button>
+      <button class="ot-other c-pent">Exodus 23:20</button>
+      <button class="ot-other active c-major">Isaiah 40:3</button>
+    </div>
+    <p class="ot-verse">The voice of one crying in the wilderness, Prepare ye the way of the Lord, make straight the paths of our God.</p>
+    <div class="ot-foot"><span class="ot-goto">NET →</span><span class="ot-goto">Septuagint →</span></div>
+  </div>
+
+  <div class="label">Every color at chip size (faded, then picked)</div>
+  <div class="chip-panel">
+    <div class="ot-others" id="chipsFaded"></div>
+    <div class="ot-others" id="chipsPicked"></div>
+  </div>
+
+  <div class="label">Nav pill</div>
+  <div class="navbar">
+    <span class="pill c-major">Isaiah 40</span>
+    <span class="pill c-minor">Hosea 6</span>
+    <span class="pill c-pauline">Romans 8</span>
+    <span class="pill c-pent">Genesis 1</span>
+  </div>
+
+  <div class="label">Reader on black: verse numbers</div>
+  <div class="reader">
+    <p><span class="vnum c-major">1</span>Comfort ye, comfort ye my people, saith your God. <span class="vnum c-major">2</span>Speak ye comfortably to Jerusalem, and cry unto her, that her warfare is accomplished, that her iniquity is pardoned.</p>
+    <p><span class="vnum c-minor">6</span>For I desired mercy, and not sacrifice; and the knowledge of God more than burnt offerings.</p>
+    <p><span class="vnum c-pauline">1</span>There is therefore now no condemnation to them which are in Christ Jesus, who walk not after the flesh, but after the Spirit.</p>
+    <div class="stanza c-major">Aleph</div>
+    <p><span class="vnum c-major">1</span>How doth the city sit solitary, that was full of people! how is she become as a widow!</p>
+  </div>
+
+  <div class="label">Ref rows</div>
+  <div class="rows">
+    <div class="ref-row" style="border-left-color:#5c1e99"><span class="ref-row-label c-major">Isaiah 53:5</span><span class="ref-row-text">But he was wounded for our transgressions, he was bruised for our iniquities: the chastisement of our peace was upon him; and with his stripes we are healed.</span></div>
+    <div class="ref-row" style="border-left-color:#a45be9"><span class="ref-row-label c-minor">Micah 6:8</span><span class="ref-row-text">He hath shewed thee, O man, what is good; and what doth the LORD require of thee, but to do justly, and to love mercy, and to walk humbly with thy God?</span></div>
+    <div class="ref-row" style="border-left-color:#6048cc"><span class="ref-row-label c-pauline">Ephesians 2:8</span><span class="ref-row-text">For by grace are ye saved through faith; and that not of yourselves: it is the gift of God.</span></div>
+    <div class="ref-row" style="border-left-color:#a67c52"><span class="ref-row-label c-pent">Genesis 1:1</span><span class="ref-row-text">In the beginning God created the heaven and the earth.</span></div>
+  </div>
+
+  <div class="label">Links in a note</div>
+  <p class="note">Compare <a class="c-major">Jeremiah 31:31</a> with <a class="c-pauline">1 Corinthians 11:25</a>, and see <a class="c-minor">Joel 2:28</a>, quoted in <a class="c-acts">Acts 2:17</a>, and <a class="c-pauline">Galatians 3:11</a>.</p>
+
+  <div class="label">Big (the outline stays the same width)</div>
+  <div class="big">
+    <span class="c-major">Isaiah</span>
+    <span class="c-minor">Habakkuk</span>
+    <span class="c-pauline">Philippians</span>
+  </div>
+</div>
+</div>
+
+<div class="panel" id="panel">
+  <div class="panel-inner">
+    <div class="row">
+      <span class="row-name">Width</span>
+      <input type="range" id="w" min="0" max="2" step="0.25" />
+      <span class="row-val" id="wVal"></span>
+    </div>
+    <div class="row">
+      <span class="row-name">Major Prophets</span>
+      <input type="range" id="major" min="0" max="100" step="1" />
+      <span class="row-val" id="majorVal"></span>
+    </div>
+    <div class="row">
+      <span class="row-name">Minor Prophets</span>
+      <input type="range" id="minor" min="0" max="100" step="1" />
+      <span class="row-val" id="minorVal"></span>
+    </div>
+    <div class="row">
+      <span class="row-name">Pauline</span>
+      <input type="range" id="pauline" min="0" max="100" step="1" />
+      <span class="row-val" id="paulineVal"></span>
+    </div>
+    <div class="btns">
+      <button id="onBtn"></button>
+      <button id="methodBtn"></button>
+      <button id="lightBtn"></button>
+      <button id="resetBtn">Reset</button>
+      <button class="primary" id="copyBtn">Copy values</button>
+    </div>
+    <p class="hint">Width is how much shows outside each letter. Each color's % is how far it moves toward white, with its contrast against the card's gray and against black. If the letters look thinner instead of outlined, switch to Shadow ring: that browser is painting the stroke on top.</p>
+    <pre class="copied" id="copyOut" hidden></pre>
+  </div>
+</div>
+
+<script>
+(function () {
+  const BASE = { major: '#5c1e99', minor: '#a45be9', pauline: '#6048cc' };
+  const KEYS = { major: 'major-prophets', minor: 'minor-prophets', pauline: 'pauline' };
+  // Starting points from contrast math: each outline reaches 4.5:1 on the card.
+  const DEFAULTS = { w: 0.75, major: 45, minor: 15, pauline: 33, method: 'stroke', on: true, light: false };
+  const STORE = 'outline-lab-v1';
+
+  const CHIPS = [
+    ['c-pent', 'Genesis 15:6'], ['c-hist', 'Joshua 1:9'], ['c-wisdom', 'Psalm 23:1'],
+    ['c-major', 'Isaiah 53:5'], ['c-minor', 'Hosea 6:6'], ['c-gospels', 'Matthew 5:3'],
+    ['c-acts', 'Acts 2:38'], ['c-pauline', 'Romans 8:28'], ['c-general', 'James 1:5'],
+    ['c-rev', 'Revelation 21:4'],
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement;
+  const stage = $('stage');
+
+  let state = Object.assign({}, DEFAULTS);
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (saved && typeof saved === 'object') state = Object.assign(state, saved);
+  } catch (e) { /* private window or blocked storage: start from the defaults */ }
+
+  function save() {
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* fine without it */ }
+  }
+
+  // ---- color math ----
+  const hexToRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const rgbToHex = (rgb) => '#' + rgb.map((c) => c.toString(16).padStart(2, '0')).join('');
+  const towardWhite = (hex, pct) => rgbToHex(hexToRgb(hex).map((c) => Math.round(c + (255 - c) * pct / 100)));
+  const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (hex) => { const [r, g, b] = hexToRgb(hex); return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b); };
+  const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+
+  // Sixteen sharp copies in a circle at the outline's width.
+  function ring(width, color) {
+    if (width <= 0) return 'none';
+    const out = [];
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const x = +(Math.cos(a) * width).toFixed(2);
+      const y = +(Math.sin(a) * width).toFixed(2);
+      out.push(`${x}px ${y}px 0 ${color}`);
+    }
+    return out.join(', ');
+  }
+
+  function lineFor(cat) { return towardWhite(BASE[cat], state[cat]); }
+
+  // ---- build the chip rows ----
+  function chipRow(el, picked) {
+    el.innerHTML = CHIPS.map(([cls, label]) =>
+      `<button class="ot-other${picked ? ' active' : ''} ${cls}">${label}</button>`).join('');
+  }
+  chipRow($('chipsFaded'), false);
+  chipRow($('chipsPicked'), true);
+
+  // ---- apply ----
+  function apply() {
+    root.style.setProperty('--stroke', (state.w * 2) + 'px');
+    for (const cat of Object.keys(BASE)) {
+      const line = lineFor(cat);
+      root.style.setProperty('--line-' + cat, line);
+      root.style.setProperty('--ring-' + cat, ring(state.w, line));
+      $(cat).value = state[cat];
+      $(cat + 'Val').innerHTML =
+        `<span class="swatch" style="background:${line}"></span>${state[cat]}% ${line}` +
+        `<small>${contrast(line, '#2a2a2a').toFixed(1)} card · ${contrast(line, '#000000').toFixed(1)} black</small>`;
+    }
+    $('w').value = state.w;
+    $('wVal').textContent = state.w === 0 ? 'none' : state.w + 'px';
+
+    stage.classList.toggle('m-stroke', state.on && state.method === 'stroke');
+    stage.classList.toggle('m-shadow', state.on && state.method === 'shadow');
+    stage.classList.toggle('light', state.light);
+
+    $('onBtn').textContent = state.on ? 'Outlines: on' : 'Outlines: off';
+    $('onBtn').classList.toggle('on', state.on);
+    $('methodBtn').textContent = state.method === 'stroke' ? 'Drawn as: stroke behind' : 'Drawn as: shadow ring';
+    $('lightBtn').textContent = state.light ? 'Theme: light' : 'Theme: dark';
+    $('lightBtn').classList.toggle('on', state.light);
+
+    // Keep the samples clear of the panel however tall it wraps.
+    root.style.setProperty('--panel-h', $('panel').offsetHeight + 'px');
+  }
+
+  // ---- controls ----
+  $('w').addEventListener('input', (e) => { state.w = +e.target.value; apply(); save(); });
+  for (const cat of Object.keys(BASE)) {
+    $(cat).addEventListener('input', (e) => { state[cat] = +e.target.value; apply(); save(); });
+  }
+  $('onBtn').addEventListener('click', () => { state.on = !state.on; apply(); save(); });
+  $('methodBtn').addEventListener('click', () => { state.method = state.method === 'stroke' ? 'shadow' : 'stroke'; apply(); save(); });
+  $('lightBtn').addEventListener('click', () => { state.light = !state.light; apply(); save(); });
+  $('resetBtn').addEventListener('click', () => { state = Object.assign({}, DEFAULTS); apply(); save(); });
+  $('copyBtn').addEventListener('click', copyValues);
+  window.addEventListener('resize', apply);
+
+  function valuesText() {
+    const lines = Object.keys(BASE).map((cat) => {
+      const key = `'${KEYS[cat]}':`;
+      return `  ${key.padEnd(18)} '${lineFor(cat)}', // ${state[cat]}% toward white from ${BASE[cat]}`;
+    });
+    return [
+      '// Outline lab v1.0: for src/lib/bibleData.ts, next to CATEGORY_COLORS.',
+      '// Width is how much shows outside each letter (the stroke is twice that).',
+      `export const OUTLINE_WIDTH_PX = ${state.w};`,
+      `export const OUTLINE_METHOD = '${state.method}'; // 'stroke' = stroke behind, 'shadow' = shadow ring`,
+      'export const CATEGORY_OUTLINES = {',
+      ...lines,
+      '};',
+    ].join('\n');
+  }
+
+  async function copyValues() {
+    const text = valuesText();
+    const btn = $('copyBtn');
+    const out = $('copyOut');
+    out.textContent = text;
+    out.hidden = false;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch (e) {
+      try {
+        const range = document.createRange();
+        range.selectNodeContents(out);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        ok = document.execCommand('copy');
+      } catch (e2) { ok = false; }
+    }
+    btn.textContent = ok ? 'Copied ✓' : 'Copy failed: select below';
+    setTimeout(() => (btn.textContent = 'Copy values'), 1600);
+    apply();
+  }
+
+  apply();
+})();
+</script>
+</body>
+</html>
