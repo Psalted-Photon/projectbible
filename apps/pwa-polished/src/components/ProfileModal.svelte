@@ -22,7 +22,7 @@
   import { User, CloudArrowUp } from 'phosphor-svelte';
   import CloseX from './CloseX.svelte';
   import { countOf, scheduleText } from '../lib/countText';
-  import { getBookColor } from '../lib/bibleData';
+  import { bookInk } from '../lib/bibleData';
 
   let isOpen = false;
   $: isOpen = $profileModalStore;
@@ -1018,7 +1018,7 @@
                       {#each harmonyPassages as passage, i}
                         <button
                           class="chapter-link"
-                          style="color: {getBookColor(passage.book)}"
+                          style={bookInk(passage.book)}
                           on:click={() => navigateToChapter(passage.book, passage.startChapter)}
                         >
                           {passage.label}
@@ -1029,7 +1029,7 @@
                   {:else}
                     <div class="chapter-links">
                       {#each todayReading.chapters as chapter, i}
-                        <button class="chapter-link" style="color: {getBookColor(chapter.book)}" on:click={() => navigateToChapter(chapter.book, chapter.chapter)}>
+                        <button class="chapter-link" style={bookInk(chapter.book)} on:click={() => navigateToChapter(chapter.book, chapter.chapter)}>
                           {chapter.book} {chapter.chapter}
                         </button>{#if i < todayReading.chapters.length - 1}, {/if}
                       {/each}

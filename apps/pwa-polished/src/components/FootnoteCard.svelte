@@ -11,7 +11,7 @@
    * verse you were reading is still on screen behind the card.
    */
   import { createEventDispatcher } from 'svelte';
-  import { getBookColor } from '../lib/bibleData';
+  import { getBookColor, ringVar } from '../lib/bibleData';
   import { fadeAway, grow } from '../lib/motion';
   import { linkifyNoteRefs } from '../lib/linkifyNoteRefs';
   import { sanitizePackHtml } from '../lib/sanitizePackHtml';
@@ -110,7 +110,7 @@
   use:trackHeight
   use:grow={new DOMRect(x, y, 0, 18)}
   out:fadeAway
-  style="left:{left}px; top:{top}px; width:{WIDTH}px; --ref-color:{color};"
+  style="left:{left}px; top:{top}px; width:{WIDTH}px; --ref-color:{color};{ringVar(color)}"
 >
   <div class="fc-head">
     <span class="fc-where">{heading}</span>
@@ -170,6 +170,7 @@
 
   .fc-where {
     color: var(--ref-color, #ddd);
+    text-shadow: var(--book-ring, none);
     font-size: 0.8rem;
     font-weight: 600;
     white-space: nowrap;
@@ -200,6 +201,7 @@
      way a reference reads everywhere else in the app. */
   .fc-body :global(.note-ref) {
     color: var(--ref-color, #8fa3f5);
+    text-shadow: var(--book-ring, none);
     cursor: pointer;
     text-decoration: underline;
     text-decoration-color: color-mix(in srgb, var(--ref-color, #8fa3f5) 45%, transparent);

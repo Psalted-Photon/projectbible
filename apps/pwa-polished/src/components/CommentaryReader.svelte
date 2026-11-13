@@ -753,6 +753,7 @@
   /* Clickable Bible cross-references injected by linkifyCommentaryRefs */
   :global(.commentary-ref) {
     color: var(--ref-color, #8ab4f8);
+    text-shadow: var(--book-ring, none);
     text-decoration: underline;
     text-decoration-style: dotted;
     text-underline-offset: 2px;

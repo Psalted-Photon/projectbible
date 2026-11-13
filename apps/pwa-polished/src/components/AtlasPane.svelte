@@ -29,7 +29,7 @@
   import { searchPlaces, placesInBounds, releasePlaceIndex } from '../lib/atlas/place-index';
   import { ScriptureSearch } from '../lib/atlas/search.js';
   import { groupByBook, bookName, distance, approxDistance, setDistanceUnits } from '../lib/atlas/places.js';
-  import { getBookColor } from '../lib/bibleData';
+  import { getBookColor, inkStyle } from '../lib/bibleData';
   import { getSettings } from '../adapters/settings';
   import { loadTimeline, timelineInstalled, formatItemSpan, type TimelineItem } from '../lib/timeline/data';
   import CloseX from './CloseX.svelte';
@@ -1677,7 +1677,7 @@
               <div class="vb-group" class:open>
                 <button class="vb-header" on:click={() => toggleBook(group, i === 0)}>
                   <span class="vb-caret motion-caret" class:open style="color:{colour}"><CaretRight size="1em" weight="bold" /></span>
-                  <span class="vb-name" style="color:{colour}">{bookName(group.book)}</span>
+                  <span class="vb-name" style={inkStyle(colour)}>{bookName(group.book)}</span>
                   <span class="vb-count">({group.refs.length})</span>
                 </button>
                 <div class="vb-refs">
@@ -1688,7 +1688,7 @@
                       title="Read {ref.readable}"
                       on:click={() => goToVerse(group.book, ref.osis)}
                     >
-                      <span class="vb-ref-label" style="color:{colour}">{ref.readable}</span>
+                      <span class="vb-ref-label" style={inkStyle(colour)}>{ref.readable}</span>
                       {#if versePreviews[ref.osis]}
                         <span class="vb-ref-text">{@html versePreview(ref.osis)}</span>
                       {/if}

@@ -4,7 +4,7 @@
   import { packInstallFinished } from "../adapters/db-manager";
   import GetPacksCard from "./GetPacksCard.svelte";
   import { get } from "svelte/store";
-  import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
+  import { getBookColor, inkStyle, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { parseOsisRef } from "../lib/parseRefString";
   import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
@@ -692,7 +692,7 @@
               <div class="vb-group">
                 <button class="vb-header" on:click={() => toggleBook(group.book)}>
                   <span class="vb-caret motion-caret" class:open={expandedBooks.has(group.book)} style="color:{group.color}"><CaretRight size="1em" weight="bold" /></span>
-                  <span class="vb-name" style="color:{group.color}">{group.book}</span>
+                  <span class="vb-name" style={inkStyle(group.color)}>{group.book}</span>
                   <span class="vb-count">({group.refs.length})</span>
                 </button>
                 {#if expandedBooks.has(group.book)}
@@ -704,7 +704,7 @@
                         style="border-left-color:{group.color}"
                         on:click={() => navigateToVerse(group.book, r.chapter, r.verse)}
                       >
-                        <span class="vb-ref-label" style="color:{group.color}">
+                        <span class="vb-ref-label" style={inkStyle(group.color)}>
                           {group.book} {r.chapter}:{r.verse}
                         </span>
                         {#if versePreviews[key]}

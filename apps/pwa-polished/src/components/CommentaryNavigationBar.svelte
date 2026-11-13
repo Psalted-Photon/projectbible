@@ -1,7 +1,7 @@
 <script lang="ts">
   import { navigationStore } from "../stores/navigationStore";
   import { windowStore } from "../lib/stores/windowStore";
-  import { BIBLE_BOOKS } from "../lib/bibleData";
+  import { BIBLE_BOOKS, getBookColor, ringVar } from "../lib/bibleData";
   import { onMount, onDestroy } from "svelte";
   import { fadeAway, growFrom, reveal } from "../lib/motion";
   import { Anchor, CaretDown, CaretRight, CaretUp, Scroll } from "phosphor-svelte";
@@ -330,6 +330,7 @@
       <button
         bind:this={referenceButtonRef}
         class="pill-btn pill-btn-text pill-btn-reference"
+        style={ringVar(currentBook ? getBookColor(currentBook) : null)}
         on:click={toggleReferenceDropdown}
       >
         <span class="pill-label">{currentReference}</span>
@@ -679,6 +680,8 @@
   .nav-dropdown.reference-dropdown-trigger.category-pauline .pill-btn-reference { color: #6048cc; }
   .nav-dropdown.reference-dropdown-trigger.category-general .pill-btn-reference { color: #f2893e; }
   .nav-dropdown.reference-dropdown-trigger.category-revelation .pill-btn-reference { color: #61f1ff; }
+  /* The outline a hard-to-read book color carries (outlineFor in bibleData). */
+  .pill-btn-reference .pill-label { text-shadow: var(--book-ring, none); }
 
   .nav-label {
     color: #888;

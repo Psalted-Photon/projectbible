@@ -22,7 +22,7 @@
   import { HIGHLIGHT_CATEGORIES, categoryKeyFor } from '../lib/highlightCategories';
   import { getHighlightNames, setHighlightName } from '../adapters/settings';
   import { reveal } from '../lib/motion';
-  import { getBookColor } from '../lib/bibleData';
+  import { bookInk } from '../lib/bibleData';
 
   /** The list a crumb back to Profile is putting back. Read once, as this mounts. */
   export let initialView: SavedListView | null = null;
@@ -328,7 +328,7 @@
                   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
                   <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
                     <div class="svp-item-header">
-                      <span class="svp-ref" style="color: {getBookColor(item.book)}">{formatRef(item.book, item.chapter, item.verse)}</span>
+                      <span class="svp-ref" style={bookInk(item.book)}>{formatRef(item.book, item.chapter, item.verse)}</span>
                     </div>
                     {#if item.text}
                       <span class="svp-text">{@html renderVersePreviewHtml(item.text)}</span>
@@ -349,7 +349,7 @@
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
           <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
             <div class="svp-item-header">
-              <span class="svp-ref" style="color: {getBookColor(item.book)}">{formatRef(item.book, item.chapter, item.verse)}</span>
+              <span class="svp-ref" style={bookInk(item.book)}>{formatRef(item.book, item.chapter, item.verse)}</span>
               {#if sortOrder === 'recent'}
                 <span class="svp-date">{formatDate(item.createdAt)}</span>
               {/if}
@@ -378,7 +378,7 @@
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
           <li class="svp-item" on:click={() => navigateTo(item.book, item.chapter, item.verse)}>
             <div class="svp-item-header">
-              <span class="svp-ref" style="color: {getBookColor(item.book)}">{formatRef(item.book, item.chapter, item.verse)}</span>
+              <span class="svp-ref" style={bookInk(item.book)}>{formatRef(item.book, item.chapter, item.verse)}</span>
               {#if sortOrder === 'recent'}
                 <span class="svp-date">{formatDate(item.createdAt)}</span>
               {/if}

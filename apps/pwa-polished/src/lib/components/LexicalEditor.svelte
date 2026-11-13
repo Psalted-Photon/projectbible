@@ -954,6 +954,7 @@
      element by BibleRefNode, so a gospel reads gospel-red and so on. */
   :global(.bible-ref) {
     color: var(--ref-color, #c0392b);
+    text-shadow: var(--book-ring, none);
     cursor: pointer;
     border-bottom: 1px dotted currentColor;
   }

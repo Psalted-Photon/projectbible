@@ -15,7 +15,7 @@
  * draws it must sit outside the inverted subtree.
  */
 
-import { BIBLE_BOOKS, CATEGORY_COLORS, type BookInfo } from '../bibleData';
+import { BIBLE_BOOKS, CATEGORY_COLORS, OUTLINE_WIDTH_PX, outlineColorFor, type BookInfo } from '../bibleData';
 import { getCustomThemeSettings, getSettings, resolveTheme } from '../../adapters/settings';
 import { luminance, mix } from '../themeColors';
 
@@ -143,4 +143,31 @@ export function rgbOf(color: string): [number, number, number] {
   if (h.length === 3) h = h.split('').map((c) => c + c).join('');
   if (!/^[0-9a-f]{6}/i.test(h)) return [128, 128, 128];
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+/**
+ * Text in a book color, with the outline some of those colors carry on a dark
+ * background (outlineColorFor in bibleData): a stroke twice the outline's width
+ * under the fill, so the same amount shows round every letter as the DOM's
+ * shadow ring gives. A pale background reads the raw color fine, so it gets none.
+ */
+export function fillBookText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  color: string,
+  pal: ConnectionsPalette,
+): void {
+  const line = pal.pale ? '' : outlineColorFor(color);
+  if (line) {
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = OUTLINE_WIDTH_PX * 2;
+    ctx.strokeStyle = line;
+    ctx.strokeText(text, x, y);
+    ctx.restore();
+  }
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
 }

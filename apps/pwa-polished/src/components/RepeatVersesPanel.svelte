@@ -10,7 +10,7 @@
    */
   import { onMount, tick } from "svelte";
   import { CaretRight, X } from "phosphor-svelte";
-  import { getBookColor } from "../lib/bibleData";
+  import { getBookColor, inkStyle } from "../lib/bibleData";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import { fadeAway, growFrom, reveal } from "../lib/motion";
   import { REPEAT_COLORS } from "../lib/repeatColors";
@@ -207,7 +207,7 @@
             <span class="rv-caret motion-caret" class:open>
               <CaretRight size={10} weight="bold" />
             </span>
-            <span class="rv-group-label" style="color:{group.color}">{group.label}</span>
+            <span class="rv-group-label" style={inkStyle(group.color)}>{group.label}</span>
             <span class="rv-group-count">({group.hits.length})</span>
           </button>
           {#if open}

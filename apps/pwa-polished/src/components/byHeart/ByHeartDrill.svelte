@@ -47,7 +47,7 @@
   import { scoreColor } from '../../lib/byHeart/scoring';
   import { heardAs, splitWords, upcomingWords } from '../../lib/byHeart/wordMatch';
   import type { TimedWord } from '../../lib/voice/engine';
-  import { getBookColor, translationLabel } from '../../lib/bibleData';
+  import { getBookColor, outlineFor, translationLabel } from '../../lib/bibleData';
   import { portal } from '../../lib/portal';
   import { localDateStr } from '../../stores/clockStore';
   import { pauseReading, readingState } from '../../lib/tts/readingEngine';
@@ -384,7 +384,7 @@
           <div class="tile">
             <p class="tile-words">… {result.phrase}{#each result.answer as word, i}{' '}<span class={wordState(result, i)}>{word}</span>{/each}</p>
             <p class="tile-reference">
-              <span class="tile-book" style:color={getBookColor(result.book)}>{result.reference}</span>
+              <span class="tile-book" style:color={getBookColor(result.book)} style:text-shadow={outlineFor(getBookColor(result.book)) || null}>{result.reference}</span>
               <span class="tile-translation">{@render translationTag(result.translation)}</span>
             </p>
           </div>

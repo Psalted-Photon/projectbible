@@ -215,7 +215,7 @@
     hideHebrewPartSlashes,
   } from "../lib/verseRendering";
   import { parseRefString } from "../lib/parseRefString";
-  import { BIBLE_BOOKS, normalizeBookName, bookTitle, DEFAULT_TRANSLATION, translationLabel, getTranslationScope } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, bookTitle, DEFAULT_TRANSLATION, translationLabel, getTranslationScope, ringVar } from "../lib/bibleData";
   import { translationForJump } from "../lib/testamentDefaults";
   import { getSettings, getInterlinearSettings, getTtsSettings, getNavBarPinned } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
@@ -7690,7 +7690,7 @@
             class:il-show-strongs={isInterlinearActive && interlinearSettings.showStrongs}
             class:il-show-parse={isInterlinearActive && interlinearSettings.showParsing}
             class:il-show-verse-english={interlinearSettings.showVerseEnglish && isOriginalLanguage(currentTranslation)}
-            style="--verse-num-color:{getBookColor(chapterData.book)}"
+            style="--verse-num-color:{getBookColor(chapterData.book)};{ringVar(getBookColor(chapterData.book))}"
           >
             <!-- Verses come in stretches: inside an "Only in" run or not. A run
                  gets one box, which carries the edge; the stretches between are
@@ -8235,6 +8235,8 @@
     min-width: 0;
     font-size: calc(var(--base-font-size, 18px) * var(--reader-font-scale, 1) * 0.5);
     color: var(--verse-num-color, #888);
+    /* The outline a hard-to-read book color carries (outlineFor in bibleData). */
+    text-shadow: var(--book-ring, none);
     vertical-align: super;
     margin-inline-end: 0.1rem;
     cursor: pointer;
@@ -8904,6 +8906,7 @@
      A tap opens the footnote card explaining it. */
   :global(.plural-marker) {
     color: var(--verse-num-color, #888);
+    text-shadow: var(--book-ring, none);
     font-size: 0.65em;
     margin-left: 1px;
     cursor: pointer;
@@ -9013,7 +9016,12 @@
     margin: 18px 0 4px 0;
     padding-top: 0;
     border-top: none;
-    text-shadow: none;
+    text-shadow: var(--book-ring, none);
+  }
+
+  /* Flat titles drop the headings' offset shadow; the label keeps its outline. */
+  .chapter-section.flat-titles .section-heading--s3 {
+    text-shadow: var(--book-ring, none);
   }
 
   /* KJV — larger headings to suit the blackletter aesthetic */

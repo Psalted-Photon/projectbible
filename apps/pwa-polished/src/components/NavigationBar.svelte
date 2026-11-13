@@ -15,7 +15,7 @@
   import { askConfirm } from "../stores/confirmStore";
   import PackDropdownSection from "./PackDropdownSection.svelte";
   import { packInstallFinished } from "../adapters/db-manager";
-  import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, bookTitle, getBookColor, DEFAULT_TRANSLATION } from "../lib/bibleData";
+  import { BIBLE_BOOKS, CATEGORY_COLORS, CATEGORY_LABELS, translationLabel, shortBookName, bookTitle, getBookColor, bookInk, inkStyle, ringVar, DEFAULT_TRANSLATION } from "../lib/bibleData";
   import { onMount, onDestroy, tick } from "svelte";
   import { fadeAway, growFrom, reveal } from "../lib/motion";
   import {
@@ -2852,7 +2852,7 @@
           <button
             class="pill-btn pill-btn-text crumb-btn"
             class:crumb-held={crumbMenu?.side === "back" && crumbMenu.index === i}
-            style="color: {getBookColor(crumb.book)};"
+            style={bookInk(crumb.book)}
             on:click={(e) => onCrumbClick(e, "back", i)}
             on:pointerdown={(e) => onCrumbPointerDown(e, "back", i)}
             on:pointermove={onCrumbPointerMove}
@@ -2905,7 +2905,7 @@
           bind:this={referenceButtonRef}
           class="pill-btn pill-btn-text pill-btn-reference"
           class:at-home={!$canGoBack}
-          style="--home-color: {getBookColor(currentBook)};"
+          style="--home-color: {getBookColor(currentBook)};{ringVar(getBookColor(currentBook))}"
           on:click={toggleReferenceDropdown}
           title="Bible navigation"
         >
@@ -2932,7 +2932,7 @@
             <button
               class="pill-btn pill-btn-text crumb-btn crumb-ahead"
               class:crumb-held={crumbMenu?.side === "ahead" && crumbMenu.index === i}
-              style="color: {getBookColor(crumb.book)};"
+              style={bookInk(crumb.book)}
               on:click={(e) => onCrumbClick(e, "ahead", i)}
               on:pointerdown={(e) => onCrumbPointerDown(e, "ahead", i)}
               on:pointermove={onCrumbPointerMove}
@@ -3553,7 +3553,7 @@
             {#if i === 0 || column.books[i - 1].category !== book.category}
               <div
                 class="category-header"
-                style="color:{CATEGORY_COLORS[book.category]}"
+                style={inkStyle(CATEGORY_COLORS[book.category])}
               >{CATEGORY_LABELS[book.category]}</div>
             {/if}
             <div
@@ -4495,6 +4495,9 @@
      A pixel comes off the padding to pay for the border, so the pill is the
      same size filled or ringed and does not jump when you leave home. */
   .pill-btn-reference:not(.at-home) .pill-label {
+    /* The outline a hard-to-read book color carries (outlineFor in bibleData).
+       Home keeps its own white-on-black shadow. */
+    text-shadow: var(--book-ring, none);
     display: inline-flex;
     align-items: center;
     padding: 5px 8px;

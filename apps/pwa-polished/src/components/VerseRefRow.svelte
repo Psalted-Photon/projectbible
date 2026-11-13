@@ -43,7 +43,7 @@
    * A range or a whole chapter previews the verse it opens at, which is also
    * where tapping it lands.
    */
-  import { getBookColor } from '../lib/bibleData';
+  import { getBookColor, inkStyle } from '../lib/bibleData';
   import { renderVersePreviewHtml } from '../lib/verseRendering';
   import { navigationStore } from '../stores/navigationStore';
   import CompanionLine from './CompanionLine.svelte';
@@ -84,7 +84,7 @@
   style="border-left-color:{color};{markColor ? ` --ref-mark-bg:${markColor};` : ''}"
   on:click={onOpen}
 >
-  <span class="ref-row-label" style="color:{color}">{label ?? `${book} ${chapter}:${verse}`}</span>
+  <span class="ref-row-label" style={inkStyle(color)}>{label ?? `${book} ${chapter}:${verse}`}</span>
   {#if text}
     <span class="ref-row-text" dir="auto">{@html renderVersePreviewHtml(text, { highlight, maxLength: 150 })}</span>
   {/if}

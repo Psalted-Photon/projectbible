@@ -15,7 +15,7 @@
 
 import { findRefs } from './bibleRefs';
 import { parseOsisRef } from './parseRefString';
-import { getBookColor } from './bibleData';
+import { getBookColor, ringVar } from './bibleData';
 
 /** Note sentinels; the definitive list is in packtools/usfm-scanner.mjs. */
 const REF_OPEN = '\x17';
@@ -39,7 +39,7 @@ function escapeHtml(s: string): string {
  */
 function wrapRef(label: string, ref: string, book: string): string {
   return (
-    `<span class="note-ref" style="--ref-color:${getBookColor(book)}" ` +
+    `<span class="note-ref" style="--ref-color:${getBookColor(book)};${ringVar(getBookColor(book))}" ` +
     `data-ref="${escapeHtml(ref)}" tabindex="0" role="link">${escapeHtml(label)}</span>`
   );
 }

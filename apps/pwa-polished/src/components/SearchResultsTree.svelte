@@ -7,6 +7,7 @@
   import { CaretRight } from "phosphor-svelte";
   import { highlightPattern } from "../lib/searchWords";
   import type { SearchTreeNode } from "../lib/searchTree";
+  import { inkStyle } from "../lib/bibleData";
   import type { SearchResult } from "../lib/services/searchService";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { navigationStore } from "../stores/navigationStore";
@@ -79,7 +80,7 @@
       <span class="tree-caret motion-caret" class:open={expanded.has(node.key)}>
         <CaretRight size={depth === 0 ? 11 : 9} weight="bold" />
       </span>
-      <span class="tree-label" style={node.color ? `color:${node.color}` : ""}>
+      <span class="tree-label" style={node.color ? inkStyle(node.color) : ""}>
         {node.label}
       </span>
       <span class="tree-count">({node.count})</span>

@@ -7,7 +7,7 @@
   import { stoneForTribe } from "../lib/gems/stones";
   import { STONES } from "../lib/familyTree/config";
   import { TRIBE_READING, tribeSection, type TribePart } from "../lib/gems/tribes";
-  import { getBookColor } from "../lib/bibleData.js";
+  import { getBookColor, outlineFor } from "../lib/bibleData.js";
   import { parseOsisRef } from "../lib/parseRefString";
   import { cardJumpToVerse, lookupReader, readerState } from "../stores/navigationStore";
   import { verseAtEnglishRef } from "../lib/companion";
@@ -100,7 +100,11 @@
       .map((p) => {
         p.querySelectorAll<HTMLAnchorElement>("a[data-osis]").forEach((a) => {
           const target = parseOsisRef(a.getAttribute("data-osis") ?? "");
-          if (target) a.style.color = getBookColor(target.book);
+          if (!target) return;
+          const color = getBookColor(target.book);
+          a.style.color = color;
+          const ring = outlineFor(color);
+          if (ring) a.style.textShadow = ring;
         });
         return p.innerHTML;
       });

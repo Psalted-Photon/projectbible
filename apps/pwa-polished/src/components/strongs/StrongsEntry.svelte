@@ -17,7 +17,7 @@
   import { navigationStore } from "../../stores/navigationStore";
   import { isOriginalLanguage, greekPartnerFor } from "../../lib/translationKind";
   import { parseOsisRef, splitOsisRefs } from "../../lib/parseRefString";
-  import { getBookColor } from "../../lib/bibleData";
+  import { getBookColor, inkStyle } from "../../lib/bibleData";
   import { expandRmacCode, expandOshbCode, expandStepBiblePOS } from "../../lib/morphologyExpander";
   import {
     languageColor,
@@ -330,7 +330,8 @@
   function refButton(osisRef: string, label: string): string {
     const parsed = parseOsisRef(osisRef);
     const color = parsed ? getBookColor(parsed.book) : "var(--color-primary, #4a90e2)";
-    return `<button class="scripture-ref" data-ref="${osisRef}" style="color:${color}">${label}</button>`;
+    const ink = parsed ? inkStyle(color) : `color:${color}`;
+    return `<button class="scripture-ref" data-ref="${osisRef}" style="${ink}">${label}</button>`;
   }
 
   /**

@@ -8,7 +8,7 @@
 
 import { parseRefString } from './parseRefString';
 import { findRefs } from './bibleRefs';
-import { getBookColor } from './bibleData';
+import { getBookColor, ringVar } from './bibleData';
 
 // NOTE: reference detection now lives in lib/bibleRefs.ts, shared with the
 // notes editor. What remains here is this file's own job: walking stored HTML
@@ -43,7 +43,7 @@ function escAttr(s: string): string {
  * @param color   Optional theme color (hex) applied as the --ref-color CSS var
  */
 function wrapRef(raw: string, color?: string): string {
-  const style = color ? ` style="--ref-color:${color}"` : '';
+  const style = color ? ` style="--ref-color:${color};${ringVar(color)}"` : '';
   return `<span class="commentary-ref"${style} data-ref="${escAttr(raw.trim())}" tabindex="0" role="link">${raw}</span>`;
 }
 
@@ -55,7 +55,7 @@ function wrapRef(raw: string, color?: string): string {
  */
 function wrapAbs(display: string, book: string, chapter: number, verse: number, color: string): string {
   const ref = `${book} ${chapter}:${verse}`;
-  return `<span class="commentary-ref" style="--ref-color:${color}" data-ref="${escAttr(ref)}" tabindex="0" role="link">${display}</span>`;
+  return `<span class="commentary-ref" style="--ref-color:${color};${ringVar(color)}" data-ref="${escAttr(ref)}" tabindex="0" role="link">${display}</span>`;
 }
 
 /**

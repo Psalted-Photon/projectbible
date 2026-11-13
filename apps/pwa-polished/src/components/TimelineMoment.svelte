@@ -9,6 +9,7 @@
   import { formatYear, type TimelineItem } from '../lib/timeline/data';
   import { laneColor } from '../lib/timeline/lanes';
   import { itemColor } from '../lib/timeline/layout';
+  import { inkStyle } from '../lib/bibleData';
   import type { Moment } from '../lib/timeline/query';
   import CloseX from './CloseX.svelte';
 
@@ -43,7 +44,7 @@
         <dt>{row.label}</dt>
         <dd>
           {#each row.items as it, i (it.id)}
-            <button class="moment-link" style="color: {colour(it)}" on:click={() => onSelect(it)}>{it.title}</button>{#if i < row.items.length - 1}<span class="moment-sep">, </span>{/if}
+            <button class="moment-link" style={inkStyle(colour(it))} on:click={() => onSelect(it)}>{it.title}</button>{#if i < row.items.length - 1}<span class="moment-sep">, </span>{/if}
           {/each}
         </dd>
       {/each}

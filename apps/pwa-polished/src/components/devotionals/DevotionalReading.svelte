@@ -34,7 +34,7 @@
   import CompanionLine from '../CompanionLine.svelte';
   import { sanitizePackHtml } from '../../lib/sanitizePackHtml';
   import { parseOsisRef } from '../../lib/parseRefString';
-  import { getBookColor, normalizeBookName, translationLabel } from '../../lib/bibleData';
+  import { getBookColor, bookInk, inkStyle, normalizeBookName, translationLabel } from '../../lib/bibleData';
   import {
     getReading,
     stepReading,
@@ -174,7 +174,7 @@
   function colorRefs(html: string): string {
     return html.replace(/<a class="devo-ref" data-osis="([^"]+)"/g, (tag, osis) => {
       const color = OSIS_BOOK_COLOR(osis);
-      return color ? `${tag} style="color:${color}"` : tag;
+      return color ? `${tag} style="${inkStyle(color)}"` : tag;
     });
   }
 
@@ -421,7 +421,7 @@
               {:else if text === ''}
                 <p class="dr-muted">{translationLabel(translation)} doesn't have this verse.</p>
               {/if}
-              <button class="dr-ref" style="color:{getBookColor(normalizeBookName(k.book))}" on:click={() => goToRef(k.osis)}>
+              <button class="dr-ref" style={bookInk(normalizeBookName(k.book))} on:click={() => goToRef(k.osis)}>
                 {k.label}
               </button>
             </div>
@@ -444,7 +444,7 @@
         {:else if text === ''}
           <p class="dr-muted">{translationLabel(headlineTrans)} doesn't have this verse.</p>
         {/if}
-        <button class="dr-ref" style="color:{getBookColor(normalizeBookName(k.book))}" on:click={() => goToRef(k.osis)}>
+        <button class="dr-ref" style={bookInk(normalizeBookName(k.book))} on:click={() => goToRef(k.osis)}>
           {k.label}
         </button>
       </div>

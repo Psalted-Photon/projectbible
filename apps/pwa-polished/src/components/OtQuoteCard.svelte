@@ -26,7 +26,7 @@
   import { fadeAway, grow } from '../lib/motion';
   import { formatOtRef, formatOtVerses, type OtQuoteEntry, type OtQuoteRef } from '../lib/otQuotesIndex';
   import { mtToLxxPsalm } from '../lib/lxxPsalms';
-  import { getBookColor } from '../lib/bibleData';
+  import { getBookColor, bookInk, inkStyle } from '../lib/bibleData';
   import { OT_CARD_GAP, OT_CARD_MAX_HEIGHT } from '../lib/otCardMetrics';
 
   /**
@@ -234,7 +234,7 @@
   <div class="ot-head">
     <div class="ot-head-lines">
       <span class="ot-grade">{gradeLabel}</span>
-      <span class="ot-ref" style="color:{refColor}">{formatOtRef(shown)}</span>
+      <span class="ot-ref" style={inkStyle(refColor)}>{formatOtRef(shown)}</span>
       {#if renumbered}
         <span class="ot-english">{formatOtVerses(activeRef)} in English Bibles</span>
       {/if}
@@ -251,7 +251,7 @@
         <button
           class="ot-other"
           class:active={i === refIndex}
-          style="color:{getBookColor(ref.book)}"
+          style={bookInk(ref.book)}
           on:click|stopPropagation={() => dispatch('select', { index: i })}
         >{formatOtRef(shownRef(entry, i))}</button>
       {/each}

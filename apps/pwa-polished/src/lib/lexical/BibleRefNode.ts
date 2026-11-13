@@ -29,7 +29,7 @@ import {
   type Spread,
   type TextNode,
 } from 'lexical';
-import { getBookColor } from '../bibleData';
+import { getBookColor, outlineFor } from '../bibleData';
 
 export type SerializedBibleRefNode = Spread<
   { ref: string; expanded: boolean; book: string; chapter: number; verse: number },
@@ -135,12 +135,14 @@ export class BibleRefNode extends ElementNode {
   createDOM(_config: EditorConfig): HTMLElement {
     const span = document.createElement('span');
     this.applyAttrs(span);
+    this.applyRing(span);
     return span;
   }
 
   updateDOM(prev: BibleRefNode, dom: HTMLElement): boolean {
     if (prev.__ref !== this.__ref || prev.__expanded !== this.__expanded) {
       this.applyAttrs(dom);
+      this.applyRing(dom);
     }
     // Never true: recreating the element mid-edit would disturb the caret.
     return false;
@@ -162,6 +164,18 @@ export class BibleRefNode extends ElementNode {
     if (this.__expanded) el.setAttribute('data-expanded', 'true');
     else el.removeAttribute('data-expanded');
     el.setAttribute('role', 'link');
+  }
+
+  /**
+   * The outline some book colors carry on a dark background (outlineFor in
+   * bibleData). On the live element only: exportDOM leaves it out, so saved
+   * and shared HTML keep just --ref-color and the ring is worked out from that
+   * whenever the page is shown.
+   */
+  private applyRing(el: HTMLElement): void {
+    const ring = outlineFor(getBookColor(this.__book));
+    if (ring) el.style.setProperty('--book-ring', ring);
+    else el.style.removeProperty('--book-ring');
   }
 
   exportDOM(_editor: LexicalEditor): DOMExportOutput {

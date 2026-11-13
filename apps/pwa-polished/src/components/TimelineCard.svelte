@@ -15,6 +15,7 @@
   import { openMapWindow } from '../lib/openMapWindow';
   import { formatItemSpan, formatSpan, formatYear, type TimelineData, type TimelineItem, type TimelinePassage } from '../lib/timeline/data';
   import { itemColor } from '../lib/timeline/layout';
+  import { ringVar } from '../lib/bibleData';
   import { laneColor, VERDICT_COLOR } from '../lib/timeline/lanes';
   import { neighbours } from '../lib/timeline/query';
   import CloseX from './CloseX.svelte';
@@ -104,7 +105,7 @@
 
 <div class="card">
   <div class="card-top">
-    <div class="card-kind" style="--c: {color}">{kindLine}</div>
+    <div class="card-kind" style="--c: {color};{ringVar(color)}">{kindLine}</div>
     <div class="card-buttons">
       <button class="card-btn" aria-label="Back" title={near.prev ? near.prev.title : ''} disabled={!near.prev} on:click={() => near.prev && onSelect(near.prev)}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -208,6 +209,7 @@
     flex: 1; min-width: 0;
     font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
     color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-shadow: var(--book-ring, none);
   }
   .card-buttons { display: flex; gap: 2px; flex: none; }
   .card-btn {

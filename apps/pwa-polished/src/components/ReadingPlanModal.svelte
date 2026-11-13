@@ -18,7 +18,7 @@
   import { parallelStore } from '../stores/parallelStore';
   import { planMetadataStore } from '../stores/PlanMetadataStore';
   import { syncService, formatSyncLabel, isSyncRunning, SYNC_SCOPE_TOOLTIP, type SyncState } from '../lib/sync';
-  import { normalizeBookName, getBookColor, shortBookName } from '../lib/bibleData';
+  import { normalizeBookName, getBookColor, ringVar, shortBookName } from '../lib/bibleData';
   import PlayTodayButton from './PlayTodayButton.svelte';
   import { syncQueue } from '../lib/sync/SyncQueueService';
   import { serializePlanData, getRemotePlanStatuses, planUploadOp } from '../adapters/SyncedReadingAdapter';
@@ -1503,7 +1503,7 @@
                     <div class="book-column">
                       <div class="book-column-title">{testament.label}</div>
                       {#each testament.books as book}
-                        <label class="book-row" style="--book-color: {getBookColor(book.name)}">
+                        <label class="book-row" style="--book-color: {getBookColor(book.name)};{ringVar(getBookColor(book.name))}">
                           <input
                             type="checkbox"
                             checked={selectedBooks.has(book.name)}
@@ -1606,7 +1606,7 @@
                     </div>
                     <div class="plan-manager-actions">
                       {#if nextCh}
-                        <button class="pm-chapter-link" style="--book-color: {getBookColor(nextCh.book)}" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{normalizeBookName(nextCh.book)} {nextCh.chapter} <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
+                        <button class="pm-chapter-link" style="--book-color: {getBookColor(nextCh.book)};{ringVar(getBookColor(nextCh.book))}" on:click={() => { selectPlanTab(entry.id); navigateToChapter(nextCh.book, nextCh.chapter); }}>{normalizeBookName(nextCh.book)} {nextCh.chapter} <ArrowRight size="1em" weight="bold" class="ph-inline" /></button>
                       {/if}
                       {#if planRenamingId !== entry.id}
                         <button class="pm-rename-btn" on:click={() => { planRenamingId = entry.id; planRenameValue = getPlanDisplayName(entry.plan.config); planDeleteConfirmId = null; }}>Rename</button>
@@ -1651,7 +1651,7 @@
                               {@const pIdx = todayReading.harmonySections.slice(0, sIdx).reduce((n: number, s: any) => n + s.passages.length, 0) + pi}
                               <button
                                 class="chapter-link harmony-passage-link banner-passage-link"
-                                style="--book-color: {getBookColor(passage.book)}"
+                                style="--book-color: {getBookColor(passage.book)};{ringVar(getBookColor(passage.book))}"
                                 on:click={() => handlePassageClick(todayReading, passage, pIdx)}
                               >{passage.label}</button>
                             {/each}
@@ -1667,7 +1667,7 @@
                             />
                             <button
                               class="chapter-link"
-                              style="--book-color: {getBookColor(chapter.book)}"
+                              style="--book-color: {getBookColor(chapter.book)};{ringVar(getBookColor(chapter.book))}"
                               on:click={() => handleChapterClick(todayReading, chapter)}
                             >{normalizeBookName(chapter.book)} {chapter.chapter}</button>
                           </label>
@@ -1827,7 +1827,7 @@
                           {#each daySections as sec}
                             {#each sec.passages as passage, pi}
                               {@const pIdx = daySections.slice(0, daySections.indexOf(sec)).reduce((n: number, s) => n + s.passages.length, 0) + pi}
-                              <label class="chapter-chip" title="§{sec.section} — {sec.title}" style="--book-color: {getBookColor(passage.book)}">
+                              <label class="chapter-chip" title="§{sec.section} — {sec.title}" style="--book-color: {getBookColor(passage.book)};{ringVar(getBookColor(passage.book))}">
                                 <input
                                   type="checkbox"
                                   checked={isPassageChecked(day.dayNumber, sec.section, passage.label)}
@@ -1852,7 +1852,7 @@
                         <!-- Standard plan day: chapter chips in their book's color -->
                         <span class="list-day-chapters">
                           {#each day.chapters as chapter}
-                            <label class="chapter-chip" style="--book-color: {getBookColor(chapter.book)}">
+                            <label class="chapter-chip" style="--book-color: {getBookColor(chapter.book)};{ringVar(getBookColor(chapter.book))}">
                               <input
                                 type="checkbox"
                                 checked={isChapterChecked(getDayProgress(day.dayNumber), chapter.book, chapter.chapter)}
@@ -2284,6 +2284,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--book-color, #ccc);
+    text-shadow: var(--book-ring, none);
   }
 
   @media (max-width: 560px) {
@@ -2528,6 +2529,7 @@
     background: none;
     border: none;
     color: var(--book-color, #3b82f6);
+    text-shadow: var(--book-ring, none);
     font-weight: 500;
     cursor: pointer;
     text-decoration: underline;
@@ -3048,6 +3050,7 @@
     white-space: nowrap;
     text-decoration: none;
     color: var(--book-color, #3b82f6);
+    text-shadow: var(--book-ring, none);
   }
 
   .chapter-chip .chapter-link:hover {
@@ -3282,6 +3285,7 @@
     padding: 4px 10px;
     background: #1a1a1a;
     color: var(--book-color, #3b82f6);
+    text-shadow: var(--book-ring, none);
     border: 1px solid var(--book-color, #3b82f6);
     border-radius: 4px;
     font-size: 12px;

@@ -13,7 +13,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { createResizeFit } from "../lib/atlas/fit";
   import { openMapWindow } from "../lib/openMapWindow";
-  import { getBookColor, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
+  import { getBookColor, bookInk, inkStyle, BIBLE_BOOKS, normalizeBookName } from "../lib/bibleData.js";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import {
     getIsbeEntry,
@@ -915,7 +915,7 @@
       /<a class="isbe-scripture" data-osis="([^".]*)[^"]*"/g,
       (tag, code) => {
         const book = osisBook(code);
-        return book ? `${tag} style="color:${getBookColor(book)}"` : tag;
+        return book ? `${tag} style="${bookInk(book)}"` : tag;
       },
     );
   }
@@ -1350,7 +1350,7 @@
           <div class="vb-group">
             <button class="vb-header" on:click={() => toggleBook(group.book)}>
               <span class="vb-caret motion-caret" class:open={expandedBooks.has(group.book)} style="color:{group.color}"><CaretRight size="1em" weight="bold" /></span>
-              <span class="vb-name" style="color:{group.color}">{group.book}</span>
+              <span class="vb-name" style={inkStyle(group.color)}>{group.book}</span>
               <span class="vb-count">({group.refs.length})</span>
             </button>
             {#if expandedBooks.has(group.book)}
@@ -1363,7 +1363,7 @@
                     style="border-left-color:{group.color}"
                     on:click={() => navigateFromVerseList(group.book, r.chapter, r.verse)}
                   >
-                    <span class="vb-ref-label" style="color:{group.color}">
+                    <span class="vb-ref-label" style={inkStyle(group.color)}>
                       {group.book} {r.chapter}:{r.verse}
                     </span>
                     {#if versePreviews[key]}

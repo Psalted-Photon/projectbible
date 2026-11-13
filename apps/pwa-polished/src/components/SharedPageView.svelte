@@ -39,6 +39,7 @@
   import { formatVerseSuffix, VERSE_SUFFIX_RE } from '../lib/lexical/bibleRefTransforms';
   import { cleanVersePreviewText } from '../lib/verseRendering';
   import { sanitizeNoteHtml } from '../lib/shared/sanitizeNoteHtml';
+  import { outlineFor } from '../lib/bibleData';
   import { splitPageBlocks } from '../lib/shared/paragraphStamp';
   import AuthorPill from './AuthorPill.svelte';
   import type { SharedNotebookMember } from '../adapters/SharedNotebookStore';
@@ -77,7 +78,19 @@
 
   // Run through the allowlist on every change rather than once on mount: the
   // page can be replaced under us by a pull while it is open.
-  $: clean = sanitizeNoteHtml(html);
+  $: clean = withBookRings(sanitizeNoteHtml(html));
+
+  /**
+   * Saved pages carry only a reference's --ref-color, so the outline some book
+   * colors need on a dark background is added here, for showing, and never
+   * saved. The sanitizer always writes that declaration as `--ref-color: #hex`.
+   */
+  function withBookRings(page: string): string {
+    return page.replace(/--ref-color: (#[0-9a-f]{3,6})/gi, (decl, color) => {
+      const ring = outlineFor(color);
+      return ring ? `${decl}; --book-ring: ${ring}` : decl;
+    });
+  }
   $: isEmpty = clean.replace(/<[^>]*>/g, '').trim() === '';
 
   $: byUserId = new Map(members.map((m) => [m.userId, m]));
@@ -341,6 +354,7 @@
 
   .shared-page :global(.bible-ref) {
     color: var(--ref-color, #c0392b);
+    text-shadow: var(--book-ring, none);
     border-bottom: 1px dotted currentColor;
     cursor: pointer;
   }

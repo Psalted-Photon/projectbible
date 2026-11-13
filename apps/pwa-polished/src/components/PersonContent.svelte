@@ -5,7 +5,7 @@
   import GetPacksCard from "./GetPacksCard.svelte";
   import { Tree } from "phosphor-svelte";
   import { get } from "svelte/store";
-  import { BIBLE_BOOKS, normalizeBookName, getBookColor } from "../lib/bibleData.js";
+  import { BIBLE_BOOKS, normalizeBookName, getBookColor, bookInk, inkStyle } from "../lib/bibleData.js";
   import { renderVersePreviewHtml } from "../lib/verseRendering";
   import { eastonBio, type BioRef } from "../lib/eastonRefs";
   import { cardJumpToVerse, lookupReader, readerState, MAIN_READER } from "../stores/navigationStore";
@@ -845,7 +845,7 @@
                     <div class="cv-book-group">
                       <button class="cv-book-header" on:click={() => toggleBook(book, refs)}>
                         <span class="cv-book-caret motion-caret" class:open={expandedBooks.has(book)} style="color:{color}"><CaretRight size="1em" weight="bold" /></span>
-                        <span class="cv-book-name" style="color:{color}">{book}</span>
+                        <span class="cv-book-name" style={inkStyle(color)}>{book}</span>
                         <span class="cv-book-count">({refs.length})</span>
                       </button>
                       {#if expandedBooks.has(book)}
@@ -856,7 +856,7 @@
                               style="border-left-color:{color}"
                               on:click={() => navigateToVerse(book, r.chapter, r.verse)}
                             >
-                              <span class="cv-ref-label" style="color:{color}">{book} {r.chapter}:{r.verse}</span>
+                              <span class="cv-ref-label" style={inkStyle(color)}>{book} {r.chapter}:{r.verse}</span>
                               {#if versePreviews[`${book} ${r.chapter}:${r.verse}`]}
                                 <span class="cv-ref-text">
                                   {@html renderVersePreviewHtml(versePreviews[`${book} ${r.chapter}:${r.verse}`])}
@@ -879,7 +879,7 @@
         {#if bio.length}
           <div class="char-bio">
             {#each bio as para}
-              <p>{#each para as piece}{#if piece.ref}{@const ref = piece.ref}<span class="bio-ref" class:visited={visitedRefs.has(ref.key)} style="color:{getBookColor(ref.book)}" role="link" tabindex="0" on:click={() => followBioRef(ref)} on:keydown={(e) => e.key === "Enter" && followBioRef(ref)}>{piece.text}</span>{:else}{piece.text}{/if}{/each}</p>
+              <p>{#each para as piece}{#if piece.ref}{@const ref = piece.ref}<span class="bio-ref" class:visited={visitedRefs.has(ref.key)} style={bookInk(ref.book)} role="link" tabindex="0" on:click={() => followBioRef(ref)} on:keydown={(e) => e.key === "Enter" && followBioRef(ref)}>{piece.text}</span>{:else}{piece.text}{/if}{/each}</p>
             {/each}
           </div>
         {/if}

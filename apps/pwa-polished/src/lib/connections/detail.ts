@@ -19,7 +19,7 @@
 import { openDB, type DBSectionHeading } from '../../adapters/db';
 import { linkMask, type ConnectionsData } from './data';
 import type { ConnectionsPalette } from './palette';
-import { BOOK_COLORS, rgbOf } from './palette';
+import { BOOK_COLORS, rgbOf, fillBookText } from './palette';
 import { shortBookName } from '../bibleData';
 import type { Span } from './lights';
 
@@ -553,10 +553,8 @@ export function drawDetail(
   ctx.textBaseline = 'bottom';
   ctx.textAlign = 'center';
   const titleY = Math.max(config.titleSize + 2, config.padTop - 14);
-  ctx.fillStyle = model.left.color;
-  ctx.fillText(model.left.name, frame.leftX, titleY);
-  ctx.fillStyle = model.right.color;
-  ctx.fillText(model.right.name, frame.rightX, titleY);
+  fillBookText(ctx, model.left.name, frame.leftX, titleY, model.left.color, palette);
+  fillBookText(ctx, model.right.name, frame.rightX, titleY, model.right.color, palette);
   ctx.fillStyle = palette.muted;
   ctx.font = `${Math.max(9, config.titleSize - 4)}px ${FONT}`;
   ctx.fillText('→', (frame.leftX + frame.rightX) / 2, titleY);
@@ -630,8 +628,11 @@ function drawAxis(
     const y = (yOf(m.position) + yOf(next)) / 2;
     if (y < -need || y > H + need) return;
     if (axis.byBook && Math.abs(yOf(next) - yOf(m.position)) < config.numberSize * 1.1) return;
-    ctx.fillStyle = m.color ?? palette.muted;
-    ctx.fillText(m.label, numberX, y);
+    if (m.color) fillBookText(ctx, m.label, numberX, y, m.color, palette);
+    else {
+      ctx.fillStyle = palette.muted;
+      ctx.fillText(m.label, numberX, y);
+    }
     numberWidth = Math.max(numberWidth, ctx.measureText(m.label).width);
   });
 

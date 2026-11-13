@@ -247,6 +247,81 @@ export function getBookColor(book: string): string {
   return info ? CATEGORY_COLORS[info.category] : '#8a8f98';
 }
 
+/**
+ * Thin outlines for the book colors that are hard to read on a dark background.
+ * Each outline is the book's own color moved toward white, drawn as a ring of
+ * sharp shadows around every letter (and the dot of every i). The width is in
+ * px, so the outline stays the same however big the text is.
+ *
+ * Tuned by eye in public/outline-lab.html (v1.0). Only Major Prophets needed
+ * one: Minor Prophets and Pauline were left exactly as they are on purpose.
+ */
+export const OUTLINE_WIDTH_PX = 0.25;
+export const CATEGORY_OUTLINES: Partial<Record<BookInfo['category'], string>> = {
+  'major-prophets': '#8556b3', // 25% toward white from #5c1e99
+};
+
+/** Sixteen sharp copies in a circle, the same ring the lab draws. */
+function outlineRing(color: string): string {
+  const out: string[] = [];
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const x = +(Math.cos(a) * OUTLINE_WIDTH_PX).toFixed(2);
+    const y = +(Math.sin(a) * OUTLINE_WIDTH_PX).toFixed(2);
+    out.push(`${x}px ${y}px 0 ${color}`);
+  }
+  return out.join(', ');
+}
+
+/** Book color (lowercase hex) → its outline color. */
+const OUTLINE_COLOR_BY_COLOR: Record<string, string> = Object.fromEntries(
+  (Object.keys(CATEGORY_OUTLINES) as Array<BookInfo['category']>).map(
+    (cat) => [CATEGORY_COLORS[cat].toLowerCase(), CATEGORY_OUTLINES[cat]!],
+  ),
+);
+
+/** Book color (lowercase hex) → its outline's text-shadow. */
+const OUTLINE_BY_COLOR: Record<string, string> = Object.fromEntries(
+  Object.entries(OUTLINE_COLOR_BY_COLOR).map(([color, line]) => [color, outlineRing(line)]),
+);
+
+/** The outline's own color for this book color, or '' — for canvas, which strokes instead. */
+export function outlineColorFor(color: string | null | undefined): string {
+  return color ? (OUTLINE_COLOR_BY_COLOR[color.trim().toLowerCase()] ?? '') : '';
+}
+
+/**
+ * The text-shadow that outlines text in this book color, or '' when the color
+ * needs none. It takes the color rather than the book so it works wherever a
+ * book color turns up: getBookColor, a timeline item, a saved note's
+ * --ref-color, or BibleReader's own copy of the palette.
+ */
+export function outlineFor(color: string | null | undefined): string {
+  return color ? (OUTLINE_BY_COLOR[color.trim().toLowerCase()] ?? '') : '';
+}
+
+/** Inline style for text in a book color: the color, plus its outline if it has one. */
+export function inkStyle(color: string): string {
+  const ring = outlineFor(color);
+  return ring ? `color:${color};text-shadow:${ring}` : `color:${color}`;
+}
+
+/** inkStyle for a book by name. */
+export function bookInk(book: string): string {
+  return inkStyle(getBookColor(book));
+}
+
+/**
+ * For places that set the color through a CSS variable: `--book-ring:<shadow>;`.
+ * The rules that read the color also read `text-shadow: var(--book-ring, none)`.
+ * It is always written, as `none` when the color needs no outline, because a
+ * ref can sit inside another ref's card (a Romans link in an Isaiah footnote)
+ * and must not inherit the outer one's ring.
+ */
+export function ringVar(color: string | null | undefined): string {
+  return `--book-ring:${outlineFor(color) || 'none'};`;
+}
+
 export function getBookChapters(bookName: string): number {
   // Normalize first, like getBookColor above — otherwise an alias spelling
   // (e.g. the plural "Psalms") silently answers "1 chapter".

@@ -12,7 +12,7 @@
   import { ArrowLeft, Plus } from 'phosphor-svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
   import { subscribeToByHeartChanges, syncedByHeartStore, type NewByHeartVerse } from '../../adapters/SyncedByHeartStore';
-  import { getBookColor, translationLabel } from '../../lib/bibleData';
+  import { bookInk, translationLabel } from '../../lib/bibleData';
   import { cardImageOf, keepThumbs } from '../../lib/byHeart/cardThumb';
   import { byHeartGame, gamePrefs, openDrill, openGame, type GameMode } from '../../lib/byHeart/game';
   import { MAX_WORDS, splitParts } from '../../lib/byHeart/passage';
@@ -353,7 +353,7 @@
       </button>
       <span class="step-title">
         {#if view === 'verse' && pageVerse}
-          <span style="color: {getBookColor(pageVerse.book)}">{referenceOf(pageVerse)}</span>
+          <span style={bookInk(pageVerse.book)}>{referenceOf(pageVerse)}</span>
           <TranslationTag translation={pageVerse.translation} />
         {:else if view === 'pick'}{ADD_VERSE}{:else if draft}{formatShareRef(draft.ref)}{/if}
       </span>

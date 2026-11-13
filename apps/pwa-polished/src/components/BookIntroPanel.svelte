@@ -261,6 +261,7 @@
   /* Ref links */
   :global(.commentary-ref) {
     color: var(--ref-color, #8ab4f8); text-decoration: underline;
+    text-shadow: var(--book-ring, none);
     text-decoration-style: dotted; text-underline-offset: 2px;
     cursor: pointer; border-radius: 2px; padding: 0 1px;
   }

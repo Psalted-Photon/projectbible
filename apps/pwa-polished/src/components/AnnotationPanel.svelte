@@ -9,7 +9,7 @@
   import CompanionLine from './CompanionLine.svelte';
   import { getAuthorColor, getAuthorInitials, TSK_COLOR } from "../lib/annotationConfig";
   import { parseRefString } from "../lib/parseRefString";
-  import { getBookColor } from "../lib/bibleData";
+  import { getBookColor, ringVar } from "../lib/bibleData";
   import { linkifyCommentaryRefs } from "../lib/linkifyCommentaryRefs";
   import { sanitizePackHtml } from "../lib/sanitizePackHtml";
   import { navigationStore } from "../stores/navigationStore";
@@ -335,7 +335,7 @@
                     <button
                       class="ref-link-btn"
                       class:navigable={!!refTarget}
-                      style="--ref-color:{refTarget ? getBookColor(refTarget.book) : '#8ab4f8'}"
+                      style="--ref-color:{refTarget ? getBookColor(refTarget.book) : '#8ab4f8'};{ringVar(refTarget ? getBookColor(refTarget.book) : null)}"
                       on:click={() => handleRefClick(ref)}
                     >{ref}</button>
                   </li>
@@ -618,6 +618,7 @@
     background: none;
     border: none;
     color: var(--ref-color, #8ab4f8);
+    text-shadow: var(--book-ring, none);
     font: inherit;
     font-size: 12px;
     padding: 0;
@@ -695,6 +696,7 @@
   /* ——— Inline commentary ref links ——— */
   :global(.commentary-ref) {
     color: var(--ref-color, #8ab4f8);
+    text-shadow: var(--book-ring, none);
     text-decoration: underline;
     text-decoration-style: dotted;
     text-underline-offset: 2px;

@@ -22,7 +22,7 @@
  */
 
 import { linkMask, type ConnectionsData } from './data';
-import { BOOK_RGB, BOOK_COLORS, rgbOf } from './palette';
+import { BOOK_RGB, BOOK_COLORS, rgbOf, fillBookText } from './palette';
 import type { ConnectionsPalette } from './palette';
 import type { DetailConfig } from './detail';
 import { CATEGORY_COLORS, shortBookName, type BookInfo } from '../bibleData';
@@ -787,14 +787,14 @@ function drawBands(
     if (text) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(text, (a + b) / 2, band - 4);
+      fillBookText(ctx, text, (a + b) / 2, band - 4, lane.color, palette);
     } else if (w >= size * 0.9) {
       ctx.save();
       ctx.translate((a + b) / 2, band - 4);
       ctx.rotate(-Math.PI / 2);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(lane.short, 0, 0);
+      fillBookText(ctx, lane.short, 0, 0, lane.color, palette);
       ctx.restore();
     }
   });
@@ -815,7 +815,7 @@ function drawBands(
     ctx.fillStyle = lane.color;
     ctx.globalAlpha = focus && !(focus.axis === 'row' && focus.lane === i) ? 0.45 : 1;
     const text = ctx.measureText(lane.name).width <= band - 6 ? lane.name : lane.short;
-    ctx.fillText(text, band - 4, (a + b) / 2);
+    fillBookText(ctx, text, band - 4, (a + b) / 2, lane.color, palette);
   });
   ctx.restore();
   ctx.globalAlpha = 1;

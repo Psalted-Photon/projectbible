@@ -14,7 +14,7 @@
    * above the books, because Septuagint hits and New Testament hits are separate
    * evidence rather than one run of references.
    */
-  import { getBookColor } from "../lib/bibleData.js";
+  import { getBookColor, inkStyle } from "../lib/bibleData.js";
   import {
     loadOriginalTokens,
     refKey,
@@ -244,7 +244,7 @@
           <div class="vb-group">
             <button class="vb-header" on:click={() => toggleBook(corpus.testament, group)}>
               <span class="vb-caret motion-caret" class:open={expandedBooks.has(bookKey(corpus.testament, group.book))} style="color:{group.color}"><CaretRight size="1em" weight="bold" /></span>
-              <span class="vb-name" style="color:{group.color}">{group.book}</span>
+              <span class="vb-name" style={inkStyle(group.color)}>{group.book}</span>
               <span class="vb-count">({group.uses.length})</span>
             </button>
             {#if expandedBooks.has(bookKey(corpus.testament, group.book))}
@@ -260,7 +260,7 @@
                     on:click={() => onNavigate(u)}
                   >
                     <span class="vb-ref-head">
-                      <span class="vb-ref-label" style="color:{group.color}">
+                      <span class="vb-ref-label" style={inkStyle(group.color)}>
                         {group.book}
                         {u.chapter}:{u.verse}
                       </span>

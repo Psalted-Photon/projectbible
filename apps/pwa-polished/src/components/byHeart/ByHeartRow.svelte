@@ -7,7 +7,7 @@
   import { onDestroy } from 'svelte';
   import { CaretRight, MicrophoneSlash } from 'phosphor-svelte';
   import type { DBByHeartVerse } from '../../adapters/db';
-  import { getBookColor } from '../../lib/bibleData';
+  import { bookInk } from '../../lib/bibleData';
   import { cardThumb } from '../../lib/byHeart/cardThumb';
   import { scoreColor } from '../../lib/byHeart/scoring';
   import { overallOf, progressOf, stageOf } from '../../lib/byHeart/schedule';
@@ -52,7 +52,7 @@
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="text" on:click={onOpen}>
     <div class="ref">
-      <span class="ref-name" style="color: {getBookColor(verse.book)}">{referenceOf(verse)}</span>
+      <span class="ref-name" style={bookInk(verse.book)}>{referenceOf(verse)}</span>
       <TranslationTag translation={verse.translation} />
     </div>
     <div class="preview">{verse.passage}</div>

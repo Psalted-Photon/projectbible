@@ -17,7 +17,7 @@
 
 <script lang="ts">
   import { CaretRight } from "phosphor-svelte";
-  import { getBookColor } from "../../lib/bibleData.js";
+  import { getBookColor, inkStyle } from "../../lib/bibleData.js";
   import { renderVersePreviewHtml } from "../../lib/verseRendering";
   import { reveal } from "../../lib/motion";
   import type { NavesRef, NavesLink } from "../../adapters/lexicon-lookup.js";
@@ -86,7 +86,7 @@
               style="border-left-color:{row.color}"
               on:click={() => onRef(row.osis)}
             >
-              <span class="ref-row-label" style="color:{row.color}">{row.label}</span>
+              <span class="ref-row-label" style={inkStyle(row.color)}>{row.label}</span>
               {#if row.key && previews[row.key]}
                 <span class="ref-row-text">
                   {@html renderVersePreviewHtml(previews[row.key], { maxLength: 150 })}
