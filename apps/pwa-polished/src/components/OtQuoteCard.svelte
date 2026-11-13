@@ -45,6 +45,14 @@
   export let text = '';
   export let busy = false;
   export let unavailable = false;
+  /**
+   * The short name of the translation you read in — "NET", "BSB" — for the
+   * button that goes to the passage there instead of in the Septuagint. The
+   * name itself is the label: shorter than any phrase for "your translation"
+   * and it says exactly where the button goes. Null hides it (the reader works
+   * out when: a Greek New Testament has no Old Testament page to land on).
+   */
+  export let yoursLabel: string | null = null;
 
   const dispatch = createEventDispatcher();
 
@@ -269,16 +277,32 @@
        bottom; two halves of one idea at opposite corners of a small card. Read
        together — "Septuagint →" — the label says both what you are looking at
        and where the button goes, and the top right is left bare. -->
-  {#if !busy && !unavailable}
+  {#if !busy && (!unavailable || yoursLabel)}
     <div class="ot-foot">
-      <button
-        class="ot-goto"
-        title={hasLxx ? 'Read it in the Septuagint' : 'Go to the passage'}
-        on:click|stopPropagation={() => dispatch('goto', { index: refIndex })}
-      >
-        <span>Septuagint</span>
-        <ArrowRight size={12} weight="bold" />
-      </button>
+      <!-- Your own translation sits to the left so Septuagint keeps its corner.
+           It goes by the English number (Psalm 41:9, the "in English Bibles"
+           line), and stays when there is no Septuagint text, where it is the
+           only way through. -->
+      {#if yoursLabel}
+        <button
+          class="ot-goto"
+          title="Read {formatOtVerses(activeRef)} in {yoursLabel}"
+          on:click|stopPropagation={() => dispatch('gotoyours', { index: refIndex })}
+        >
+          <span>{yoursLabel}</span>
+          <ArrowRight size={12} weight="bold" />
+        </button>
+      {/if}
+      {#if !unavailable}
+        <button
+          class="ot-goto"
+          title={hasLxx ? 'Read it in the Septuagint' : 'Go to the passage'}
+          on:click|stopPropagation={() => dispatch('goto', { index: refIndex })}
+        >
+          <span>Septuagint</span>
+          <ArrowRight size={12} weight="bold" />
+        </button>
+      {/if}
     </div>
   {/if}
 </div>
@@ -436,10 +460,11 @@
     font-style: italic;
   }
 
-  /* Holds the one control to the bottom right, where the source line was. */
+  /* Holds the controls to the bottom right, where the source line was. */
   .ot-foot {
     display: flex;
     justify-content: flex-end;
+    gap: 6px;
     margin-top: 5px;
     flex: 0 0 auto;
   }

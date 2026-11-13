@@ -215,7 +215,8 @@
     hideHebrewPartSlashes,
   } from "../lib/verseRendering";
   import { parseRefString } from "../lib/parseRefString";
-  import { BIBLE_BOOKS, normalizeBookName, bookTitle, DEFAULT_TRANSLATION } from "../lib/bibleData";
+  import { BIBLE_BOOKS, normalizeBookName, bookTitle, DEFAULT_TRANSLATION, translationLabel, getTranslationScope } from "../lib/bibleData";
+  import { translationForJump } from "../lib/testamentDefaults";
   import { getSettings, getInterlinearSettings, getTtsSettings, getNavBarPinned } from "../adapters/settings";
   import type { InterlinearSettings } from "../adapters/settings";
   import { ttsCurrentVerse } from "../stores/audioStore";
@@ -1713,18 +1714,20 @@
    * exercised, because every existing call site passes the current translation
    * forward.
    */
-  function gotoOtQuote(index: number) {
+  function gotoOtQuote(index: number, inYours = false) {
     const hit = otQuoteHit;
     if (!hit) return;
 
-    // Falls back to the Masoretic reference in the reader's own translation
-    // when there is no Septuagint for this one — going somewhere sensible beats
-    // a dead button.
-    const lxx = hit.entry.lxx[index];
+    // The card's second button, or no Septuagint for this one: the English
+    // reference in the translation you read in. With the English number, not
+    // the Septuagint's — Psalm 41:9, not 40:9.
+    const lxx = inYours ? undefined : hit.entry.lxx[index];
     const ref = hit.entry.refs[index];
     if (!lxx && !ref) return;
 
-    const translation = lxx ? 'lxx2012' : currentTranslation;
+    const translation = lxx
+      ? 'lxx2012'
+      : (otQuoteLandsIn(hit.book, ref.book, currentTranslation, $availableTranslations) ?? currentTranslation);
     const target = lxx ?? { book: ref.book, chapter: ref.chapter, verse: ref.verse };
 
     // The crumb points at the mark we tapped, not at whatever chapter the
@@ -1743,6 +1746,38 @@
     }
     closeOtQuote();
   }
+
+  /**
+   * Which translation the card's "your translation" button lands in, or null
+   * when it should not be shown.
+   *
+   * A window keeps its own translation. The main reader follows the same rule
+   * as every other jump — a set Old Testament default wins when you cross over
+   * (lib/testamentDefaults) — so the button's label names the translation you
+   * will actually see. Hidden when that is the Septuagint (the other button
+   * already goes there) or a New Testament-only text with no Old Testament page.
+   */
+  function otQuoteLandsIn(
+    fromBook: string,
+    toBook: string | undefined,
+    current: string,
+    installed: readonly string[],
+  ): string | null {
+    if (!toBook) return null;
+    const landIn = windowId ? current : translationForJump(current, fromBook, toBook, installed);
+    if (landIn.toLowerCase() === 'lxx2012') return null;
+    if (getTranslationScope(landIn) === 'nt-only') return null;
+    return landIn;
+  }
+
+  $: otQuoteYours = otQuoteHit
+    ? otQuoteLandsIn(
+        otQuoteHit.book,
+        otQuoteHit.entry.refs[otQuoteRefIndex]?.book,
+        currentTranslation,
+        $availableTranslations,
+      )
+    : null;
 
   // --- Translation card ---------------------------------------------------
   // A whole-verse selection's Translation button: the same verses in another
@@ -7339,8 +7374,10 @@
     text={otQuoteText}
     busy={otQuoteBusy}
     unavailable={otQuoteUnavailable}
+    yoursLabel={otQuoteYours ? translationLabel(otQuoteYours) : null}
     on:select={(e) => loadOtQuoteRef(e.detail.index)}
     on:goto={(e) => gotoOtQuote(e.detail.index)}
+    on:gotoyours={(e) => gotoOtQuote(e.detail.index, true)}
     on:close={closeOtQuote}
   />
 {/if}
