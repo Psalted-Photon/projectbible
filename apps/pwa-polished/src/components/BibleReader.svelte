@@ -86,6 +86,8 @@
   import { motionLevel } from "../lib/motion";
   import { barScale } from "../lib/barSize";
   import NavigationBar from "./NavigationBar.svelte";
+  import StoryTitle from "./StoryTitle.svelte";
+  import { storyMode, storyBooks, storyAt, type StoryPlace } from "../lib/stories";
   import SelectionToast from "./SelectionToast.svelte";
   import RadialSelectionMenu from "./RadialSelectionMenu.svelte";
   import {
@@ -818,8 +820,13 @@
     return registerReaderDriver(trailId, {
       state: readerNavState,
       arrive: windowArrive,
-      move: (translation, book, chapter) => {
+      move: (translation, book, chapter, verse) => {
         if (!windowId) return;
+        // Story Mode lands on a story's first verse: a link's arrival, minus the mark.
+        if (verse != null) {
+          windowArrive({ ...readerNavState(), translation, book, chapter, scrollTargetVerse: verse });
+          return;
+        }
         _windowRestore = null;
         windowStore.updateContentState(windowId, { translation, book, chapter, highlightedVerse: null });
       },
@@ -1034,15 +1041,19 @@
    * and how far its first line has gone up past the top edge. Measured the
    * same way it is put back, so the same line lands in the same place.
    */
-  function readPosition(): ReaderPosition | null {
+  function readPosition(probe = 0): ReaderPosition | null {
     if (!readerElement) return null;
     const top = readerElement.getBoundingClientRect().top;
+    // `probe` looks further down than the top edge: Story Mode's title asks
+    // for the first verse showing below the bars, not the one under them.
+    // Everything that saves or restores a place leaves it at 0.
+    const line = top + probe;
     const sections = readerElement.querySelectorAll<HTMLElement>('[data-chapter-section]');
     for (const section of sections) {
-      if (section.getBoundingClientRect().bottom <= top) continue;
+      if (section.getBoundingClientRect().bottom <= line) continue;
       for (const el of section.querySelectorAll<HTMLElement>('.verse[data-verse]')) {
         const r = el.getBoundingClientRect();
-        if (r.bottom <= top + 1) continue;
+        if (r.bottom <= line + 1) continue;
         const verse = parseInt(el.dataset.verse ?? '', 10);
         const chapter = parseInt(section.dataset.chapter ?? '', 10);
         const book = section.dataset.book;
@@ -1055,8 +1066,86 @@
 
   onMount(() => {
     if (!trailId) return;
-    return registerReaderPosition(readPosition, trailId);
+    return registerReaderPosition(() => readPosition(), trailId);
   });
+
+  // ── Story Mode's pinned title ────────────────────────────────────────────
+  // "Bigger story › smaller story" for the first verse showing below the bars,
+  // worked out from the same measuring as the saved place, so no new tracking.
+  // It lies over the page, so nothing about scroll positions changes.
+
+  let navBar: NavigationBar | null = null;
+  /** The nav bar's full height; with navBarOffset, how much of it shows. */
+  let navBarHeight = 0;
+  let storyTitleHeight = 0;
+  let storyPlace: StoryPlace | null = null;
+  let storyTitleFrame = 0;
+
+  $: storyTitleOn = $storyMode && !pickOnly;
+  $: storyTitleTop = Math.max(0, navBarHeight + navBarOffset);
+  /** Only while it is up: a book with no stories yet shows no title. */
+  $: storyTitleShown = storyTitleOn && !!storyPlace;
+
+  function updateStoryTitle(): void {
+    storyTitleFrame = 0;
+    if (!storyTitleOn) {
+      storyPlace = null;
+      return;
+    }
+    const pos = readPosition(storyTitleTop + storyTitleHeight);
+    const next = pos ? storyAt(get(storyBooks), pos.book, pos.chapter, pos.verse) : null;
+    // Same story, same object: no redraw, no swap fade.
+    if (next && storyPlace && next.bigger === storyPlace.bigger && next.smaller === storyPlace.smaller) return;
+    storyPlace = next;
+  }
+
+  /** At most once a frame, however fast the scroll events come. */
+  function scheduleStoryTitle(): void {
+    if (storyTitleFrame || !storyTitleOn) return;
+    storyTitleFrame = requestAnimationFrame(updateStoryTitle);
+  }
+
+  // Look again whenever the page or the data changes without a scroll.
+  $: {
+    void chapters;
+    void $storyBooks;
+    if (storyTitleOn) tick().then(scheduleStoryTitle);
+    else storyPlace = null;
+  }
+
+  onMount(() => {
+    const nav = readerElement?.querySelector<HTMLElement>('.navigation-bar');
+    if (!nav || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      navBarHeight = nav.offsetHeight;
+    });
+    ro.observe(nav);
+    navBarHeight = nav.offsetHeight;
+    return () => {
+      ro.disconnect();
+      if (storyTitleFrame) cancelAnimationFrame(storyTitleFrame);
+    };
+  });
+
+  function openStoryList(): void {
+    void navBar?.openAtCurrentStory();
+  }
+
+  /**
+   * A story picked in the dropdown: land on its first verse with no mark. One
+   * already on the page is scrolled to; otherwise the reader moves there by
+   * hand, the way a chapter pick does, so no crumb is left either.
+   */
+  function goToStory(book: string, chapter: number, verse: number): void {
+    if (readerElement && findVerseEl(readerElement, book, chapter, verse)) {
+      beginDeliberateNavigation();
+      void scrollToTarget(book, chapter, verse);
+    } else if (trailId) {
+      trailFor(trailId).moveByHand(currentTranslation, book, chapter, verse);
+    } else {
+      doScrollToVerse(book, chapter, verse);
+    }
+  }
 
   // ── Keeping your line when the screen changes width ──────────────────────
   // Opening or closing a folding phone changes the width, the text rewraps,
@@ -2621,7 +2710,7 @@
     let line = parseFloat(style.lineHeight);
     if (!Number.isFinite(line)) line = parseFloat(style.fontSize) * 1.5;
     if (!Number.isFinite(line)) line = 24;
-    return 68 * get(barScale) + line;
+    return 68 * get(barScale) + line + (storyTitleShown ? storyTitleHeight : 0);
   }
 
   // Scroll to a verse element, pulling in any immediately-preceding section heading
@@ -3950,6 +4039,7 @@
         if (anchorTimer) clearTimeout(anchorTimer);
         anchorTimer = setTimeout(noteAnchor, 150);
       }
+      scheduleStoryTitle();
     };
 
     // Attach scroll event listener
@@ -7562,10 +7652,20 @@
   bind:this={readerElement}
   bind:clientWidth={readerClientWidth}
 >
+  {#if storyTitleShown && storyPlace}
+    <StoryTitle
+      place={storyPlace}
+      top={storyTitleTop}
+      bind:height={storyTitleHeight}
+      on:open={openStoryList}
+    />
+  {/if}
   <NavigationBar
+    bind:this={navBar}
     {windowId}
     {navMode}
     {pickOnly}
+    onStoryJump={goToStory}
     style="transform: translateY({navBarOffset}px); transition: transform 0.25s ease;"
   />
 

@@ -1,0 +1,145 @@
+book: Genesis
+
+# Smaller stories start from the BSB headings; tiny ones are merged.
+# Bigger-story titles are our own.
+
+## In the Beginning
+1:1   The Creation
+2:4   Man and Woman in the Garden
+
+## The Fall
+3:1   The Serpent’s Deception
+3:8   God Confronts Adam and Eve
+3:14  The Curses
+3:21  Sent Out of Eden
+
+## From Adam to Noah
+4:1   Cain and Abel
+4:17  Cain’s Descendants
+4:25  Seth and Enosh
+5:1   Adam’s Descendants
+5:18  Enoch Walks with God
+5:25  From Methuselah to Noah
+
+## Noah and the Flood
+6:1   Corruption on the Earth
+6:13  Building the Ark
+7:1   The Great Flood
+8:1   The Ark Rests on Ararat
+8:6   A Raven and a Dove
+8:13  Leaving the Ark
+9:1   The Rainbow Covenant
+9:18  Noah’s Shame and Canaan’s Curse
+
+## The Nations and Babel
+10:1  The Table of Nations
+11:1  The Tower of Babel
+11:10 From Shem to Abram
+
+## Abram Sets Out
+11:27 Terah’s Family
+12:1  The Call of Abram
+12:10 Abram and Sarai in Egypt
+13:1  Abram and Lot Part Ways
+13:14 God Renews the Promise
+14:1  The War of the Kings
+14:10 Abram Rescues Lot
+14:17 Melchizedek Blesses Abram
+
+## The Covenant with Abraham
+15:1  God’s Covenant with Abram
+16:1  Hagar and Ishmael
+17:1  Father of Many Nations
+17:9  The Sign of Circumcision
+
+## Sodom and Gomorrah
+18:1  The Three Visitors
+18:9  Sarah Laughs
+18:16 Abraham Pleads for Sodom
+19:1  Lot Welcomes the Angels
+19:12 Lot Flees to Zoar
+19:24 Sodom and Gomorrah Destroyed
+19:30 Lot and His Daughters
+
+## Isaac, the Promised Son
+20:1  Abraham and Abimelech
+21:1  The Birth of Isaac
+21:9  Hagar Sent Away
+21:22 The Covenant at Beersheba
+22:1  The Offering of Isaac
+22:20 The Sons of Nahor
+23:1  Sarah’s Death and Burial
+
+## A Bride for Isaac
+24:1  The Servant’s Errand
+24:15 Rebekah at the Well
+24:62 Isaac Marries Rebekah
+25:1  Abraham’s Last Years
+25:12 Ishmael’s Descendants
+
+## Jacob and Esau
+25:19 The Twins Are Born
+25:29 Esau Sells His Birthright
+26:1  Isaac in Gerar
+26:12 Isaac’s Wells
+26:26 Peace with Abimelech
+27:1  Jacob Steals the Blessing
+27:30 Esau’s Lost Blessing
+28:1  Jacob Sent Away
+
+## Jacob in Haran
+28:10 Jacob’s Dream at Bethel
+29:1  Jacob Meets Rachel
+29:14 Jacob Marries Leah and Rachel
+29:31 Jacob’s Children Are Born
+30:25 Jacob Prospers
+31:1  Jacob Flees from Laban
+31:22 Laban Pursues Jacob
+31:43 Jacob’s Covenant with Laban
+
+## Jacob Comes Home
+32:1  Jacob Prepares to Meet Esau
+32:22 Jacob Wrestles with God
+33:1  Jacob Meets Esau
+34:1  Dinah and Shechem
+35:1  Back to Bethel
+35:16 Rachel Dies
+35:21 Jacob’s Sons and Isaac’s Death
+36:1  Esau’s Descendants
+
+## Joseph Sold into Egypt
+37:1  Joseph’s Dreams
+37:12 Sold by His Brothers
+37:31 Jacob Mourns Joseph
+38:1  Judah and Tamar
+
+## From Prison to Palace
+39:1  Joseph and Potiphar’s Wife
+39:13 Joseph in Prison
+40:1  The Cupbearer and the Baker
+41:1  Pharaoh’s Dreams
+41:14 Joseph Interprets the Dreams
+41:37 Joseph Rules Egypt
+41:46 Plenty, Then Famine
+
+## Joseph and His Brothers
+42:1  The Brothers Go to Egypt
+42:25 The Brothers Return to Canaan
+43:1  Back to Egypt with Benjamin
+43:16 Dinner at Joseph’s House
+44:1  The Silver Cup
+44:18 Judah Pleads for Benjamin
+45:1  Joseph Makes Himself Known
+45:9  Joseph Sends for Jacob
+
+## Israel in Egypt
+46:1  Jacob Goes Down to Egypt
+46:28 Jacob Sees Joseph Again
+47:1  Settling in Goshen
+47:13 The Famine Goes On
+47:27 Israel Prospers in Goshen
+48:1  Jacob Blesses Ephraim and Manasseh
+49:1  Jacob Blesses His Sons
+49:29 Jacob’s Death and Burial
+50:15 Joseph Comforts His Brothers
+50:22 The Death of Joseph

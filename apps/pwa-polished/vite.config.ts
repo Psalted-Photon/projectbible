@@ -249,6 +249,9 @@ export default defineConfig({
         'pb-gem.png',
         // The launch splash's black-and-white iris, drawn on every launch.
         'iris-mono.png',
+        // Story Mode's stories (lib/stories.ts), about 16 KB, so the
+        // dropdown and the pinned title work offline.
+        'stories.json',
         // The wordmark's face: drawn by the launch splash on first paint.
         'fonts/milonga-400.woff2',
         'fonts/berry-rotunda.woff2',

@@ -490,8 +490,8 @@ export interface ReaderDriver {
   state: () => NavigationState;
   /** Stand where a crumb remembers, scrolled to its `restoreScroll` if it has one. */
   arrive: (nav: NavigationState) => void;
-  /** Go to a book and chapter picked by hand, with no mark. */
-  move: (translation: string, book: string, chapter: number) => void;
+  /** Go to a book and chapter picked by hand, with no mark; scrolled to `verse` when given (Story Mode). */
+  move: (translation: string, book: string, chapter: number, verse?: number | null) => void;
   /** Follow a link to a verse, in `translation` (the one the reader is in). */
   goToVerse: (translation: string, book: string, chapter: number, verse: number) => void;
   /** Change translation and stay on `pos`, the line on screen before the switch. */
@@ -632,7 +632,7 @@ export interface ReaderTrail {
   goToAhead: (index: number, clearAfter?: boolean) => TrailCrumb | null;
   removeCrumb: (side: 'back' | 'ahead', index: number) => void;
   clearHistory: () => void;
-  moveByHand: (translation: string, book: string, chapter: number) => void;
+  moveByHand: (translation: string, book: string, chapter: number, verse?: number | null) => void;
 }
 
 function makeReaderTrail(r: Reader): ReaderTrail {
@@ -800,10 +800,10 @@ function makeReaderTrail(r: Reader): ReaderTrail {
      * crumb: only following a link does. The spot you are on just moves, like
      * a tab, and the crumbs behind and ahead stay where they are.
      */
-    moveByHand: (translation, book, chapter) => {
+    moveByHand: (translation, book, chapter, verse) => {
       if (!r.driver) return;
       trail.update((t) => ({ ...t, current: null }));
-      r.driver.move(translation, book, chapter);
+      r.driver.move(translation, book, chapter, verse);
     },
   };
 }
@@ -1073,7 +1073,7 @@ function createNavigationStore() {
       persistState(nav);
       set(nav);
     },
-    move: (translation, book, chapter) => navigateTo(translation, book, chapter, null, false),
+    move: (translation, book, chapter, verse) => navigateTo(translation, book, chapter, verse ?? null, false),
     goToVerse: (translation, book, chapter, verse) => navigateToVerse(translation, book, chapter, verse),
   };
 

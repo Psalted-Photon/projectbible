@@ -1,0 +1,52 @@
+book: Daniel
+
+# Chapters 1–6 are six court stories; 7–12 are Daniel's visions.
+
+## Faithful in Babylon
+1:1   Taken to Babylon
+1:8   Daniel’s Faithfulness
+1:17  Daniel’s Wisdom
+
+## The King’s Dream
+2:1   Nebuchadnezzar’s Troubling Dream
+2:14  The Dream Revealed to Daniel
+2:24  Daniel Interprets the Dream
+2:46  Daniel Promoted
+
+## The Fiery Furnace
+3:1   The Golden Statue
+3:8   Shadrach, Meshach and Abednego Accused
+3:19  Into the Furnace
+
+## The King Humbled
+4:1   The Dream of a Great Tree
+4:19  Daniel Interprets the Dream
+4:28  The Dream Comes True
+4:34  Nebuchadnezzar Restored
+
+## The Writing on the Wall
+5:1   Belshazzar’s Feast
+5:5   The Hand Writes on the Wall
+5:13  Daniel Reads the Writing
+
+## The Lions’ Den
+6:1   The Plot against Daniel
+6:10  Daniel in the Lions’ Den
+6:25  Darius Honors God
+
+## Visions of Beasts
+7:1   The Four Beasts
+7:9   The Ancient of Days and the Son of Man
+7:15  The Four Beasts Explained
+8:1   The Ram and the Goat
+8:15  Gabriel Explains the Vision
+
+## The Seventy Weeks
+9:1   Daniel’s Prayer for His People
+9:20  The Seventy Weeks
+
+## The Last Vision
+10:1  The Vision by the Tigris
+11:1  Kings of the South and North
+11:36 The King Who Exalts Himself
+12:1  The Time of the End

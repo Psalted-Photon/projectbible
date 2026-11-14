@@ -28,6 +28,8 @@
   import type { Suggestion } from "../lib/search/searchWorker";
   import { addedWords, leadCategory, readIntent, topMatch } from "../lib/search/queryIntent";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
+  import { devOptionsUnlocked } from "../lib/devOptions";
+  import { storyMode, storyModeChosen, storyBooks, storyAt, chapterSpan, loadStories, type SmallerStory } from "../lib/stories";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import { portal } from "../lib/portal";
   import SearchResultsTree from "./SearchResultsTree.svelte";
@@ -170,6 +172,13 @@
    */
   export let navMode: 'auto' | 'master' | 'follower' = 'auto';
 
+  /**
+   * Story Mode's jump to a story's first verse. The reader passes its own,
+   * which scrolls a verse already on the page instead of reloading it; left
+   * out, the bar moves its reader by hand the way a chapter pick does.
+   */
+  export let onStoryJump: ((book: string, chapter: number, verse: number) => void) | null = null;
+
   /* The reference dropdown is two side-by-side columns, OT then NT. Splitting the
      list here (rather than flowing one list into CSS columns) keeps each column
      reading straight top-to-bottom, so a book is where you expect it. */
@@ -182,6 +191,108 @@
   let referenceDropdownOpen = false;
   let commDropdownOpen = false;
   let expandedBooks = new Set<string>();
+
+  // ── Story Mode ─────────────────────────────────────────────────────────────
+  // The Canonical / Story Mode switch sits at the top of the Bible dropdown,
+  // in Dev Options only until every book has its stories. By Heart's simple
+  // reader keeps the plain chapter list.
+  $: showStoryToggle = $devOptionsUnlocked && !pickOnly;
+  $: storiesOn = $storyMode && !pickOnly;
+  /** The bigger story open in the dropdown, as "book#index". One at a time, like books. */
+  let expandedStory: string | null = null;
+  /** The story the reader is in, marked in the list. */
+  let storyHere: { book: string; bi: number; si: number } | null = null;
+
+  /** Find the reader's story and open the list at it. */
+  async function openAtReaderStory(): Promise<void> {
+    const books = await loadStories();
+    const pos = currentReaderPosition(windowId);
+    const book = pos?.book ?? currentBook;
+    const place = book ? storyAt(books, book, pos?.chapter ?? currentChapter, pos?.verse ?? 1) : null;
+    if (!book || !place) {
+      storyHere = null;
+      expandedStory = null;
+      return;
+    }
+    storyHere = { book, bi: place.bi, si: place.si };
+    expandedStory = `${book}#${place.bi}`;
+    if (!expandedBooks.has(book)) expandedBooks = new Set([book]);
+  }
+
+  async function chooseStoryMode(on: boolean) {
+    if (on === $storyModeChosen) return;
+    storyModeChosen.set(on);
+    if (on) {
+      await openAtReaderStory();
+      await tick();
+      scrollReferenceToCurrent();
+    }
+  }
+
+  function toggleBiggerStory(book: string, bi: number, event: MouseEvent) {
+    const key = `${book}#${bi}`;
+    const opening = expandedStory !== key;
+    expandedStory = opening ? key : null;
+    if (!opening) return;
+    // A long list of smaller stories can open below the fold: bring it up,
+    // never so far that its bigger story's row goes off the top.
+    const row = (event.currentTarget as HTMLElement | null)?.closest('.story-group') as HTMLElement | null;
+    requestAnimationFrame(() => {
+      const dropdown = row?.closest('.reference-dropdown') as HTMLElement | null;
+      if (!row || !dropdown) return;
+      const box = dropdown.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      if (r.bottom > box.bottom) dropdown.scrollTop += Math.max(0, Math.min(r.bottom - box.bottom + 8, r.top - box.top - 80));
+    });
+  }
+
+  function selectStory(book: string, story: SmallerStory) {
+    if (onStoryJump) {
+      onStoryJump(book, story.c, story.v);
+    } else if (windowId && !keepsTrail) {
+      windowStore.updateContentState(windowId, {
+        translation: currentTranslation,
+        book,
+        chapter: story.c,
+        highlightedVerse: null,
+      });
+    } else {
+      myTrail.moveByHand(currentTranslation, book, story.c, story.v);
+    }
+    referenceDropdownOpen = false;
+    expandedBooks = new Set();
+  }
+
+  /** The open book at the top of the list, and its marked story, if any, in view. */
+  function scrollReferenceToCurrent() {
+    const dropdown = (navElement?.querySelector('.reference-dropdown') ?? document.querySelector('.reference-dropdown')) as HTMLElement | null;
+    if (!dropdown) return;
+    const openBookItem = dropdown.querySelector('.book-item .book-button.expanded')?.closest('.book-item') as HTMLElement | null;
+    const currentBookItem = dropdown.querySelector('.book-item .book-button.current')?.closest('.book-item') as HTMLElement | null;
+    const bookItem = openBookItem ?? currentBookItem;
+    if (bookItem) scrollBookItemToTop(dropdown, bookItem);
+    const story = dropdown.querySelector('.story-small.selected') as HTMLElement | null;
+    if (!story) return;
+    const box = dropdown.getBoundingClientRect();
+    const r = story.getBoundingClientRect();
+    // Below the fold: lift it to about a third of the way down.
+    if (r.bottom > box.bottom - 8) dropdown.scrollTop += r.top - box.top - box.height / 3;
+  }
+
+  /**
+   * Open the Bible dropdown at the story the reader is in: the pinned story
+   * title's tap. Already open, it just finds the story again.
+   */
+  export async function openAtCurrentStory(): Promise<void> {
+    if (!referenceButtonRef) return; // a bar with no location pill has no dropdown to open
+    if (!referenceDropdownOpen) {
+      await openReferenceDropdown();
+      return;
+    }
+    await openAtReaderStory();
+    await tick();
+    scrollReferenceToCurrent();
+  }
   /** Expand state for the whole results tree, keyed by node path. */
   let expandedSearchNodes = new Set<string>();
   let searchQuery = "";
@@ -616,14 +727,15 @@
 
   async function toggleReferenceDropdown(event: MouseEvent) {
     event.stopPropagation();
-    const opening = !referenceDropdownOpen;
-
-    if (!opening) {
+    if (referenceDropdownOpen) {
       referenceDropdownOpen = false;
       referenceDropdownPositioned = false;
       return;
     }
+    await openReferenceDropdown();
+  }
 
+  async function openReferenceDropdown() {
     translationDropdownOpen = false;
     translationDropdownPositioned = false;
     commDropdownOpen = false;
@@ -632,6 +744,7 @@
     if (currentBook && !expandedBooks.has(currentBook)) {
       expandedBooks = new Set([currentBook]);
     }
+    if (storiesOn) await openAtReaderStory();
 
     // Scroll nav instantly so button position is correct before we measure
     scrollToShowButton(referenceButtonRef);
@@ -654,9 +767,13 @@
         referenceDropdownPositioned = true; // reveal now that it's placed
         growFrom(dropdown, rect);
 
-        // Scroll the list to the current book
+        // Scroll the list to the current book, and in Story Mode to its story
         if (currentBook) {
           requestAnimationFrame(() => {
+            if (storiesOn) {
+              scrollReferenceToCurrent();
+              return;
+            }
             const currentBookItem = dropdown.querySelector('.book-item .book-button.current')?.closest('.book-item') as HTMLElement;
             if (currentBookItem) {
               scrollBookItemToTop(dropdown, currentBookItem);
@@ -3542,7 +3659,25 @@
   {/if}
 
   {#if referenceDropdownOpen}
-    <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned} class:one-column={bookListOneColumn} out:fadeAway>
+    <div class="dropdown-menu tree-menu reference-dropdown" class:positioned={referenceDropdownPositioned} class:one-column={bookListOneColumn} class:with-story-toggle={showStoryToggle} out:fadeAway>
+      {#if showStoryToggle}
+        <div class="story-toggle" role="radiogroup" aria-label="Book list">
+          <button
+            class="story-toggle-option"
+            class:active={!$storyModeChosen}
+            role="radio"
+            aria-checked={!$storyModeChosen}
+            on:click={() => chooseStoryMode(false)}
+          >Canonical</button>
+          <button
+            class="story-toggle-option"
+            class:active={$storyModeChosen}
+            role="radio"
+            aria-checked={$storyModeChosen}
+            on:click={() => chooseStoryMode(true)}
+          >Story Mode</button>
+        </div>
+      {/if}
       {#each REFERENCE_COLUMNS as column}
         <div class="book-column book-column-{column.testament}">
           <div class="book-column-title">{column.label}</div>
@@ -3572,12 +3707,50 @@
                 <span class="book-name">{bookTitle(book.name)}</span>
               </button>
 
-              {#if expandedBooks.has(book.name)}
+              {#if expandedBooks.has(book.name) && storiesOn && $storyBooks?.[book.name]?.length}
+                <div class="stories-container" in:reveal>
+                  {#each $storyBooks[book.name] as big, bi}
+                    {@const open = expandedStory === `${book.name}#${bi}`}
+                    {@const here = storyHere?.book === book.name && storyHere.bi === bi}
+                    <div class="story-group">
+                      <button
+                        class="story-big"
+                        class:open
+                        aria-expanded={open}
+                        on:click={(e) => toggleBiggerStory(book.name, bi, e)}
+                      >
+                        <span class="expand-icon motion-caret" class:open>
+                          <CaretRight size={10} weight="bold" />
+                        </span>
+                        <span class="story-title" class:here>{big.t}</span>
+                        <span class="story-chapters">({chapterSpan(big)})</span>
+                      </button>
+                      {#if open}
+                        <div class="story-smalls" in:reveal>
+                          {#each big.s as small, si}
+                            <button
+                              class="story-small"
+                              class:selected={here && storyHere?.si === si}
+                              on:click={() => selectStory(book.name, small)}
+                            >
+                              <span class="story-title">{small.t}</span>
+                              <span class="story-chapters">({chapterSpan(small)})</span>
+                            </button>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {:else if expandedBooks.has(book.name)}
                 <div
                   class="chapters-container"
                   in:reveal
                   style="--chapter-columns: {Math.min(book.chapters, 7)}"
                 >
+                  {#if storiesOn}
+                    <div class="stories-none">No stories for this book yet</div>
+                  {/if}
                   {#each Array.from({ length: book.chapters }, (_, i) => i + 1) as chapter}
                     <button
                       class="chapter-button"
@@ -4873,6 +5046,150 @@
     max-width: 90vw;
   }
 
+  /* ── Story Mode ── The switch spans both columns and stays pinned at the
+     top, so it can be reached from anywhere in the list. Its height is the
+     variable the sticky column titles and category headers sit below. */
+  .tree-menu.with-story-toggle {
+    --story-toggle-h: 34px;
+  }
+
+  .story-toggle {
+    grid-column: 1 / -1;
+    position: sticky;
+    top: 0;
+    z-index: 6; /* above the open chapter / story overlay */
+    box-sizing: border-box;
+    height: var(--story-toggle-h);
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: #1a1a1a;
+    border-bottom: 1px solid #3a3a3a;
+  }
+
+  .story-toggle-option {
+    flex: 1;
+    min-width: 0;
+    padding: 0 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: #9a9a9a;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+    transition: background var(--motion-press-ms, 80ms), color var(--motion-press-ms, 80ms);
+  }
+
+  .story-toggle-option.active {
+    background: #3a3a3a;
+    border-color: #4a4a4a;
+    color: #f0f0f0;
+  }
+
+  /* The open book's stories: the same overlay as its chapter grid. */
+  .stories-container {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 5;
+    box-sizing: border-box;
+    width: calc(200% + 1px);
+    padding: 4px;
+    background: #1c1c1c;
+    border: 1px solid #3a3a3a;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6);
+  }
+
+  .book-column-nt .stories-container {
+    left: calc(-100% - 1px);
+  }
+
+  .story-group + .story-group {
+    border-top: 1px solid #2c2c2c;
+  }
+
+  .story-big,
+  .story-small {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: #e2e2e2;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .story-big {
+    padding: 9px 8px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .story-big:hover,
+  .story-small:hover {
+    background: #2a2a2a;
+  }
+
+  .story-big .expand-icon {
+    flex: none;
+    align-self: center;
+  }
+
+  .story-smalls {
+    padding: 0 0 6px 20px;
+  }
+
+  .story-small {
+    padding: 7px 8px;
+    font-size: 14px;
+    color: #cfcfcf;
+  }
+
+  .story-small.selected {
+    background: #667eea;
+    border-color: #667eea;
+    color: #fff;
+  }
+
+  /* Where the reader is: the same weight a current book gets, no new color. */
+  .story-title.here {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+
+  .story-title {
+    min-width: 0;
+  }
+
+  .story-chapters {
+    flex: none;
+    font-weight: 400;
+    font-size: 0.85em;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .story-small.selected .story-chapters {
+    opacity: 0.9;
+  }
+
+  .stories-none {
+    grid-column: 1 / -1;
+    padding: 2px 4px 6px;
+    font-size: 12px;
+    color: #9a9a9a;
+  }
+
   .book-column {
     box-sizing: border-box;
     display: flex;
@@ -4888,7 +5205,7 @@
   /* Fixed height so the category headers below can stick just under it. */
   .book-column-title {
     position: sticky;
-    top: 0;
+    top: var(--story-toggle-h, 0px);
     z-index: 3;
     flex: 0 0 auto;
     height: 26px;
@@ -4961,7 +5278,7 @@
   /* Category group label in the book dropdown */
   .category-header {
     position: sticky;
-    top: 26px; /* clears the sticky column title */
+    top: calc(26px + var(--story-toggle-h, 0px)); /* clears the sticky column title (and the Story Mode switch) */
     z-index: 1;
     font-size: 0.62rem;
     font-weight: 700;
@@ -5440,6 +5757,17 @@
       border: none;
       box-shadow: none;
     }
+
+    /* Story lists fill the single column, and never widen it: width 0 keeps
+       long titles out of the box's own fit-content width, so they wrap. */
+    .stories-container,
+    .book-column-nt .stories-container {
+      position: static;
+      width: 0;
+      min-width: 100%;
+      border: none;
+      box-shadow: none;
+    }
   }
 
   /* Reader setting "Book list in one column": the same single list as above on
@@ -5466,6 +5794,15 @@
     width: fit-content;
     grid-template-columns: repeat(var(--chapter-columns, 7), 40px);
     justify-content: start;
+    border: none;
+    box-shadow: none;
+  }
+
+  .tree-menu.one-column .stories-container,
+  .tree-menu.one-column .book-column-nt .stories-container {
+    position: static;
+    width: 0;
+    min-width: 100%;
     border: none;
     box-shadow: none;
   }

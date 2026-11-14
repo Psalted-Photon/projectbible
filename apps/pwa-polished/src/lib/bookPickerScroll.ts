@@ -24,7 +24,14 @@ function stickyHeaderHeight(bookItem: HTMLElement): number {
     sibling = sibling.previousElementSibling;
   }
 
-  return (title?.offsetHeight ?? 0) + ((sibling as HTMLElement | null)?.offsetHeight ?? 0);
+  // The Bible picker's Canonical / Story Mode switch, pinned above both.
+  const toggle = bookItem.closest('.tree-menu')?.querySelector('.story-toggle') as HTMLElement | null;
+
+  return (
+    (toggle?.offsetHeight ?? 0) +
+    (title?.offsetHeight ?? 0) +
+    ((sibling as HTMLElement | null)?.offsetHeight ?? 0)
+  );
 }
 
 export function scrollBookItemToTop(dropdown: HTMLElement, bookItem: HTMLElement): void {

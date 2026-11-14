@@ -1,0 +1,59 @@
+book: Joshua
+
+# Bigger stories follow the book's own divisions (1–5, 6–12, 13–21, 22, 23–24),
+# with the conquest and the land lists each split in two.
+
+## Into the Land
+1:1   God Commands Joshua
+1:10  Joshua Takes Charge
+2:1   Rahab Hides the Spies
+2:8   The Promise to Rahab
+3:1   Crossing the Jordan
+4:1   Twelve Stones from the Jordan
+5:1   Circumcision and Passover at Gilgal
+5:13  The Commander of the LORD’s Army
+
+## Jericho and Ai
+6:1   The Walls of Jericho
+7:1   Defeat at Ai
+7:16  Achan’s Sin
+8:1   Ai Is Taken
+8:30  The Covenant Renewed at Mount Ebal
+
+## Conquering the South and North
+9:1   The Gibeonites’ Trick
+10:1  The Day the Sun Stood Still
+10:16 Five Kings at Makkedah
+10:29 The Southern Cities
+11:1  The Northern Cities
+11:16 The Whole Land Taken
+12:1  The Defeated Kings
+
+## Dividing the Land
+13:1  Land Still to Be Taken
+13:8  The Eastern Tribes’ Land
+14:1  Dividing the Land West of the Jordan
+14:6  Caleb Asks for Hebron
+15:1  Judah’s Land
+15:13 Caleb’s Portion
+15:20 The Cities of Judah
+16:1  Ephraim’s Land
+17:1  Manasseh’s Western Land
+18:1  The Rest Divided at Shiloh
+18:11 Benjamin’s Land
+19:1  Six More Tribes’ Land
+19:49 Joshua’s Inheritance
+
+## Refuge and Levite Cities
+20:1  Six Cities of Refuge
+21:1  Forty-Eight Cities for the Levites
+
+## The Altar by the Jordan
+22:1  The Eastern Tribes Go Home
+22:9  The Altar of Witness
+
+## Joshua’s Farewell
+23:1  Joshua’s Charge to the Leaders
+24:1  Joshua Retells Israel’s Story
+24:14 Choose Whom You Will Serve
+24:29 Joshua’s Death and Burial
