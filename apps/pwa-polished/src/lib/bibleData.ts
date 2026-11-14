@@ -253,12 +253,14 @@ export function getBookColor(book: string): string {
  * sharp shadows around every letter (and the dot of every i). The width is in
  * px, so the outline stays the same however big the text is.
  *
- * Tuned by eye in public/outline-lab.html (v1.0). Only Major Prophets needed
- * one: Minor Prophets and Pauline were left exactly as they are on purpose.
+ * Tuned by eye in public/outline-lab.html (v1.0), then thinned to 0.18px and
+ * given to Minor Prophets too, at the same 25% toward white, so the two
+ * prophet groups match. Pauline is left exactly as it is on purpose.
  */
-export const OUTLINE_WIDTH_PX = 0.25;
+export const OUTLINE_WIDTH_PX = 0.18;
 export const CATEGORY_OUTLINES: Partial<Record<BookInfo['category'], string>> = {
   'major-prophets': '#8556b3', // 25% toward white from #5c1e99
+  'minor-prophets': '#bb84ef', // 25% toward white from #a45be9
 };
 
 /** Sixteen sharp copies in a circle, the same ring the lab draws. */
