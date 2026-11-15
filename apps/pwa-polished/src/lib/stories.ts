@@ -1,5 +1,6 @@
 import { derived, writable, type Readable } from 'svelte/store';
 import { devOptionsUnlocked } from './devOptions';
+import { normalizeBookName } from './bibleData';
 
 /**
  * Story Mode: reading the Bible by complete stories instead of chapters.
@@ -61,6 +62,16 @@ export const storyCards = writable<Record<string, StoryCard>>({});
 
 let loading: Promise<StoryBooks | null> | null = null;
 
+/**
+ * The data is keyed by the build script's book names ("Psalms"); the app's
+ * own are a few that differ ("Psalm"), so the keys are put into the app's.
+ */
+function appNames<T>(byBook: Record<string, T>): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [book, value] of Object.entries(byBook)) out[normalizeBookName(book)] = value;
+  return out;
+}
+
 /** Fetch the data if it isn't here yet. A failure isn't kept, so the next ask tries again. */
 export function loadStories(): Promise<StoryBooks | null> {
   if (!loading) {
@@ -69,8 +80,15 @@ export function loadStories(): Promise<StoryBooks | null> {
         const res = await fetch('/stories.json');
         if (res.ok) {
           const json = await res.json();
-          const books = (json?.books ?? null) as StoryBooks | null;
-          storyCards.set((json?.cards ?? {}) as Record<string, StoryCard>);
+          const books = json?.books ? appNames(json.books as StoryBooks) : null;
+          if (books) {
+            for (const list of Object.values(books)) {
+              for (const big of list) {
+                for (const s of big.s) if (s.l) s.l = { ...s.l, b: normalizeBookName(s.l.b) };
+              }
+            }
+          }
+          storyCards.set(appNames((json?.cards ?? {}) as Record<string, StoryCard>));
           storyBooks.set(books);
           return books;
         }
@@ -152,7 +170,7 @@ export function storyAt(
   chapter: number,
   verse: number,
 ): StoryPlace | null {
-  const list = books?.[book];
+  const list = books?.[normalizeBookName(book)];
   if (!list?.length) return null;
   let bi = 0;
   for (let i = 0; i < list.length; i++) {
