@@ -1,5 +1,14 @@
 book: Mark
 
+card: How Mark Is Built
+- 1:1–8:26 · Galilee: one miracle after another, and the question “Who is this?”
+- 8:27–10:52 · On the road: Peter says “You are the Christ,” and three times Jesus foretells his death.
+- 11–16 · Jerusalem: one week, the cross and the empty tomb.
+> Fast: the shortest Gospel, often moving on “at once” or “immediately,” yet more than a third of it is spent on Jesus’ last week.
+> The hinge: Peter’s answer at Caesarea Philippi (8:29) is the middle of the book. Before it, people ask who Jesus is; after it, he teaches what kind of Christ he has come to be.
+> Keeping it quiet: Jesus often tells people not to say who he is, until a Roman centurion at the cross says it out loud: “Truly this man was the Son of God!” (15:39).
+> The ending: some of the earliest manuscripts stop at 16:8, with the women afraid at the empty tomb. Verses 9–20 are in most others.
+
 ## The Beginning
 1:1   John the Baptist
 1:12  The Temptation and First Preaching

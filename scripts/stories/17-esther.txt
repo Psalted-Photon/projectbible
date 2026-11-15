@@ -1,0 +1,28 @@
+book: Esther
+
+## A New Queen
+1:1     Xerxes’ Royal Feast
+1:9     Queen Vashti’s Refusal
+1:13    Queen Vashti Deposed
+2:1     Seeking Vashti’s Successor
+2:5     Esther Finds Favor
+2:17    Esther Becomes Queen
+2:21    Mordecai Uncovers a Conspiracy
+
+## Haman’s Plot
+3:1     Haman’s Plot against the Jews
+4:1     Mordecai Appeals to Esther
+5:1     Esther Approaches the King
+5:9     Haman’s Plot against Mordecai
+
+## The Tables Turn
+6:1     Mordecai Is Honored
+7:1     Esther Pleads for Her People
+7:7     The Hanging of Haman
+8:1     Esther Appeals for the Jews
+8:7     The Decree of Xerxes
+
+## Purim
+9:1     The Jews Destroy Their Enemies
+9:11    Haman’s Sons Hanged
+9:18    The Feast of Purim Instituted

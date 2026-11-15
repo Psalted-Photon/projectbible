@@ -19,7 +19,8 @@
  *   === Book I                   <- a divider label before the next bigger story;
  *                                   its chapters are worked out like a story's
  *   3:1   Deliver Me | David · Cry for help   <- "| " adds an info line
- *         -> 2 Samuel 15:13–17:22             <- a story link under the story above
+ *         -> 2 Samuel 15:13–17:22             <- a story link under the story above;
+ *         -> 2 Chronicles 10:1–19 | Also told in   "| " gives its label (default "Written when")
  *
  * Lines starting with "#" (one hash and a space) are comments. A story ends
  * where the next begins, so the first smaller story must start at 1:1 and
@@ -37,7 +38,8 @@
  * where c:v is the first verse and e is the last chapter the story touches.
  * A bigger story after a divider also has d (its label) and de (the last
  * chapter before the next divider). A smaller story may have i (its info
- * line) and l: { b, c, v, t } (the link's book, first verse and printed text).
+ * line) and l: { b, c, v, t, n? } (the link's book, first verse, printed text
+ * and label, when it isn't "Written when").
  * A link's whole range is checked, end included.
  *
  * Psalms is also checked for its info lines: every psalm's opening story has
@@ -69,7 +71,10 @@ const fail = (file, line, msg) => errors.push(`${file}${line ? `:${line}` : ''} 
 const PSALM_KINDS = ['Cry for help', 'Praise', 'Thanks', 'Trust', 'Wisdom', 'The King', 'History', 'Pilgrim song', 'Confession', 'Mixed'];
 
 /** "2 Samuel 11:1–12:25", "1 Samuel 21:10–15" or "Psalm 18:1": checked whole, end included. */
-function parseLink(file, n, text) {
+function parseLink(file, n, whole) {
+  const [text, label, extra] = whole.split('|').map((x) => x.trim());
+  if (label === '') fail(file, n, 'empty link label after "|"');
+  if (extra !== undefined) fail(file, n, 'more than one "|" on a link');
   const m = text.match(/^(.+?)\s+(\d+):(\d+)(?:\s*[–-]\s*(?:(\d+):)?(\d+))?$/);
   if (!m) { fail(file, n, `can't read this link: "${text}"`); return null; }
   const b = m[1];
@@ -81,7 +86,7 @@ function parseLink(file, n, text) {
   if (!real(c, v)) fail(file, n, `link ${b} ${c}:${v} doesn't exist`);
   if (!real(ec, ev)) fail(file, n, `link end ${b} ${ec}:${ev} doesn't exist`);
   if (ec < c || (ec === c && ev < v)) fail(file, n, `link ${text} ends before it starts`);
-  return { b, c, v, t: text };
+  return { b, c, v, t: text, ...(label ? { n: label } : {}) };
 }
 
 function parseFile(file) {

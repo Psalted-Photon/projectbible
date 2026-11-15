@@ -1,0 +1,47 @@
+book: Ecclesiastes
+
+card: How Ecclesiastes Is Built
+- 1–2 · The search: the Teacher tries wisdom, pleasure and hard work, and calls them all “futile.”
+- 3–6 · Times and seasons: what lasts under the sun, and what doesn’t.
+- 7–10 · What wisdom is worth, and where it runs out.
+- 11–12 · Enjoy your days and remember your Creator before old age comes.
+> “Under the sun”: the phrase comes nearly 30 times. The Teacher looks at life from ground level, the way anyone can see it.
+> Futile: the Hebrew word means breath or vapor, something real but brief that slips through the fingers.
+> The conclusion: “Fear God and keep His commandments, because this is the whole duty of man” (12:13).
+
+## Everything Is Futile
+1:1     Everything Is Futile
+1:12    With Wisdom Comes Sorrow
+2:1     The Futility of Pleasure
+2:12    The Wise and the Foolish
+2:18    The Futility of Work
+
+## A Time for Everything
+3:1     To Everything There Is a Season
+3:9     God’s Works Remain Forever
+3:16    From Dust to Dust
+4:1     The Evil of Oppression
+4:13    The Futility of Power
+
+## Wealth and Its Limits
+5:1     Approaching God with Awe
+5:8     The Futility of Wealth
+6:1     The Futility of Life
+
+## Wisdom and Its Limits
+7:1     The Value of Wisdom
+7:15    The Limits of Human Wisdom
+8:1     Obey the King
+8:10    Fear God, Whose Ways Are Mysterious
+
+## Enjoy Your Portion
+9:1     Death Comes to Good and Bad
+9:7     Enjoy Your Portion in This Life
+9:13    Wisdom Is Better than Strength
+10:1    Wisdom and Folly
+
+## Remember Your Creator
+11:1    Cast Your Bread upon the Waters
+11:7    Enjoy Your Years
+12:1    Remember Your Creator
+12:9    The Whole Duty of Man

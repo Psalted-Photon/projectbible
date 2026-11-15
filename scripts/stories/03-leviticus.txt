@@ -1,0 +1,99 @@
+book: Leviticus
+
+card: How Leviticus Is Built
+- 1–7 · Offerings: five kinds of sacrifice, first for the people, then the priests’ side of each.
+- 8–10 · Priests: Aaron and his sons are ordained, and Nadab and Abihu offer strange fire.
+- 11–15 · Clean and unclean: food, childbirth, skin disease, mildew and the body.
+- 16 · The Day of Atonement: the center of the book, once a year, for the whole people.
+- 17–27 · Holiness: “Be holy, because I am holy,” worked out in daily life, feasts, Sabbath years and Jubilee.
+> Why it’s here: the tabernacle is finished at the end of Exodus. Leviticus answers the next question: how can a holy God live among his people? No one travels in this book; it all happens at the foot of Sinai.
+> “Love your neighbor as yourself” first appears here (19:18), in the middle of the holiness laws.
+
+## The Offerings
+1:1     Laws for Burnt Offerings
+2:1     Laws for Grain Offerings
+3:1     Laws for Peace Offerings
+4:1     Laws for Sin Offerings
+5:1     Sins Requiring a Sin Offering
+5:14    Laws for Guilt Offerings
+6:1     Sins Requiring a Guilt Offering
+
+## The Priests’ Instructions
+6:8     The Burnt Offering
+6:14    The Grain Offering
+6:24    The Sin Offering
+7:1     The Guilt Offering
+7:11    The Peace Offering
+7:22    Fat and Blood Forbidden
+7:28    The Priests’ Portion
+
+## The Priests Are Ordained
+8:1     Moses Consecrates Aaron and His Sons
+8:14    The Priests’ Sin and Burnt Offerings
+8:22    The Ram of Ordination
+9:1     Aaron’s First Offerings
+10:1    The Sin of Nadab and Abihu
+10:8    Restrictions for Priests
+
+## Clean and Unclean
+11:1    Clean and Unclean Animals
+12:1    Purification after Childbirth
+13:1    Laws about Skin Diseases
+13:47   Laws about Mildew
+14:1    Cleansing from Skin Diseases
+14:33   Signs of Home Contamination
+14:48   Cleansing a Home
+15:1    The Uncleanness of Men
+15:13   The Cleansing of Men
+15:19   The Uncleanness of Women
+15:28   The Cleansing of Women
+
+## The Day of Atonement
+16:1    The Day of Atonement
+
+## A Holy People
+17:1    The Place of Sacrifice
+17:10   Laws against Eating Blood
+18:1    Unlawful Sexual Relations
+19:1    Commandments for Holiness
+19:9    Love Your Neighbor
+19:19   Keep My Statutes
+20:1    Punishments for Disobedience
+20:10   Punishments for Sexual Immorality
+20:22   Distinguish between Clean and Unclean
+
+## Holy Priests and Offerings
+21:1    Holiness Required of Priests
+21:16   Restrictions against Those with Blemishes
+22:1    Restrictions against the Unclean
+22:17   Worthy Offerings
+
+## Feasts, Sabbaths and Jubilee
+23:1    Feasts and Sabbaths
+23:4    Passover and the Feast of Unleavened Bread
+23:9    The Feast of Firstfruits
+23:15   The Feast of Weeks
+23:23   The Feast of Trumpets
+23:26   The Day of Atonement
+23:33   The Feast of Tabernacles
+24:1    The Oil for the Lamps
+24:5    The Showbread
+24:10   Punishment for Blasphemy
+24:17   An Eye for an Eye
+25:1    The Seventh Year
+25:8    The Year of Jubilee
+25:13   Return of Property
+25:18   The Blessing of Obedience
+25:23   The Law of Redemption
+25:35   Redemption of the Poor
+25:39   Redemption of Bondmen
+25:47   Redemption of Servants
+
+## Blessings and Curses
+26:1    Additional Blessings of Obedience
+26:14   Punishments for Disobedience
+26:40   God Remembers Those Who Repent
+
+## Vows and Tithes
+27:1    Rules about Valuations
+27:30   Instruction on Tithes

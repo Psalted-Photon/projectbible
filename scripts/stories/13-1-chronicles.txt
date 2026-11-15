@@ -1,0 +1,131 @@
+book: 1 Chronicles
+
+card: How Chronicles Is Built
+- 1 Chronicles 1–9 · Names: from Adam to the families who came home from exile, with the most room given to Judah, David’s tribe, and Levi, the temple tribe.
+- 1 Chronicles 10–29 · David: the ark comes to Jerusalem, and David plans and gathers for the temple.
+- 2 Chronicles 1–9 · Solomon: the temple is built and filled with glory.
+- 2 Chronicles 10–36 · Judah’s kings: from the split to the exile, ending with Cyrus sending the people home.
+> Written for the returned: Chronicles retells Samuel and Kings for people back from Babylon, asking what the story means for them now. In Hebrew it is one book, and it comes last in the Hebrew Bible.
+> What it leaves out: the northern kings appear only when they touch Judah, and David’s sin with Bathsheba and Solomon’s fall aren’t told. The focus is the temple, worship and David’s line.
+> Seek the LORD: kings who seek the LORD prosper and kings who forsake him fall, often within the same reign. “If My people who are called by My name humble themselves and pray…” (2 Chronicles 7:14) sums it up.
+> “Also in”: stories told in Samuel or Kings too have a line under them that opens the other telling.
+
+## From Adam to Jacob
+1:1     From Adam to Abraham
+1:28    The Descendants of Abraham
+1:35    Esau and Seir
+1:43    The Kings of Edom
+
+## Judah and David’s Line
+2:1     The Sons of Israel
+3:1     The Descendants of David | Also in 2 Samuel 3
+        -> 2 Samuel 3:1–5 | Also told in
+3:10    The Descendants of Solomon
+3:17    The Royal Line After the Exile
+4:1     The Descendants of Judah
+4:9     The Prayer of Jabez
+4:11    More Descendants of Judah
+
+## Simeon, the Eastern Tribes and Levi
+4:24    The Descendants of Simeon
+5:1     The Descendants of Reuben
+5:11    The Descendants of Gad
+5:23    The Half-Tribe of Manasseh
+6:1     The Descendants of Levi
+6:31    The Temple Musicians
+6:48    The Descendants of Aaron
+6:54    Territories for the Levites
+
+## The Northern Tribes and Benjamin
+7:1     The Descendants of Issachar
+7:6     Benjamin and Naphtali
+7:14    The Descendants of Manasseh
+7:20    The Descendants of Ephraim
+7:30    The Descendants of Asher
+8:1     Genealogy from Benjamin to Saul
+8:33    The Family of Saul
+
+## Those Who Came Home
+9:1     The People of Jerusalem
+9:35    The Descendants of Saul
+
+## David Becomes King
+10:1    Saul’s Overthrow and Death | Also in 1 Samuel 31
+        -> 1 Samuel 31:1–6 | Also told in
+11:1    David Anointed King of All Israel | Also in 2 Samuel 5
+        -> 2 Samuel 5:1–5 | Also told in
+11:4    David Conquers Jerusalem | Also in 2 Samuel 5
+        -> 2 Samuel 5:6–11 | Also told in
+11:10   David’s Mighty Men | Also in 2 Samuel 23
+        -> 2 Samuel 23:8–39 | Also told in
+12:1    The Mighty Men Join David at Ziklag
+12:23   David’s Army Grows at Hebron
+
+## The Ark Comes to Jerusalem
+13:1    David Fetches the Ark | Also in 2 Samuel 6
+        -> 2 Samuel 6:1–4 | Also told in
+13:8    Uzzah Touches the Ark | Also in 2 Samuel 6
+        -> 2 Samuel 6:5–11 | Also told in
+14:1    David’s Family Grows | Also in 2 Samuel 5
+        -> 2 Samuel 5:12–16 | Also told in
+14:8    Two Victories over the Philistines | Also in 2 Samuel 5
+        -> 2 Samuel 5:17–25 | Also told in
+15:1    Preparing to Move the Ark | Also in 2 Samuel 6
+        -> 2 Samuel 6:12–15 | Also told in
+15:14   The Priests and Levites Carry the Ark
+15:25   Moving the Ark to Jerusalem
+16:1    A Tent for the Ark | Also in 2 Samuel 6
+        -> 2 Samuel 6:17–19 | Also told in
+16:7    David’s Psalms of Thanksgiving
+16:23   Sing to the LORD, All the Earth
+16:37   Worship before the Ark
+
+## God’s Covenant and David’s Wars
+17:1    God’s Covenant with David | Also in 2 Samuel 7
+        -> 2 Samuel 7:1–17 | Also told in
+17:16   David’s Prayer of Thanksgiving | Also in 2 Samuel 7
+        -> 2 Samuel 7:18–29 | Also told in
+18:1    David’s Triumphs | Also in 2 Samuel 8
+        -> 2 Samuel 8:1–14 | Also told in
+18:14   David’s Officers | Also in 2 Samuel 8
+        -> 2 Samuel 8:15–18 | Also told in
+19:1    David’s Messengers Disgraced | Also in 2 Samuel 10
+        -> 2 Samuel 10:1–8 | Also told in
+19:10   David Defeats Ammon and Aram | Also in 2 Samuel 10
+        -> 2 Samuel 10:9–19 | Also told in
+20:1    The Capture of Rabbah | Also in 2 Samuel 12
+        -> 2 Samuel 12:26–31 | Also told in
+20:4    Battles against the Philistines | Also in 2 Samuel 21
+        -> 2 Samuel 21:15–22 | Also told in
+
+## The Census and the Temple Site
+21:1    David’s Military Census | Also in 2 Samuel 24
+        -> 2 Samuel 24:1–9 | Also told in
+21:7    Judgment and Plague | Also in 2 Samuel 24
+        -> 2 Samuel 24:10–14 | Also told in
+21:18   David Builds an Altar | Also in 2 Samuel 24
+        -> 2 Samuel 24:18–25 | Also told in
+22:1    Preparations for the Temple
+22:6    Solomon Anointed to Build the Temple
+
+## Priests, Levites and Officials
+23:1    The Divisions of the Levites
+23:24   Levite Duties Revised
+24:1    Twenty-Four Divisions of Priests
+24:20   The Rest of the Levites
+25:1    Twenty-Four Divisions of Musicians
+26:1    The Divisions of the Gatekeepers
+26:20   The Treasurers, Officers, and Judges
+27:1    Twelve Captains for Twelve Months
+27:16   The Leaders of the Twelve Tribes
+27:25   David’s Various Overseers
+
+## David’s Last Words
+28:1    David Commissions Solomon
+28:11   The Plans for the Temple
+29:1    Offerings for the Temple
+29:10   David’s Prayer of Blessing
+29:21   Solomon Anointed King | Also in 1 Kings 1
+        -> 1 Kings 1:32–40 | Also told in
+29:26   David’s Reign and Death | Also in 1 Kings 2
+        -> 1 Kings 2:10–12 | Also told in

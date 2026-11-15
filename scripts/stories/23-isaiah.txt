@@ -1,0 +1,167 @@
+book: Isaiah
+
+card: How Isaiah Is Built
+- 1–12 · Judah and Jerusalem: rebellion and judgment, Isaiah’s call, and the promise of Immanuel and a child to be born.
+- 13–27 · The nations: messages against Babylon, Moab, Egypt, Tyre and more, then judgment on the whole earth.
+- 28–35 · Woes and hope: don’t lean on Egypt; a king will reign in righteousness.
+- 36–39 · History: Hezekiah, the Assyrian siege and the envoys from Babylon, also told in 2 Kings 18–20.
+- 40–55 · Comfort: the LORD will bring his people home from Babylon, and his Servant will suffer for them.
+- 56–66 · New creation: the nations stream to Zion, under new heavens and a new earth.
+> Two halves: chapters 1–39 mostly warn of judgment in Isaiah’s own day. Chapter 40 opens with “Comfort, comfort My people” and looks past the exile.
+> The Servant songs: four poems (42:1–9, 49:1–7, 50:4–11, 52:13–53:12) about the LORD’s Servant. The New Testament reads the last one as fulfilled in Jesus’ death.
+> “The Holy One of Israel”: Isaiah’s favorite name for God, used about 25 times across both halves.
+
+=== Judgment and Hope
+
+## Judah on Trial
+1:1     Judah’s Rebellion
+1:10    Meaningless Offerings
+1:21    The Corruption of Zion
+2:1     The Mountain of the House of the LORD
+2:5     The Day of Reckoning
+3:1     Judgment on Jerusalem and Judah
+3:16    A Warning to the Daughters of Zion
+4:1     A Remnant in Zion
+5:1     The Song of the Vineyard
+5:8     Woes to the Wicked
+
+## Isaiah’s Call and Immanuel
+6:1     Isaiah’s Commission
+7:1     A Message to Ahaz
+7:10    The Sign of Immanuel
+7:17    Judgment to Come
+8:1     Assyrian Invasion Prophesied
+8:11    A Call to Fear God
+8:19    Darkness and Light
+
+## A Child Is Born
+9:1     Unto Us a Child Is Born
+9:8     Judgment against Israel
+10:1    Woe to Tyrants
+10:5    Judgment on Assyria
+10:20   A Remnant Shall Return
+11:1    The Root of Jesse
+12:1    Joyful Thanksgiving
+
+## Messages against the Nations
+13:1    The Burden against Babylon
+14:3    The Fall of the King of Babylon
+14:24   God’s Purpose against Assyria
+14:28   Philistia Will Be Destroyed
+15:1    The Burden against Moab
+16:1    Moab’s Destruction
+17:1    The Burden against Damascus
+18:1    A Message to Cush
+
+## Egypt, Babylon and Tyre
+19:1    The Burden against Egypt
+19:16   A Blessing upon the Earth
+20:1    A Sign against Egypt and Cush
+21:1    Babylon Is Fallen
+21:11   The Burden against Edom
+21:13   The Burden against Arabia
+22:1    The Valley of Vision
+22:15   A Message for Shebna
+23:1    The Burden against Tyre
+
+## The Whole Earth Judged
+24:1    God’s Judgment on the Earth
+25:1    Praise to the Victorious God
+26:1    A Song of Salvation
+27:1    The LORD’s Vineyard
+
+## Woes and a Coming King
+28:1    The Captivity of Ephraim
+28:14   A Cornerstone in Zion
+28:23   Listen and Hear
+29:1    Woe to David’s City
+29:17   Sanctification for the Godly
+30:1    The Worthless Treaty with Egypt
+30:18   God Will Be Gracious
+31:1    Woe to Those Who Rely on Egypt
+32:1    A Righteous King
+32:9    The Women of Jerusalem
+33:1    The LORD Is Exalted
+
+## Ruin and Return
+34:1    Judgment on the Nations and Edom
+35:1    The Glory of Zion
+
+## Hezekiah and Assyria
+36:1    Sennacherib Threatens Jerusalem
+37:1    Isaiah’s Message of Deliverance
+37:8    Sennacherib’s Blasphemous Letter
+37:14   Hezekiah’s Prayer
+37:21   Sennacherib’s Fall Prophesied
+37:36   Jerusalem Delivered from the Assyrians
+38:1    Hezekiah’s Illness and Recovery
+38:9    Hezekiah’s Song of Thanksgiving
+39:1    Hezekiah Shows His Treasures
+
+=== Comfort for God’s People
+
+## Comfort My People
+40:1    Prepare the Way for the LORD
+40:9    Here Is Your God!
+41:1    God’s Help to Israel
+41:21   Meaningless Idols
+
+## Here Is My Servant
+42:1    Here Is My Servant
+42:10   A New Song of Praise
+42:18   Israel Is Deaf and Blind
+43:1    Israel’s Only Savior
+43:14   A Way in the Wilderness
+43:22   Israel’s Unfaithfulness
+44:1    The LORD Has Chosen Israel
+44:21   Jerusalem to Be Restored
+
+## Cyrus and the Fall of Babylon
+45:1    God Calls Cyrus
+46:1    Babylon’s Idols
+47:1    The Humiliation of Babylon
+48:1    Israel’s Stubbornness
+48:12   Deliverance Promised to Israel
+
+## The Servant’s Mission
+49:1    The Servant and Light to the Gentiles
+50:1    Israel’s Sin
+50:4    The Servant’s Obedience
+51:1    Salvation for Zion
+51:17   God’s Fury Removed
+52:1    Deliverance for Jerusalem
+
+## The Suffering Servant
+52:13   The Servant Exalted
+53:1    The Suffering Servant
+
+## Come to the Waters
+54:1    Future Blessings for Zion
+55:1    Invitation to the Needy
+
+## Justice and True Worship
+56:1    Salvation for Foreigners
+56:9    Israel’s Sinful Leaders
+57:3    God Condemns Idolatry
+57:14   Healing for the Repentant
+58:1    True Fasts and Sabbaths
+59:1    Sin Separates Us from God
+59:18   The Covenant of the Redeemer
+
+## Zion’s Future Glory
+60:1    Future Glory for Zion
+61:1    The Year of the LORD’s Favor
+62:1    Zion’s Salvation and New Name
+
+## A Prayer for Mercy
+63:1    God’s Vengeance on the Nations
+63:7    God’s Mercies Recalled
+63:15   A Prayer for Mercy
+64:1    A Prayer for God’s Power
+
+## New Heavens and a New Earth
+65:1    Judgments and Promises
+65:17   A New Heaven and a New Earth
+66:1    Heaven Is My Throne
+66:7    Rejoice with Jerusalem
+66:15   Final Judgments against the Wicked

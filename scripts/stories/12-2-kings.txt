@@ -1,0 +1,143 @@
+book: 2 Kings
+
+=== Israel and Judah
+
+## Elijah Taken Up
+1:1     Elijah Denounces Ahaziah
+2:1     Elijah Taken Up to Heaven
+2:15    Elisha Succeeds Elijah
+2:19    Elisha Heals the Waters of Jericho
+2:23    Elisha Mocked
+
+## Elisha’s Wonders
+3:1     Moab’s Rebellion
+4:1     The Widow’s Oil
+4:8     The Shunammite Woman
+4:18    Elisha Raises the Shunammite’s Son
+4:38    Elisha Purifies the Poisonous Stew
+4:42    Feeding a Hundred Men
+5:1     Naaman Cured of Leprosy
+5:15    Gehazi’s Greed and Leprosy
+
+## Siege and Famine
+6:1     The Axe Head Floats
+6:8     Elisha Captures the Blinded Arameans
+6:24    The Siege and Famine of Samaria
+7:3     The Syrians Flee
+7:16    Elisha’s Prophecy Fulfilled
+8:1     The Shunammite’s Land Restored
+8:7     Hazael Murders Ben-hadad
+8:16    Jehoram Reigns in Judah | Also in 2 Chronicles 21
+        -> 2 Chronicles 21:1–7 | Also told in
+8:20    Edom and Libnah Rebel | Also in 2 Chronicles 21
+        -> 2 Chronicles 21:8–11 | Also told in
+8:25    Ahaziah Reigns in Judah | Also in 2 Chronicles 22
+        -> 2 Chronicles 22:1–7 | Also told in
+
+## Jehu’s Revolt
+9:1     Jehu Anointed King of Israel
+9:14    Jehu Kills Joram and Ahaziah | Also in 2 Chronicles 22
+        -> 2 Chronicles 22:8–9 | Also told in
+9:30    Jezebel’s Violent Death
+10:1    Ahab’s Seventy Sons Killed
+10:18   Jehu Kills the Priests of Baal
+10:28   Jehu Repeats Jeroboam’s Sins
+
+## Joash, the Boy King
+11:1    Athaliah and Joash | Also in 2 Chronicles 22
+        -> 2 Chronicles 22:10–12 | Also told in
+11:4    Joash Anointed King of Judah | Also in 2 Chronicles 23
+        -> 2 Chronicles 23:1–11 | Also told in
+11:13   The Death of Athaliah | Also in 2 Chronicles 23
+        -> 2 Chronicles 23:12–15 | Also told in
+11:17   Jehoiada Restores the Worship of the LORD | Also in 2 Chronicles 23
+        -> 2 Chronicles 23:16–21 | Also told in
+12:1    Joash Repairs the Temple | Also in 2 Chronicles 24
+        -> 2 Chronicles 24:1–14 | Also told in
+12:17   The Death of Joash | Also in 2 Chronicles 24
+        -> 2 Chronicles 24:23–27 | Also told in
+
+## Israel’s Last Kings
+13:1    Jehoahaz Reigns in Israel
+13:10   Jehoash Reigns in Israel
+13:14   Elisha’s Final Prophecy
+14:1    Amaziah Reigns in Judah | Also in 2 Chronicles 25
+        -> 2 Chronicles 25:1–4 | Also told in
+14:8    Jehoash Defeats Amaziah | Also in 2 Chronicles 25
+        -> 2 Chronicles 25:17–24 | Also told in
+14:17   The Death of Amaziah | Also in 2 Chronicles 25
+        -> 2 Chronicles 25:25–28 | Also told in
+14:23   Jeroboam II Reigns in Israel
+15:1    Azariah Reigns in Judah | Also in 2 Chronicles 26
+        -> 2 Chronicles 26:3–23 | Also told in
+15:8    Zechariah Reigns in Israel
+15:13   Shallum Reigns in Israel
+15:17   Menahem Reigns in Israel
+15:23   Pekahiah Reigns in Israel
+15:27   Pekah Reigns in Israel
+15:32   Jotham Reigns in Judah | Also in 2 Chronicles 27
+        -> 2 Chronicles 27:1–9 | Also told in
+16:1    Ahaz Reigns in Judah | Also in 2 Chronicles 28
+        -> 2 Chronicles 28:1–4 | Also told in
+16:10   The Idolatry of Ahaz | Also in 2 Chronicles 28
+        -> 2 Chronicles 28:16–27 | Also told in
+17:1    Hoshea the Last King of Israel
+17:5    Israel Carried Captive to Assyria
+17:24   Samaria Resettled
+
+=== Judah Alone
+
+## Hezekiah
+18:1    Hezekiah Destroys Idolatry in Judah | Also in 2 Chronicles 29
+        -> 2 Chronicles 29:1–2 | Also told in
+18:13   Sennacherib Invades Judah | Also in 2 Chronicles 32
+        -> 2 Chronicles 32:1–8 | Also told in
+18:17   Sennacherib Threatens Jerusalem | Also in 2 Chronicles 32
+        -> 2 Chronicles 32:9–19 | Also told in
+19:1    Isaiah’s Message of Deliverance
+19:8    Sennacherib’s Blasphemous Letter
+19:14   Hezekiah’s Prayer
+19:20   Sennacherib’s Fall Prophesied
+19:35   Jerusalem Delivered from the Assyrians | Also in 2 Chronicles 32
+        -> 2 Chronicles 32:20–23 | Also told in
+20:1    Hezekiah’s Illness and Recovery | Also in 2 Chronicles 32
+        -> 2 Chronicles 32:24–31 | Also told in
+20:12   Hezekiah Shows His Treasures
+
+## Manasseh and Josiah
+21:1    Manasseh Reigns in Judah | Also in 2 Chronicles 33
+        -> 2 Chronicles 33:1–9 | Also told in
+21:10   Manasseh’s Idolatries Rebuked | Also in 2 Chronicles 33
+        -> 2 Chronicles 33:10–20 | Also told in
+21:19   Amon Reigns in Judah | Also in 2 Chronicles 33
+        -> 2 Chronicles 33:21–25 | Also told in
+22:1    Josiah Repairs the Temple | Also in 2 Chronicles 34
+        -> 2 Chronicles 34:1–2 | Also told in
+22:8    Hilkiah Finds the Book of the Law | Also in 2 Chronicles 34
+        -> 2 Chronicles 34:14–21 | Also told in
+22:14   Huldah’s Prophecy | Also in 2 Chronicles 34
+        -> 2 Chronicles 34:22–28 | Also told in
+23:1    Josiah Renews the Covenant | Also in 2 Chronicles 34
+        -> 2 Chronicles 34:29–33 | Also told in
+23:4    Josiah Destroys Idolatry | Also in 2 Chronicles 34
+        -> 2 Chronicles 34:3–7 | Also told in
+23:21   Josiah Restores the Passover | Also in 2 Chronicles 35
+        -> 2 Chronicles 35:1–19 | Also told in
+23:28   The Death of Josiah | Also in 2 Chronicles 35
+        -> 2 Chronicles 35:20–24 | Also told in
+
+## The Fall of Jerusalem
+23:31   Jehoahaz Succeeds Josiah | Also in 2 Chronicles 36
+        -> 2 Chronicles 36:1–4 | Also told in
+24:1    Babylon Controls Jehoiakim
+24:6    Jehoiachin Reigns in Judah | Also in 2 Chronicles 36
+        -> 2 Chronicles 36:9–10 | Also told in
+24:10   The Captivity of Jerusalem
+24:18   Zedekiah Reigns in Judah | Also in 2 Chronicles 36
+        -> 2 Chronicles 36:11–14 | Also told in
+25:1    Nebuchadnezzar Besieges Jerusalem | Also in 2 Chronicles 36
+        -> 2 Chronicles 36:15–21 | Also told in
+25:8    The Temple Destroyed
+25:18   Captives Carried to Babylon
+25:22   Gedaliah Governs and Is Murdered
+25:27   Jehoiachin Released from Prison

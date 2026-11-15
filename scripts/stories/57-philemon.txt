@@ -1,0 +1,6 @@
+book: Philemon
+
+## A Plea for Onesimus
+1:1     Greetings from Paul and Timothy
+1:4     Philemon’s Faith and Love
+1:8     Paul’s Appeal for Onesimus

@@ -1,0 +1,254 @@
+book: Luke
+
+card: How Luke Is Built
+- 1–2 · Two births: John and Jesus, told side by side, with songs from Mary, Zechariah and Simeon.
+- 3:1–9:50 · Galilee: teaching, healing and calling disciples.
+- 9:51–19:27 · The road to Jerusalem: ten chapters on the way, holding most of the parables only Luke tells.
+- 19:28–24:53 · Jerusalem: the last week, the cross, and the risen Jesus on the road to Emmaus.
+> The turn: “Jesus resolutely set out for Jerusalem” (9:51). From there the whole story leans toward the city.
+> An orderly account: Luke tells Theophilus he has “carefully investigated everything from the beginning” (1:3). Acts is his second volume.
+> Who gets welcomed: shepherds, Samaritans, tax collectors, widows and a lost son. Luke keeps showing how far God’s welcome reaches.
+> “Also in”: stories Mark tells too have a line under them that opens Mark’s telling.
+
+## Two Births Foretold
+1:1     Dedication to Theophilus
+1:5     Gabriel Foretells John’s Birth
+1:26    Gabriel Foretells Jesus’ Birth
+1:39    Mary Visits Elizabeth
+1:46    Mary’s Song
+1:57    The Birth of John the Baptist
+1:67    Zechariah’s Song
+
+## Jesus Is Born
+2:1     The Birth of Jesus
+2:8     The Shepherds and the Angels
+2:21    Jesus Presented at the Temple
+2:25    Simeon and Anna
+2:41    The Boy Jesus at the Temple
+
+## John, the Baptism and the Testing
+3:1     The Mission of John the Baptist | Also in Mark 1
+        -> Mark 1:1–8 | Also told in
+3:21    The Baptism of Jesus | Also in Mark 1
+        -> Mark 1:9–11 | Also told in
+3:23    The Genealogy of Jesus
+4:1     The Temptation of Jesus | Also in Mark 1
+        -> Mark 1:12–13 | Also told in
+
+## Jesus Begins in Galilee
+4:14    The Rejection at Nazareth | Also in Mark 6
+        -> Mark 6:1–6 | Also told in
+4:31    Jesus Expels an Unclean Spirit | Also in Mark 1
+        -> Mark 1:21–28 | Also told in
+4:38    Jesus Heals at Peter’s House | Also in Mark 1
+        -> Mark 1:29–34 | Also told in
+4:42    Jesus Preaches in Judea | Also in Mark 1
+        -> Mark 1:35–39 | Also told in
+5:1     The First Disciples | Also in Mark 1
+        -> Mark 1:16–20 | Also told in
+5:12    The Leper’s Prayer | Also in Mark 1
+        -> Mark 1:40–45 | Also told in
+
+## Questions and the Twelve
+5:17    Jesus Heals a Paralytic | Also in Mark 2
+        -> Mark 2:1–12 | Also told in
+5:27    Jesus Calls Levi | Also in Mark 2
+        -> Mark 2:13–17 | Also told in
+5:33    Fasting and New Wineskins | Also in Mark 2
+        -> Mark 2:18–20 | Also told in
+6:1     The Lord of the Sabbath | Also in Mark 2
+        -> Mark 2:23–28 | Also told in
+6:6     Jesus Heals on the Sabbath | Also in Mark 3
+        -> Mark 3:1–6 | Also told in
+6:12    The Twelve Apostles | Also in Mark 3
+        -> Mark 3:13–19 | Also told in
+6:17    Jesus Heals the Multitudes | Also in Mark 3
+        -> Mark 3:7–12 | Also told in
+
+## The Sermon on the Plain
+6:20    Blessings and Woes
+6:27    Love Your Enemies
+6:37    Judging Others
+6:46    The House on the Rock
+
+## Faith and Forgiveness
+7:1     The Faith of the Centurion
+7:11    Jesus Raises a Widow’s Son
+7:18    John’s Inquiry
+7:24    Jesus Testifies about John
+7:36    A Sinful Woman Anoints Jesus
+
+## Parables and Power
+8:1     Women Minister to Jesus
+8:4     The Parable of the Sower | Also in Mark 4
+        -> Mark 4:1–20 | Also told in
+8:19    Jesus’ Mother and Brothers | Also in Mark 3
+        -> Mark 3:31–35 | Also told in
+8:22    Jesus Calms the Storm | Also in Mark 4
+        -> Mark 4:35–41 | Also told in
+8:26    The Demons and the Pigs | Also in Mark 5
+        -> Mark 5:1–20 | Also told in
+8:40    The Healing Touch of Jesus | Also in Mark 5
+        -> Mark 5:21–43 | Also told in
+
+## Who Jesus Is
+9:1     The Ministry of the Twelve | Also in Mark 6
+        -> Mark 6:7–13 | Also told in
+9:7     Herod Tries to See Jesus | Also in Mark 6
+        -> Mark 6:14–29 | Also told in
+9:10    The Feeding of the Five Thousand | Also in Mark 6
+        -> Mark 6:30–44 | Also told in
+9:18    Peter’s Confession and the Passion Foretold | Also in Mark 8
+        -> Mark 8:27–30 | Also told in
+9:23    Take Up Your Cross | Also in Mark 8
+        -> Mark 8:34–38 | Also told in
+9:28    The Transfiguration | Also in Mark 9
+        -> Mark 9:1–13 | Also told in
+9:37    The Boy with an Evil Spirit | Also in Mark 9
+        -> Mark 9:14–29 | Also told in
+9:43    The Second Prediction of the Passion | Also in Mark 9
+        -> Mark 9:30–32 | Also told in
+9:46    The Greatest in the Kingdom | Also in Mark 9
+        -> Mark 9:33–41 | Also told in
+
+## On the Road to Jerusalem
+9:51    The Samaritans Reject Jesus
+9:57    The Cost of Discipleship
+10:1    Jesus Sends the Seventy-Two
+10:13   Woe to the Unrepentant
+10:17   The Joyful Return
+10:21   Jesus’ Prayer of Thanksgiving
+10:25   The Parable of the Good Samaritan
+10:38   Martha and Mary
+
+## Prayer and Warnings
+11:1    The Lord’s Prayer
+11:5    Ask, Seek, Knock
+11:14   A House Divided and an Unclean Spirit | Also in Mark 3
+        -> Mark 3:20–27 | Also told in
+11:29   The Sign of Jonah
+11:33   The Lamp of the Body
+11:37   Woes to Pharisees and Experts in the Law
+
+## Ready and Watching
+12:1    The Leaven of the Pharisees | Also in Mark 8
+        -> Mark 8:14–21 | Also told in
+12:4    Fear God Alone
+12:8    Confessing Christ
+12:13   The Parable of the Rich Fool
+12:22   Do Not Worry
+12:35   Readiness at Any Hour | Also in Mark 13
+        -> Mark 13:32–37 | Also told in
+12:49   Division and the Signs of the Times
+
+## The Narrow Door
+13:1    A Call to Repentance
+13:6    The Parable of the Barren Fig Tree
+13:10   Jesus Heals a Disabled Woman
+13:18   The Mustard Seed and the Leaven | Also in Mark 4
+        -> Mark 4:30–34 | Also told in
+13:22   The Narrow Door
+13:31   Lament over Jerusalem
+14:1    Jesus Heals a Man with Dropsy
+14:7    The Parable of the Guests
+14:15   The Parable of the Banquet
+14:25   The Cost of Discipleship
+
+## Lost and Found
+15:1    The Parable of the Lost Sheep
+15:8    The Parable of the Lost Coin
+15:11   The Parable of the Prodigal Son
+16:1    The Parable of the Shrewd Manager
+16:14   The Law and the Prophets
+16:19   The Rich Man and Lazarus
+
+## Faith and the Coming Kingdom
+17:1    Temptations and Trespasses | Also in Mark 9
+        -> Mark 9:42–48 | Also told in
+17:5    The Power of Faith
+17:11   The Ten Lepers
+17:20   The Coming of the Kingdom
+18:1    The Parable of the Persistent Widow
+18:9    The Pharisee and the Tax Collector
+
+## Nearing Jerusalem
+18:15   Jesus Blesses the Children | Also in Mark 10
+        -> Mark 10:13–16 | Also told in
+18:18   The Rich Young Ruler | Also in Mark 10
+        -> Mark 10:17–31 | Also told in
+18:31   The Third Prediction of the Passion | Also in Mark 10
+        -> Mark 10:32–34 | Also told in
+18:35   Jesus Heals a Blind Beggar | Also in Mark 10
+        -> Mark 10:46–52 | Also told in
+19:1    Jesus and Zacchaeus
+19:11   The Parable of the Ten Minas
+
+## The King Enters Jerusalem
+19:28   The Triumphal Entry | Also in Mark 11
+        -> Mark 11:1–11 | Also told in
+19:41   Jesus Weeps over Jerusalem
+19:45   Jesus Cleanses the Temple | Also in Mark 11
+        -> Mark 11:15–19 | Also told in
+20:1    Jesus’ Authority Challenged | Also in Mark 11
+        -> Mark 11:27–33 | Also told in
+20:9    The Parable of the Wicked Tenants | Also in Mark 12
+        -> Mark 12:1–12 | Also told in
+20:19   Paying Taxes to Caesar | Also in Mark 12
+        -> Mark 12:13–17 | Also told in
+20:27   The Sadducees and the Resurrection | Also in Mark 12
+        -> Mark 12:18–27 | Also told in
+20:41   Whose Son Is the Christ? | Also in Mark 12
+        -> Mark 12:35–37 | Also told in
+21:1    The Poor Widow’s Offering | Also in Mark 12
+        -> Mark 12:41–44 | Also told in
+21:5    Temple Destruction and Other Signs | Also in Mark 13
+        -> Mark 13:1–8 | Also told in
+21:10   Witnessing to All Nations | Also in Mark 13
+        -> Mark 13:9–13 | Also told in
+21:20   The Destruction of Jerusalem | Also in Mark 13
+        -> Mark 13:14–23 | Also told in
+21:25   The Return of the Son of Man | Also in Mark 13
+        -> Mark 13:24–27 | Also told in
+21:29   The Lesson of the Fig Tree | Also in Mark 13
+        -> Mark 13:28–31 | Also told in
+21:34   Be Watchful for the Day
+
+## The Last Supper
+22:1    The Plot and Judas’s Bargain | Also in Mark 14
+        -> Mark 14:1–2 | Also told in
+22:7    Preparing the Passover | Also in Mark 14
+        -> Mark 14:12–16 | Also told in
+22:14   The Last Supper | Also in Mark 14
+        -> Mark 14:17–26 | Also told in
+22:24   Who Is the Greatest?
+22:31   Jesus Predicts Peter’s Denial | Also in Mark 14
+        -> Mark 14:27–31 | Also told in
+22:39   Jesus Prays on the Mount of Olives | Also in Mark 14
+        -> Mark 14:32–42 | Also told in
+22:47   The Betrayal of Jesus | Also in Mark 14
+        -> Mark 14:43–52 | Also told in
+22:54   Peter Denies Jesus | Also in Mark 14
+        -> Mark 14:66–72 | Also told in
+22:66   Jesus before the Sanhedrin | Also in Mark 14
+        -> Mark 14:53–65 | Also told in
+
+## The Cross
+23:1    Jesus before Pilate
+23:6    Jesus before Herod
+23:13   The Crowd Chooses Barabbas | Also in Mark 15
+        -> Mark 15:6–11 | Also told in
+23:26   The Crucifixion | Also in Mark 15
+        -> Mark 15:21–32 | Also told in
+23:44   The Death of Jesus | Also in Mark 15
+        -> Mark 15:33–41 | Also told in
+23:50   The Burial of Jesus | Also in Mark 15
+        -> Mark 15:42–47 | Also told in
+
+## He Is Risen
+24:1    The Resurrection | Also in Mark 16
+        -> Mark 16:1–8 | Also told in
+24:13   The Road to Emmaus | Also in Mark 16
+        -> Mark 16:12–13 | Also told in
+24:36   Jesus Appears to the Disciples
+24:50   The Ascension | Also in Mark 16
+        -> Mark 16:19–20 | Also told in

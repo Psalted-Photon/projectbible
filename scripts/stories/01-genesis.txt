@@ -3,6 +3,15 @@ book: Genesis
 # Smaller stories start from the BSB headings; tiny ones are merged.
 # Bigger-story titles are our own.
 
+card: How Genesis Is Built
+- 1–11 · Beginnings: creation, the fall, the flood and Babel. The whole world in a few chapters.
+- 12–25 · Abraham: God promises land, descendants and a blessing for all nations.
+- 25–36 · Isaac and Jacob: the promise passes down a family full of rivalry.
+- 37–50 · Joseph: the family goes down to Egypt, and God turns evil to good.
+> “This is the account of…”: the same line returns about ten times (2:4, 5:1, 6:9, 10:1, 11:10, 11:27, 25:12, 25:19, 36:1, 37:2), each time narrowing the story toward one family.
+> The younger first: again and again God’s choice passes over the older son. Isaac over Ishmael, Jacob over Esau, Joseph over his brothers, Ephraim over Manasseh.
+> Garden to coffin: the book opens with life in Eden and closes with Joseph “in a coffin in Egypt” (50:26), still waiting on the promise.
+
 ## In the Beginning
 1:1   The Creation
 2:4   Man and Woman in the Garden

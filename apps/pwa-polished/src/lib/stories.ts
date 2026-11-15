@@ -30,6 +30,8 @@ export interface StoryLink {
   v: number;
   /** As written in the source: "2 Samuel 11:1–12:25". */
   t: string;
+  /** The label over the link row; "Written when" when absent. */
+  n?: string;
 }
 
 export interface SmallerStory extends StoryRange {

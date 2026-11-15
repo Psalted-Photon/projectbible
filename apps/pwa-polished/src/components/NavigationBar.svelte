@@ -3832,7 +3832,7 @@
                                 {#if linkOpen}
                                   {@const link = small.l}
                                   <div class="story-link" in:reveal>
-                                    <div class="story-link-label">Written when</div>
+                                    <div class="story-link-label">{link.n ?? 'Written when'}</div>
                                     <VerseRefRow
                                       book={link.b}
                                       chapter={link.c}

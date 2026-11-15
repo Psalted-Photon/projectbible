@@ -1,0 +1,80 @@
+book: Job
+
+card: How Job Is Built
+- 1–2 · The story opens: a blameless man loses everything, and three friends come to sit with him.
+- 3–27 · The debate: three rounds of speeches, Job against Eliphaz, Bildad and Zophar.
+- 28–31 · A poem on wisdom, then Job’s last defense.
+- 32–37 · Elihu: a younger man speaks up.
+- 38–42 · The LORD answers from the whirlwind, and Job is restored.
+> Story around poetry: the opening and the close are told as a story. Everything in between is poetry.
+> The question underneath: does Job fear God “for nothing” (1:9)? The friends insist that suffering must mean sin. Job knows his doesn’t, and demands an answer.
+> No reason given: God never tells Job about the scene in heaven. He answers with the wonders of creation, and Job is satisfied.
+> Running out of words: the third round breaks down. Bildad’s last speech is six verses, and Zophar doesn’t speak at all.
+
+## Job Loses Everything
+1:1     Job’s Character and Wealth
+1:6     Satan’s First Attack
+1:13    Job Loses His Children and Possessions
+2:1     Job Loses His Health
+2:11    Job’s Three Friends
+
+## The First Round
+3:1     Job Laments His Birth
+4:1     Eliphaz: The Innocent Prosper
+5:1     Eliphaz Continues: God Blesses those Who Seek Him
+6:1     Job Replies: My Complaint Is Just
+7:1     Job Continues: Life Seems Futile
+8:1     Bildad: Job Should Repent
+9:1     Job: How Can I Contend with God?
+10:1    Job’s Plea to God
+11:1    Zophar Rebukes Job
+12:1    Job Presents His Case
+13:1    Job Prepares His Case
+14:1    Job Laments the Finality of Death
+
+## The Second Round
+15:1    Eliphaz: Job Does Not Fear God
+16:1    Job Decries His Comforters
+17:1    Job Prepares for Death
+18:1    Bildad: God Punishes the Wicked
+19:1    Job: My Redeemer Lives
+20:1    Zophar: Destruction Awaits the Wicked
+21:1    Job: God Will Punish the Wicked
+
+## The Third Round
+22:1    Eliphaz: Can a Man Be of Use to God?
+23:1    Job Longs for God
+24:1    Job: Judgment for the Wicked
+25:1    Bildad: Man Cannot Be Righteous
+26:1    Job: Who Can Understand God’s Majesty?
+27:1    Job Affirms His Integrity
+27:7    The Wicked Man’s Portion
+
+## Where Wisdom Is Found
+28:1    Where Can Wisdom Be Found?
+
+## Job’s Last Defense
+29:1    Job’s Former Blessings
+30:1    Job’s Honor Turned to Contempt
+30:15   Job’s Prosperity Becomes Calamity
+31:1    Job’s Final Appeal
+
+## Elihu Speaks
+32:1    Elihu Rebukes Job’s Friends
+33:1    Elihu Rebukes Job
+34:1    Elihu Confirms God’s Justice
+35:1    Elihu Recalls God’s Justice
+36:1    Elihu Describes God’s Power
+37:1    Elihu Proclaims God’s Majesty
+
+## The LORD Answers
+38:1    The LORD Challenges Job
+39:1    The LORD Speaks of His Creation
+40:1    Job Humbles Himself before the LORD
+40:6    The LORD Challenges Job Again
+41:1    The LORD’s Power Shown in Leviathan
+42:1    Job Submits Himself to the LORD
+
+## Job Restored
+42:7    The LORD Rebukes Job’s Friends
+42:10   The LORD Blesses Job

@@ -2,6 +2,13 @@ book: Daniel
 
 # Chapters 1–6 are six court stories; 7–12 are Daniel's visions.
 
+card: How Daniel Is Built
+- 1–6 · Six court stories: Daniel and his friends stay faithful in Babylon, from the king’s food to the lions’ den.
+- 7–12 · Four visions: beasts from the sea, a ram and a goat, seventy weeks, and the time of the end.
+> Two languages: from 2:4 to the end of chapter 7 the book is written in Aramaic, the language of the empire. The rest is Hebrew.
+> One message, twice: Nebuchadnezzar’s statue (2) and Daniel’s four beasts (7) both show four kingdoms giving way to a kingdom that will never end.
+> Even the kings say it: “His kingdom is an eternal kingdom” (4:3), from the mouth of Nebuchadnezzar.
+
 ## Faithful in Babylon
 1:1   Taken to Babylon
 1:8   Daniel’s Faithfulness

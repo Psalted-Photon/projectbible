@@ -1,0 +1,156 @@
+book: Acts
+
+card: How Acts Is Built
+- 1–7 · Jerusalem: the Spirit comes at Pentecost and the church grows, until Stephen is stoned.
+- 8–12 · Judea and Samaria: Philip, Saul’s conversion, and Peter at the home of Cornelius, a Gentile.
+- 13–20 · To the ends of the earth: Paul’s three journeys across Asia Minor and Greece.
+- 21–28 · Paul on trial: arrested in Jerusalem, he appeals to Caesar and reaches Rome.
+> The outline in one verse: “you will be My witnesses in Jerusalem, and in all Judea and Samaria, and to the ends of the earth” (1:8).
+> Peter, then Paul: Peter leads the first half and Paul the second, and their stories mirror each other. Each heals a man who could not walk, and each is freed from prison.
+> “We”: from 16:10 the writer starts saying “we.” Luke himself traveled with Paul for parts of the journey.
+
+=== Jerusalem
+
+## Waiting for the Spirit
+1:1     Prologue
+1:6     The Ascension
+1:12    Matthias Replaces Judas
+
+## Pentecost
+2:1     The Holy Spirit at Pentecost
+2:14    Peter Addresses the Crowd
+2:37    Three Thousand Believe
+2:42    The Fellowship of Believers
+
+## Peter and John
+3:1     A Lame Man Walks
+3:11    Peter Speaks in Solomon’s Colonnade
+4:1     Peter and John before the Sanhedrin
+4:13    The Name Forbidden
+4:23    The Believers’ Prayer
+
+## The Church Grows
+4:32    Sharing among Believers
+5:1     Ananias and Sapphira
+5:12    The Apostles Heal Many
+5:17    The Apostles Arrested and Freed
+5:24    The Apostles before the Sanhedrin
+5:33    Gamaliel’s Advice
+
+## Stephen
+6:1     The Choosing of the Seven
+6:8     The Arrest of Stephen
+7:1     Stephen’s Address: The Call of Abraham
+7:9     Joseph Sold into Egypt
+7:15    Israel Oppressed and Moses Born
+7:23    The Rejection and Flight of Moses
+7:30    The Call of Moses
+7:39    The Rebellion of Israel
+7:44    The Tabernacle of the Testimony
+7:54    The Stoning of Stephen
+
+=== Judea and Samaria
+
+## Philip
+8:1     Saul Persecutes the Church
+8:4     Philip in Samaria
+8:9     Simon the Sorcerer
+8:26    Philip and the Ethiopian
+
+## Saul Meets Jesus
+9:1     The Road to Damascus
+9:10    Ananias Baptizes Saul
+9:20    Saul Preaches and Escapes
+9:26    Saul in Jerusalem
+
+## Peter and Cornelius
+9:31    The Healing of Aeneas
+9:36    The Raising of Tabitha
+10:1    Cornelius Sends for Peter
+10:9    Peter’s Vision
+10:17   Peter Called to Caesarea
+10:24   Peter Visits Cornelius
+10:34   Good News for the Gentiles
+10:44   The Gentiles Receive the Holy Spirit
+11:1    Peter’s Report at Jerusalem
+
+## Antioch and Herod
+11:19   The Church at Antioch
+12:1    James Killed, Peter Imprisoned
+12:5    The Rescue of Peter
+12:20   The Death of Herod
+
+=== To the Ends of the Earth
+
+## Paul’s First Journey
+13:1    Paul’s First Missionary Journey Begins
+13:4    On Cyprus
+13:13   In Pisidian Antioch
+13:42   A Light for the Gentiles
+14:1    Paul and Barnabas at Iconium
+14:8    The Visit to Lystra and Derbe
+14:21   Strengthening the Disciples
+
+## The Council at Jerusalem
+15:1    The Dispute over Circumcision
+15:5    The Council at Jerusalem
+15:22   The Letter to the Gentile Believers
+15:30   The Believers at Antioch Rejoice
+
+## Paul’s Second Journey
+15:36   Paul’s Second Missionary Journey Begins
+16:1    Timothy Joins Paul and Silas
+16:6    Paul’s Vision of the Macedonian
+16:11   Lydia’s Conversion in Philippi
+16:16   Paul and Silas Imprisoned
+16:25   The Conversion of the Jailer
+16:35   An Official Apology
+17:1    The Uproar in Thessalonica
+17:10   The Character of the Bereans
+17:16   Paul in Athens
+17:22   Paul’s Address in the Areopagus
+18:1    Paul Ministers in Corinth
+18:12   Paul before Gallio
+18:18   Paul Returns to Antioch
+
+## Paul’s Third Journey
+18:23   Paul’s Third Missionary Journey Begins
+19:1    The Holy Spirit Received at Ephesus
+19:8    Paul Ministers in Ephesus
+19:13   Seven Sons of Sceva
+19:21   The Riot in Ephesus
+20:1    Paul in Macedonia and Greece
+20:7    Eutychus Revived at Troas
+20:13   From Troas to Miletus
+20:17   Paul’s Farewell to the Ephesians
+
+## Arrested in Jerusalem
+21:1    Paul’s Journey to Jerusalem
+21:8    Paul Visits Philip the Evangelist
+21:17   Paul’s Arrival at Jerusalem
+21:27   Paul Seized at the Temple
+21:37   Paul Addresses the Crowd
+22:1    Paul’s Defense to the Crowd
+22:22   Paul the Roman Citizen
+23:1    Paul before the Sanhedrin
+23:12   The Plot to Kill Paul
+23:23   Paul Sent to Felix
+
+## Before Felix, Festus and Agrippa
+24:1    Tertullus Prosecutes Paul
+24:10   Paul’s Defense to Felix
+24:22   The Verdict Postponed
+25:1    Paul’s Trial before Festus
+25:10   Paul Appeals to Caesar
+25:13   Festus Consults Agrippa
+25:23   Paul before Agrippa and Bernice
+26:1    Paul’s Testimony to Agrippa
+26:24   Festus Interrupts Paul’s Defense
+
+## Shipwreck and Rome
+27:1    Paul Sails for Rome
+27:13   The Storm at Sea
+27:27   The Shipwreck
+28:1    Ashore on Malta
+28:11   Paul Arrives in Italy
+28:16   Paul Preaches at Rome

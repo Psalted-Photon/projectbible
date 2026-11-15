@@ -1,0 +1,198 @@
+book: 2 Chronicles
+
+card: How Chronicles Is Built
+- 1 Chronicles 1–9 · Names: from Adam to the families who came home from exile, with the most room given to Judah, David’s tribe, and Levi, the temple tribe.
+- 1 Chronicles 10–29 · David: the ark comes to Jerusalem, and David plans and gathers for the temple.
+- 2 Chronicles 1–9 · Solomon: the temple is built and filled with glory.
+- 2 Chronicles 10–36 · Judah’s kings: from the split to the exile, ending with Cyrus sending the people home.
+> Written for the returned: Chronicles retells Samuel and Kings for people back from Babylon, asking what the story means for them now. In Hebrew it is one book, and it comes last in the Hebrew Bible.
+> What it leaves out: the northern kings appear only when they touch Judah, and David’s sin with Bathsheba and Solomon’s fall aren’t told. The focus is the temple, worship and David’s line.
+> Seek the LORD: kings who seek the LORD prosper and kings who forsake him fall, often within the same reign. “If My people who are called by My name humble themselves and pray…” (2 Chronicles 7:14) sums it up.
+> “Also in”: stories told in Samuel or Kings too have a line under them that opens the other telling.
+
+## Solomon’s Wisdom
+1:1     Solomon’s Prayer for Wisdom | Also in 1 Kings 3
+        -> 1 Kings 3:1–15 | Also told in
+1:14    Solomon’s Riches | Also in 1 Kings 10
+        -> 1 Kings 10:26–29 | Also told in
+
+## Building the Temple
+2:1     Preparations for the Temple | Also in 1 Kings 5
+        -> 1 Kings 5:1–6 | Also told in
+2:11    Hiram’s Reply to Solomon | Also in 1 Kings 5
+        -> 1 Kings 5:7–12 | Also told in
+3:1     Temple Construction Begins | Also in 1 Kings 6
+        -> 1 Kings 6:1–4 | Also told in
+3:5     The Temple’s Interior | Also in 1 Kings 6
+        -> 1 Kings 6:14–22 | Also told in
+3:10    The Cherubim | Also in 1 Kings 6
+        -> 1 Kings 6:23–30 | Also told in
+3:14    The Veil and Pillars | Also in 1 Kings 7
+        -> 1 Kings 7:13–22 | Also told in
+4:1     The Altar, the Sea and the Basins | Also in 1 Kings 7
+        -> 1 Kings 7:23–26 | Also told in
+4:11    Completion of the Bronze Works | Also in 1 Kings 7
+        -> 1 Kings 7:40–47 | Also told in
+4:19    Completion of the Gold Furnishings | Also in 1 Kings 7
+        -> 1 Kings 7:48–51 | Also told in
+
+## The Temple Dedicated
+5:1     The Ark Enters the Temple | Also in 1 Kings 8
+        -> 1 Kings 8:1–11 | Also told in
+6:1     Solomon Blesses the LORD | Also in 1 Kings 8
+        -> 1 Kings 8:12–21 | Also told in
+6:12    Solomon’s Prayer of Dedication | Also in 1 Kings 8
+        -> 1 Kings 8:22–53 | Also told in
+7:1     Fire from Heaven
+7:4     Sacrifices of Dedication | Also in 1 Kings 8
+        -> 1 Kings 8:62–66 | Also told in
+7:11    The LORD’s Response to Solomon | Also in 1 Kings 9
+        -> 1 Kings 9:1–9 | Also told in
+
+## Solomon’s Splendor
+8:1     Solomon’s Additional Achievements | Also in 1 Kings 9
+        -> 1 Kings 9:10–28 | Also told in
+9:1     The Queen of Sheba | Also in 1 Kings 10
+        -> 1 Kings 10:1–13 | Also told in
+9:13    Solomon’s Wealth and Splendor | Also in 1 Kings 10
+        -> 1 Kings 10:14–29 | Also told in
+9:29    The Death of Solomon | Also in 1 Kings 11
+        -> 1 Kings 11:41–43 | Also told in
+
+## The Kingdom Splits
+10:1    Rebellion against Rehoboam | Also in 1 Kings 12
+        -> 1 Kings 12:1–15 | Also told in
+10:16   The Kingdom Divided | Also in 1 Kings 12
+        -> 1 Kings 12:16–19 | Also told in
+11:1    Shemaiah’s Prophecy | Also in 1 Kings 12
+        -> 1 Kings 12:20–24 | Also told in
+11:5    Rehoboam Fortifies Judah
+11:13   Jeroboam Forsakes the Priests and Levites
+11:18   Rehoboam’s Family
+12:1    Shishak Raids Jerusalem | Also in 1 Kings 14
+        -> 1 Kings 14:25–28 | Also told in
+12:13   Rehoboam’s Reign and Death | Also in 1 Kings 14
+        -> 1 Kings 14:21–24 | Also told in
+
+## Abijah and Asa
+13:1    Abijah’s War against Jeroboam | Also in 1 Kings 15
+        -> 1 Kings 15:1–8 | Also told in
+14:1    Asa Reigns in Judah | Also in 1 Kings 15
+        -> 1 Kings 15:9–15 | Also told in
+15:1    The Prophecy of Azariah
+15:8    Asa’s Reforms | Also in 1 Kings 15
+        -> 1 Kings 15:9–15 | Also told in
+16:1    War between Asa and Baasha | Also in 1 Kings 15
+        -> 1 Kings 15:16–22 | Also told in
+16:7    Hanani’s Message to Asa
+16:11   The Death and Burial of Asa
+
+## Jehoshaphat
+17:1    Jehoshaphat Reigns in Judah | Also in 1 Kings 15
+        -> 1 Kings 15:23–24 | Also told in
+18:1    Jehoshaphat Allies with Ahab | Also in 1 Kings 22
+        -> 1 Kings 22:1–12 | Also told in
+18:12   Micaiah Prophesies against Ahab | Also in 1 Kings 22
+        -> 1 Kings 22:13–28 | Also told in
+18:28   Ahab’s Defeat and Death | Also in 1 Kings 22
+        -> 1 Kings 22:29–40 | Also told in
+19:1    Jehoshaphat Reproved by Jehu
+19:4    Jehoshaphat’s Reforms
+20:1    War against Jehoshaphat
+20:5    Jehoshaphat’s Prayer
+20:14   The Prophecy of Jahaziel
+20:20   The Enemies Destroy Themselves
+20:26   The Joyful Return
+20:31   Summary of Jehoshaphat’s Reign | Also in 1 Kings 22
+        -> 1 Kings 22:41–50 | Also told in
+
+## Wicked Kings and a Boy King
+21:1    Jehoram Reigns in Judah | Also in 2 Kings 8
+        -> 2 Kings 8:16–19 | Also told in
+21:8    Edom and Libnah Rebel | Also in 2 Kings 8
+        -> 2 Kings 8:20–24 | Also told in
+21:12   Elijah’s Letter to Jehoram
+21:16   Jehoram’s Disease and Death
+22:1    Ahaziah Reigns in Judah | Also in 2 Kings 8
+        -> 2 Kings 8:25–29 | Also told in
+22:10   Athaliah and Joash | Also in 2 Kings 11
+        -> 2 Kings 11:1–3 | Also told in
+23:1    Joash Anointed King of Judah | Also in 2 Kings 11
+        -> 2 Kings 11:4–12 | Also told in
+23:12   The Death of Athaliah | Also in 2 Kings 11
+        -> 2 Kings 11:13–16 | Also told in
+23:16   Jehoiada Restores the Worship of the LORD | Also in 2 Kings 11
+        -> 2 Kings 11:17–21 | Also told in
+24:1    Joash Repairs the Temple | Also in 2 Kings 12
+        -> 2 Kings 12:1–16 | Also told in
+24:17   The Wickedness of Joash
+24:23   The Death of Joash | Also in 2 Kings 12
+        -> 2 Kings 12:17–21 | Also told in
+
+## Amaziah, Uzziah and Ahaz
+25:1    Amaziah Reigns in Judah | Also in 2 Kings 14
+        -> 2 Kings 14:1–7 | Also told in
+25:5    Amaziah’s Victories
+25:17   Jehoash Defeats Amaziah | Also in 2 Kings 14
+        -> 2 Kings 14:8–14 | Also told in
+25:25   The Death of Amaziah | Also in 2 Kings 14
+        -> 2 Kings 14:17–20 | Also told in
+26:1    Uzziah Reigns in Judah | Also in 2 Kings 14
+        -> 2 Kings 14:21–22 | Also told in
+27:1    Jotham Reigns in Judah | Also in 2 Kings 15
+        -> 2 Kings 15:32–38 | Also told in
+28:1    Ahaz Reigns in Judah | Also in 2 Kings 16
+        -> 2 Kings 16:1–9 | Also told in
+28:5    Aram Defeats Judah
+28:16   The Idolatry of Ahaz | Also in 2 Kings 16
+        -> 2 Kings 16:10–20 | Also told in
+
+## Hezekiah
+29:1    Hezekiah Cleanses the Temple | Also in 2 Kings 18
+        -> 2 Kings 18:1–12 | Also told in
+29:20   Hezekiah Restores Temple Worship
+30:1    Hezekiah Proclaims a Passover
+30:13   Hezekiah Celebrates the Passover
+31:3    Contributions for Worship
+31:11   Hezekiah Organizes the Priests
+32:1    Sennacherib Invades Judah | Also in 2 Kings 18
+        -> 2 Kings 18:13–16 | Also told in
+32:9    Sennacherib Threatens Jerusalem | Also in 2 Kings 18
+        -> 2 Kings 18:17–37 | Also told in
+32:20   Jerusalem Delivered from the Assyrians | Also in 2 Kings 19
+        -> 2 Kings 19:35–37 | Also told in
+32:24   Hezekiah’s Illness and Recovery | Also in 2 Kings 20
+        -> 2 Kings 20:1–11 | Also told in
+
+## Manasseh and Josiah
+33:1    Manasseh Reigns in Judah | Also in 2 Kings 21
+        -> 2 Kings 21:1–9 | Also told in
+33:10   Manasseh’s Repentance and Restoration | Also in 2 Kings 21
+        -> 2 Kings 21:10–18 | Also told in
+33:21   Amon Reigns in Judah | Also in 2 Kings 21
+        -> 2 Kings 21:19–26 | Also told in
+34:1    Josiah Destroys Idolatry | Also in 2 Kings 22
+        -> 2 Kings 22:1–2 | Also told in
+34:8    Josiah Repairs the Temple | Also in 2 Kings 22
+        -> 2 Kings 22:3–7 | Also told in
+34:14   Hilkiah Finds the Book of the Law | Also in 2 Kings 22
+        -> 2 Kings 22:8–13 | Also told in
+34:22   Huldah’s Prophecy | Also in 2 Kings 22
+        -> 2 Kings 22:14–20 | Also told in
+34:29   Josiah Renews the Covenant | Also in 2 Kings 23
+        -> 2 Kings 23:1–3 | Also told in
+35:1    Josiah Restores the Passover | Also in 2 Kings 23
+        -> 2 Kings 23:21–27 | Also told in
+35:20   The Death of Josiah | Also in 2 Kings 23
+        -> 2 Kings 23:28–30 | Also told in
+
+## The Fall of Jerusalem
+36:1    Jehoahaz Succeeds Josiah | Also in 2 Kings 23
+        -> 2 Kings 23:31–35 | Also told in
+36:5    Jehoiakim Reigns in Judah | Also in 2 Kings 23
+        -> 2 Kings 23:36–37 | Also told in
+36:11   Zedekiah Reigns in Judah | Also in 2 Kings 24
+        -> 2 Kings 24:18–20 | Also told in
+36:15   The Fall of Jerusalem | Also in 2 Kings 25
+        -> 2 Kings 25:1–7 | Also told in
+36:22   The Proclamation of Cyrus

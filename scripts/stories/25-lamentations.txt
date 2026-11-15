@@ -1,0 +1,28 @@
+book: Lamentations
+
+card: How Lamentations Is Built
+- 1 · The city weeps: Jerusalem as a widow with no one to comfort her.
+- 2 · The Lord’s anger: what the siege did to the city.
+- 3 · One man’s grief, with hope at the center: “His mercies never fail. They are new every morning” (3:22–23).
+- 4 · Then and now: Zion’s people before the fall and after.
+- 5 · A prayer: “Restore us to Yourself, O LORD.”
+> Acrostics: chapters 1, 2 and 4 have 22 verses each, one for each letter of the Hebrew alphabet. Chapter 3 gives every letter three verses, 66 in all. Chapter 5 has 22 verses but no alphabet, as if the pattern finally breaks.
+> Hope in the middle: the brightest words in the book sit at its exact center.
+> Grief in order: the alphabet holds the sorrow from first letter to last, mourning completely without being swallowed by it.
+
+## The City Weeps
+1:1     How Lonely Lies the City!
+
+## The Lord’s Anger
+2:1     God’s Anger over Jerusalem
+
+## Hope in the Dark
+3:1     The Prophet’s Afflictions
+3:19    The Prophet’s Hope
+3:37    God’s Justice
+
+## Then and Now
+4:1     The Distress of Zion
+
+## Remember Us
+5:1     A Prayer for Restoration
