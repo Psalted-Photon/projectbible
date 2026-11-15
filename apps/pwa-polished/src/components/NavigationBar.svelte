@@ -29,7 +29,7 @@
   import { addedWords, leadCategory, readIntent, topMatch } from "../lib/search/queryIntent";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
   import { devOptionsUnlocked } from "../lib/devOptions";
-  import { storyMode, storyModeChosen, storyBooks, storyAt, chapterSpan, loadStories, type SmallerStory } from "../lib/stories";
+  import { storyMode, storyModeChosen, storyBooks, storyCards, storyAt, chapterSpan, loadStories, type SmallerStory, type StoryLink } from "../lib/stories";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import { portal } from "../lib/portal";
   import SearchResultsTree from "./SearchResultsTree.svelte";
@@ -202,6 +202,46 @@
   let expandedStory: string | null = null;
   /** The story the reader is in, marked in the list. */
   let storyHere: { book: string; bi: number; si: number } | null = null;
+  /** The book whose card ("How Psalms Is Built") is open. Closed until tapped. */
+  let storyCardOpen: string | null = null;
+  /** The story whose link row is showing, as "book#bigger#smaller". */
+  let storyLinkOpen: string | null = null;
+
+  /** A divider's chapters: "1–41". */
+  const dividerSpan = (c: number, e: number) => (c === e ? `${c}` : `${c}–${e}`);
+
+  /**
+   * Follow a story's link, e.g. a psalm to the moment in David's life it was
+   * written. Unlike a story tap this is a link, so it leaves a crumb to come
+   * back by, and marks the verse it lands on.
+   */
+  function followStoryLink(link: StoryLink) {
+    if (windowId) {
+      if (keepsTrail) {
+        myTrail.pushHistory({
+          translation: currentTranslation,
+          book: currentBook,
+          chapter: currentChapter,
+          highlightedVerse: null,
+          scrollTargetVerse: null,
+          linkHighlight: null,
+          restoreScroll: null,
+        });
+      }
+      windowStore.updateContentState(windowId, {
+        translation: currentTranslation,
+        book: link.b,
+        chapter: link.c,
+        highlightedVerse: link.v,
+      });
+    } else {
+      navigationStore.pushHistory(get(navigationStore));
+      navigationStore.navigateTo(currentTranslation, link.b, link.c, link.v);
+    }
+    referenceDropdownOpen = false;
+    expandedBooks = new Set();
+    storyLinkOpen = null;
+  }
 
   /** Find the reader's story and open the list at it. */
   async function openAtReaderStory(): Promise<void> {
@@ -271,7 +311,7 @@
     const currentBookItem = dropdown.querySelector('.book-item .book-button.current')?.closest('.book-item') as HTMLElement | null;
     const bookItem = openBookItem ?? currentBookItem;
     if (bookItem) scrollBookItemToTop(dropdown, bookItem);
-    const story = dropdown.querySelector('.story-small.selected') as HTMLElement | null;
+    const story = dropdown.querySelector('.story-small.selected, .story-small-wrap.selected') as HTMLElement | null;
     if (!story) return;
     const box = dropdown.getBoundingClientRect();
     const r = story.getBoundingClientRect();
@@ -3709,9 +3749,44 @@
 
               {#if expandedBooks.has(book.name) && storiesOn && $storyBooks?.[book.name]?.length}
                 <div class="stories-container" in:reveal>
+                  {#if $storyCards[book.name]}
+                    {@const card = $storyCards[book.name]}
+                    {@const cardOpen = storyCardOpen === book.name}
+                    <div class="story-card">
+                      <button
+                        class="story-card-head"
+                        class:open={cardOpen}
+                        aria-expanded={cardOpen}
+                        on:click={() => (storyCardOpen = cardOpen ? null : book.name)}
+                      >
+                        <span class="expand-icon motion-caret" class:open={cardOpen}>
+                          <CaretRight size={10} weight="bold" />
+                        </span>
+                        <span class="story-title">{card.t}</span>
+                      </button>
+                      {#if cardOpen}
+                        <div class="story-card-body" in:reveal>
+                          {#each card.p as line}
+                            {#if line.startsWith('- ')}
+                              {@const parts = line.slice(2).split(' · ')}
+                              <div class="story-card-row">
+                                <span class="story-card-label">{parts[0]}</span>
+                                <span>{parts.slice(1).join(' · ')}</span>
+                              </div>
+                            {:else}
+                              <p class="story-card-para">{line}</p>
+                            {/if}
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
                   {#each $storyBooks[book.name] as big, bi}
                     {@const open = expandedStory === `${book.name}#${bi}`}
                     {@const here = storyHere?.book === book.name && storyHere.bi === bi}
+                    {#if big.d}
+                      <div class="story-divider">{big.d} · {dividerSpan(big.c, big.de ?? big.e)}</div>
+                    {/if}
                     <div class="story-group">
                       <button
                         class="story-big"
@@ -3728,14 +3803,68 @@
                       {#if open}
                         <div class="story-smalls" in:reveal>
                           {#each big.s as small, si}
-                            <button
-                              class="story-small"
-                              class:selected={here && storyHere?.si === si}
-                              on:click={() => selectStory(book.name, small)}
-                            >
-                              <span class="story-title">{small.t}</span>
-                              <span class="story-chapters">({chapterSpan(small)})</span>
-                            </button>
+                            {@const selected = here && storyHere?.si === si}
+                            {#if small.l}
+                              <!-- A story with a link: its info line is its own
+                                   button, opening the link row under it. -->
+                              {@const linkKey = `${book.name}#${bi}#${si}`}
+                              {@const linkOpen = storyLinkOpen === linkKey}
+                              <div class="story-small-wrap" class:selected>
+                                <button
+                                  class="story-small has-info"
+                                  on:click={() => selectStory(book.name, small)}
+                                >
+                                  <span class="story-line">
+                                    <span class="story-title">{small.t}</span>
+                                    <span class="story-chapters">({chapterSpan(small)})</span>
+                                  </span>
+                                </button>
+                                <button
+                                  class="story-info story-info-button"
+                                  aria-expanded={linkOpen}
+                                  on:click={() => (storyLinkOpen = linkOpen ? null : linkKey)}
+                                >
+                                  <span>{small.i ?? 'Linked passage'}</span>
+                                  <span class="expand-icon motion-caret" class:open={linkOpen}>
+                                    <CaretRight size={9} weight="bold" />
+                                  </span>
+                                </button>
+                                {#if linkOpen}
+                                  {@const link = small.l}
+                                  <div class="story-link" in:reveal>
+                                    <div class="story-link-label">Written when</div>
+                                    <VerseRefRow
+                                      book={link.b}
+                                      chapter={link.c}
+                                      verse={link.v}
+                                      label={link.t}
+                                      onOpen={() => followStoryLink(link)}
+                                    />
+                                  </div>
+                                {/if}
+                              </div>
+                            {:else if small.i}
+                              <button
+                                class="story-small has-info"
+                                class:selected
+                                on:click={() => selectStory(book.name, small)}
+                              >
+                                <span class="story-line">
+                                  <span class="story-title">{small.t}</span>
+                                  <span class="story-chapters">({chapterSpan(small)})</span>
+                                </span>
+                                <span class="story-info">{small.i}</span>
+                              </button>
+                            {:else}
+                              <button
+                                class="story-small"
+                                class:selected
+                                on:click={() => selectStory(book.name, small)}
+                              >
+                                <span class="story-title">{small.t}</span>
+                                <span class="story-chapters">({chapterSpan(small)})</span>
+                              </button>
+                            {/if}
                           {/each}
                         </div>
                       {/if}
@@ -5181,6 +5310,171 @@
 
   .story-small.selected .story-chapters {
     opacity: 0.9;
+  }
+
+  /* A row with an info line under it ("David · Cry for help"): the title
+     and chapters keep their own line, so the name is still what cuts short. */
+  .story-small.has-info {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+  }
+
+  .story-line {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .story-info {
+    font-size: 12px;
+    font-weight: 400;
+    color: #9a9a9a;
+  }
+
+  .story-small.selected .story-info {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  /* A story with a link: the title row and its info line are two buttons that
+     read as one row; marked, the pair shares the mark. */
+  .story-small-wrap {
+    border: 1px solid transparent;
+    border-radius: 4px;
+  }
+
+  .story-small-wrap .story-small.has-info {
+    padding-bottom: 1px;
+  }
+
+  .story-small-wrap.selected {
+    background: #667eea;
+    border-color: #667eea;
+  }
+
+  .story-small-wrap.selected .story-small,
+  .story-small-wrap.selected .story-info {
+    color: #fff;
+  }
+
+  .story-small-wrap.selected .story-small:hover,
+  .story-small-wrap.selected .story-info-button:hover {
+    background: transparent;
+  }
+
+  .story-info-button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    padding: 1px 8px 7px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .story-info-button:hover {
+    background: #2a2a2a;
+  }
+
+  .story-info-button .expand-icon {
+    flex: none;
+    display: inline-flex;
+  }
+
+  .story-link {
+    padding: 2px 8px 8px;
+  }
+
+  .story-link-label {
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9a9a9a;
+  }
+
+  .story-small-wrap.selected .story-link-label {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  /* A plain label between groups of bigger stories ("Book I · 1–41"), in
+     the list's own text color. Not a button. */
+  .story-divider {
+    padding: 10px 8px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #bdbdbd;
+    border-top: 1px solid #2c2c2c;
+  }
+
+  .stories-container > .story-divider:first-child {
+    border-top: none;
+    padding-top: 4px;
+  }
+
+  /* A book's card ("How Psalms Is Built"): closed until tapped. */
+  .story-card {
+    margin-bottom: 4px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    background: #222;
+  }
+
+  .story-card-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #e2e2e2;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .story-card-head:hover {
+    background: #2a2a2a;
+  }
+
+  .story-card-head .expand-icon {
+    flex: none;
+  }
+
+  .story-card-body {
+    padding: 2px 12px 10px 24px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #cfcfcf;
+  }
+
+  .story-card-row {
+    display: flex;
+    flex-direction: column;
+    padding: 3px 0;
+  }
+
+  .story-card-label {
+    font-weight: 600;
+    color: #e2e2e2;
+  }
+
+  .story-card-para {
+    margin: 8px 0 0;
   }
 
   .stories-none {

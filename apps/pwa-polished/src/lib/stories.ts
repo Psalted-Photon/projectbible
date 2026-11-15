@@ -15,21 +15,49 @@ import { devOptionsUnlocked } from './devOptions';
  * file in public/. Until a book has stories, Story Mode shows its chapters.
  */
 
-export interface SmallerStory {
+export interface StoryRange {
   t: string;
   c: number;
   v: number;
   e: number;
 }
 
-export interface BiggerStory extends SmallerStory {
+/** A passage a story points to: a book, its first verse, and how to print it. */
+export interface StoryLink {
+  b: string;
+  c: number;
+  v: number;
+  /** As written in the source: "2 Samuel 11:1–12:25". */
+  t: string;
+}
+
+export interface SmallerStory extends StoryRange {
+  /** A muted second line under the row, e.g. a psalm's "David · Cry for help". */
+  i?: string;
+  /** Where the story points, e.g. the moment in David's life a psalm was written. */
+  l?: StoryLink;
+}
+
+export interface BiggerStory extends StoryRange {
+  /** A plain label shown above this story, e.g. "Book I" in Psalms. */
+  d?: string;
+  /** The last chapter the label covers, for its chapters. */
+  de?: number;
   s: SmallerStory[];
 }
 
 export type StoryBooks = Record<string, BiggerStory[]>;
 
+/** A book's collapsed card at the top of its stories. "- " lines are list rows. */
+export interface StoryCard {
+  t: string;
+  p: string[];
+}
+
 /** The data, once fetched. Null until then, or if it couldn't be. */
 export const storyBooks = writable<StoryBooks | null>(null);
+/** Each book's card, for the books that have one. */
+export const storyCards = writable<Record<string, StoryCard>>({});
 
 let loading: Promise<StoryBooks | null> | null = null;
 
@@ -42,6 +70,7 @@ export function loadStories(): Promise<StoryBooks | null> {
         if (res.ok) {
           const json = await res.json();
           const books = (json?.books ?? null) as StoryBooks | null;
+          storyCards.set((json?.cards ?? {}) as Record<string, StoryCard>);
           storyBooks.set(books);
           return books;
         }
@@ -101,11 +130,11 @@ storyMode.subscribe((on) => {
 // --- Finding and naming stories --------------------------------------------
 
 /** The chapters a story covers, for its brackets: "37" or "37–50". */
-export function chapterSpan(s: SmallerStory): string {
+export function chapterSpan(s: StoryRange): string {
   return s.c === s.e ? `${s.c}` : `${s.c}–${s.e}`;
 }
 
-const before = (a: SmallerStory, chapter: number, verse: number) =>
+const before = (a: StoryRange, chapter: number, verse: number) =>
   a.c < chapter || (a.c === chapter && a.v <= verse);
 
 export interface StoryPlace {

@@ -1,0 +1,269 @@
+book: Psalms
+
+# Smaller stories are each psalm, titled with its BSB heading. Bigger stories
+# are the collections inside each of the five books; titles are our own.
+# "| Author · Kind" is the info line; "->" is the moment in David’s life the
+# psalm’s heading names. Kinds: Cry for help, Praise, Thanks, Trust, Wisdom,
+# The King, History, Pilgrim song, Confession, Mixed.
+
+card: How Psalms Is Built
+- Book I (1–41) · Nearly all David. Mostly cries for help from a man under pressure, with trust breaking through.
+- Book II (42–72) · The sons of Korah, then David again. Longing, confession and the king, closing with “the prayers of David son of Jesse are ended.”
+- Book III (73–89) · Asaph and the sons of Korah. Hard questions: the temple in ruins, and in Psalm 89 the promise to David’s line seems broken.
+- Book IV (90–106) · Opens with Moses. The answer to Book III: kings may fail, but the LORD reigns.
+- Book V (107–150) · Gathered home. Thanks, pilgrim songs on the road to Jerusalem, and a rising flood of praise.
+> From cries to praise: cries for help crowd the first half of the book. Praise takes over toward the end, until the last five psalms are nothing but Hallelujah.
+> “God” or “the LORD”: in Psalms 42–83 the writers mostly say “God” (Elohim) where the rest of the book says “the LORD” (Yahweh). Psalm 53 even repeats Psalm 14 with the name changed.
+> Closing blessings: each of the five books ends with a short blessing of the LORD (41, 72, 89, 106), and Psalm 150 closes the whole book in praise. Many readers see an echo of the five books of Moses.
+> The big arc, as many readers see it: God’s King is crowned (2), the kingdom falls (89), the people learn again that the LORD reigns (93–100), and they come home singing (107–150).
+
+=== Book I
+
+## Two Paths and a King
+1:1     The Two Paths | Unnamed · Wisdom
+2:1     The Triumphant Messiah | Unnamed · The King
+
+## David Cries Out
+3:1     Deliver Me, O LORD! | David · Cry for help
+        -> 2 Samuel 15:13–17:22
+4:1     Answer Me When I Call! | David · Trust
+5:1     Give Ear to My Words | David · Cry for help
+6:1     Do Not Rebuke Me in Your Anger | David · Confession
+7:1     I Take Refuge in You | David · Cry for help
+8:1     How Majestic Is Your Name! | David · Praise
+9:1     I Will Give Thanks to the LORD | David · Thanks
+10:1    The Perils of the Pilgrim | Unnamed · Cry for help
+11:1    In the LORD I Take Refuge | David · Trust
+12:1    The Godly Are No More | David · Cry for help
+13:1    How Long, O LORD? | David · Cry for help
+14:1    The Fool Says There Is No God | David · Wisdom
+
+## Who May Dwell with God
+15:1    Who May Dwell on Your Holy Mountain? | David · Wisdom
+16:1    The Presence of the LORD | David · Trust
+17:1    Hear My Righteous Plea | David · Cry for help
+18:1    The LORD Is My Rock | David · Thanks
+        -> 2 Samuel 22:1–51
+19:1    The Heavens Declare the Glory of God | David · Praise
+20:1    The Day of Trouble | David · The King
+21:1    After the Battle | David · The King
+22:1    The Psalm of the Cross | David · Cry for help
+23:1    The LORD Is My Shepherd | David · Trust
+24:1    The Earth Is the LORD’s | David · Praise
+
+## Waiting on the LORD
+25:1    To You I Lift Up My Soul | David · Cry for help
+26:1    Vindicate Me, O LORD | David · Cry for help
+27:1    The LORD Is My Salvation | David · Trust
+28:1    The LORD Is My Strength | David · Cry for help
+29:1    Ascribe Glory to the LORD | David · Praise
+30:1    You Turned My Mourning into Dancing | David · Thanks
+31:1    Into Your Hands I Commit My Spirit | David · Cry for help
+32:1    The Joy of Forgiveness | David · Confession
+33:1    Praise to the Creator | Unnamed · Praise
+34:1    Taste and See That the LORD Is Good | David · Thanks
+        -> 1 Samuel 21:10–15
+
+## Suffering and Hope
+35:1    Contend with My Opponents, O LORD | David · Cry for help
+36:1    The Transgression of the Wicked | David · Mixed
+37:1    Delight Yourself in the LORD | David · Wisdom
+38:1    Do Not Rebuke Me in Your Anger | David · Confession
+39:1    I Will Watch My Ways | David · Cry for help
+40:1    I Waited Patiently for the LORD | David · Mixed
+41:1    Victory over Betrayal | David · Cry for help
+41:13   Book I Closes in Blessing
+
+=== Book II
+
+## Sons of Korah
+42:1    As the Deer Pants for the Water | Sons of Korah · Cry for help
+43:1    Send Out Your Light | Unnamed · Cry for help
+44:1    Redeem Us, O God | Sons of Korah · Cry for help
+45:1    My Heart Is Stirred by a Noble Theme | Sons of Korah · The King
+46:1    God Is Our Refuge and Strength | Sons of Korah · Trust
+47:1    Clap Your Hands, All You Peoples | Sons of Korah · Praise
+48:1    Broken Bondage | Sons of Korah · Praise
+49:1    The Evanescence of Wealth | Sons of Korah · Wisdom
+
+## Asaph’s Call to Judgment
+50:1    The Mighty One Calls | Asaph · Wisdom
+
+## David Forgiven and Hunted
+51:1    Create in Me a Clean Heart, O God | David · Confession
+        -> 2 Samuel 11:1–12:25
+52:1    Why Do You Boast of Evil? | David · Trust
+        -> 1 Samuel 22:6–23
+53:1    The Fool Says There Is No God | David · Wisdom
+54:1    Save Me by Your Name | David · Cry for help
+        -> 1 Samuel 23:19–29
+55:1    Cast Your Burden upon the LORD | David · Cry for help
+56:1    Be Merciful to Me, O God | David · Cry for help
+        -> 1 Samuel 21:10–15
+57:1    In You My Soul Takes Refuge | David · Cry for help
+        -> 1 Samuel 24:1–22
+58:1    God Judges the Earth | David · Cry for help
+59:1    Deliver Me from My Enemies | David · Cry for help
+        -> 1 Samuel 19:11–17
+60:1    Victory with God | David · Cry for help
+        -> 2 Samuel 8:1–14
+
+## From Waiting to Worship
+61:1    You Have Heard My Vows | David · Cry for help
+62:1    Waiting on God | David · Trust
+63:1    Thirsting for God | David · Trust
+        -> 2 Samuel 15:23–30
+64:1    The Hurtful Tongue | David · Cry for help
+65:1    Praise Awaits God in Zion | David · Praise
+66:1    Make a Joyful Noise | Unnamed · Thanks
+67:1    May God Cause His Face to Shine upon Us | Unnamed · Praise
+68:1    God’s Enemies Are Scattered | David · Praise
+
+## Hurry to Help Me
+69:1    The Waters Are up to My Neck | David · Cry for help
+70:1    Hurry, O LORD, to Help Me! | David · Cry for help
+71:1    Be My Rock of Refuge | Unnamed · Cry for help
+
+## The King’s Prayer
+72:1    Endow the King with Your Justice | Solomon · The King
+72:18   Book II Closes in Blessing
+
+=== Book III
+
+## Asaph Wrestles with God
+73:1    Surely God Is Good to Israel | Asaph · Wisdom
+74:1    Why Have You Rejected Us Forever? | Asaph · Cry for help
+75:1    God’s Righteous Judgment | Asaph · Thanks
+76:1    God’s Name Is Great in Israel | Asaph · Praise
+77:1    In the Day of Trouble I Sought the Lord | Asaph · Cry for help
+78:1    I Will Open My Mouth in Parables | Asaph · History
+
+## Asaph Pleads for the Nation
+79:1    A Prayer for Deliverance | Asaph · Cry for help
+80:1    Hear Us, O Shepherd of Israel | Asaph · Cry for help
+81:1    Sing for Joy to God Our Strength | Asaph · Mixed
+82:1    God Presides in the Divine Assembly | Asaph · Mixed
+83:1    O God, Be Not Silent | Asaph · Cry for help
+
+## Longing for Zion
+84:1    Better Is One Day in Your Courts | Sons of Korah · Pilgrim song
+85:1    You Showed Favor to Your Land | Sons of Korah · Cry for help
+86:1    Tried but Trusting | David · Cry for help
+87:1    The LORD Loves the Gates of Zion | Sons of Korah · Praise
+88:1    I Cry Out before You | Heman · Cry for help
+
+## Where Is Your Covenant Love?
+89:1    I Will Sing of His Love Forever | Ethan · Mixed
+89:52   Book III Closes in Blessing
+
+=== Book IV
+
+## Moses and the Everlasting God
+90:1    From Everlasting to Everlasting | Moses · Wisdom
+91:1    You Are My Refuge and My Fortress | Unnamed · Trust
+92:1    How Great Are Your Works! | Unnamed · Thanks
+
+## The LORD Reigns
+93:1    The LORD Reigns! | Unnamed · Praise
+94:1    The LORD Will Not Forget His People | Unnamed · Cry for help
+95:1    Do Not Harden Your Hearts | Unnamed · Praise
+96:1    Sing to the LORD, All the Earth | Unnamed · Praise
+97:1    Let the Earth Rejoice | Unnamed · Praise
+98:1    Sing to the LORD a New Song | Unnamed · Praise
+99:1    The LORD Reigns! | Unnamed · Praise
+100:1   Make a Joyful Noise | Unnamed · Thanks
+
+## Prayers of the King and the Afflicted
+101:1   I Will Set No Worthless Thing before My Eyes | David · The King
+102:1   The Prayer of the Afflicted | Unnamed · Cry for help
+103:1   Bless the LORD, O My Soul | David · Praise
+
+## Remember His Wonders
+104:1   How Many Are Your Works, O LORD! | Unnamed · Praise
+105:1   Tell of His Wonders | Unnamed · History
+106:1   Give Thanks to the LORD, for He Is Good | Unnamed · History
+106:48  Book IV Closes in Blessing
+
+=== Book V
+
+## Gathered from the Lands
+107:1   Thanksgiving for Deliverance | Unnamed · Thanks
+
+## David’s King and Priest
+108:1   Israel’s Kingdom Blessing | David · Mixed
+109:1   The Song of the Slandered | David · Cry for help
+110:1   God’s Faithful Messiah | David · The King
+
+## Hallelujah!
+111:1   Majestic Is His Work | Unnamed · Praise
+112:1   The Blessed Fear of the LORD | Unnamed · Wisdom
+113:1   The LORD Exalts the Humble | Unnamed · Praise
+114:1   A Psalm of Exodus | Unnamed · History
+115:1   To Your Name Be the Glory | Unnamed · Trust
+116:1   The LORD Has Heard My Voice | Unnamed · Thanks
+117:1   Extol Him, All You Peoples | Unnamed · Praise
+118:1   The LORD Is on My Side | Unnamed · Thanks
+
+## The Alphabet Psalm
+119:1   Aleph · Walking in His Law | Unnamed · Wisdom
+119:9   Beth · How a Young Man Keeps Pure
+119:17  Gimel · A Stranger on the Earth
+119:25  Daleth · Laid Low in the Dust
+119:33  He · Teach Me Your Way
+119:41  Waw · Walking in Freedom
+119:49  Zayin · Comfort in Affliction
+119:57  Heth · The LORD Is My Portion
+119:65  Teth · Good for Me to Be Afflicted
+119:73  Yodh · Your Hands Made Me
+119:81  Kaph · Waiting for Rescue
+119:89  Lamedh · Your Word Stands Forever
+119:97  Mem · How I Love Your Law
+119:105 Nun · A Lamp to My Feet
+119:113 Samekh · My Hiding Place
+119:121 Ayin · Time for the LORD to Act
+119:129 Pe · Your Words Give Light
+119:137 Tzade · You Are Righteous
+119:145 Koph · I Call with All My Heart
+119:153 Resh · Look on My Affliction
+119:161 Shin · Great Peace for Those Who Love Your Law
+119:169 Taw · Seek Your Servant
+
+## Songs of Ascents
+120:1   In My Distress I Cried to the LORD | Unnamed · Pilgrim song
+121:1   I Lift Up My Eyes to the Hills | Unnamed · Pilgrim song
+122:1   Pray for the Peace of Jerusalem | David · Pilgrim song
+123:1   I Lift Up My Eyes to You | Unnamed · Pilgrim song
+124:1   Our Help Is in the Name of the LORD | David · Pilgrim song
+125:1   The LORD Surrounds His People | Unnamed · Pilgrim song
+126:1   Zion’s Captives Restored | Unnamed · Pilgrim song
+127:1   Children Are a Heritage from the LORD | Solomon · Pilgrim song
+128:1   The Blessed Fear of the LORD | Unnamed · Pilgrim song
+129:1   The Cords of the Wicked | Unnamed · Pilgrim song
+130:1   Out of the Depths | Unnamed · Confession
+131:1   I Have Stilled My Soul | David · Pilgrim song
+132:1   The LORD Has Chosen Zion | Unnamed · Pilgrim song
+133:1   How Pleasant to Live in Harmony! | David · Pilgrim song
+134:1   Bless the LORD, All You Servants | Unnamed · Pilgrim song
+
+## His Love Endures Forever
+135:1   Give Praise, O Servants of the LORD | Unnamed · Praise
+136:1   His Loving Devotion Endures Forever | Unnamed · Thanks
+137:1   By the Rivers of Babylon | Unnamed · Cry for help
+
+## David’s Last Collection
+138:1   A Thankful Heart | David · Thanks
+139:1   You Have Searched Me and Known Me | David · Trust
+140:1   Rescue Me from Evil Men | David · Cry for help
+141:1   Come Quickly to Me | David · Cry for help
+142:1   I Lift My Voice to the LORD | David · Cry for help
+        -> 1 Samuel 22:1–2
+143:1   I Stretch Out My Hands to You | David · Cry for help
+144:1   Blessed Be the LORD, My Rock | David · The King
+145:1   I Will Exalt You, My God and King | David · Praise
+
+## The Final Hallelujahs
+146:1   Praise the LORD, O My Soul | Unnamed · Praise
+147:1   It Is Good to Sing Praises | Unnamed · Praise
+148:1   Praise the LORD from the Heavens | Unnamed · Praise
+149:1   Sing to the LORD a New Song | Unnamed · Praise
+150:1   The Book Closes: Let Everything Praise the LORD | Unnamed · Praise
