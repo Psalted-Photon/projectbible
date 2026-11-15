@@ -11,6 +11,9 @@
  * icons turn into holes the text has to jump. The anchor is the bold weight:
  * Phosphor's anchor is a line drawing, and the regular stroke is too thin to
  * hold more than a letter or two per line.
+ *
+ * The circle is the plain shape: no edges or gaps to work around, so it shows
+ * the size of a book best when the size follows the book's length.
  */
 
 import type { BookInfo } from '../bibleData';
@@ -88,6 +91,19 @@ function lettersShape(id: string, label: string, stacked: boolean): BookShape {
   };
 }
 
+function circleShape(): BookShape {
+  return {
+    id: 'circle',
+    label: 'Circle',
+    box: [256, 256],
+    paint(ctx, thicken) {
+      ctx.beginPath();
+      ctx.arc(128, 128, 128 + thicken, 0, Math.PI * 2);
+      ctx.fill();
+    },
+  };
+}
+
 // Paths copied from phosphor-svelte (fill weight unless noted).
 export const SHAPES: BookShape[] = [
   iconShape(
@@ -119,6 +135,7 @@ export const SHAPES: BookShape[] = [
   ),
   lettersShape('alpha-omega', 'Α Ω', false),
   lettersShape('alpha-omega-stacked', 'Α Ω stacked', true),
+  circleShape(),
 ];
 
 export function shapeById(id: string): BookShape {
@@ -189,6 +206,16 @@ export function fitShape(
     x: (pageW - w * scale) / 2 - left * scale,
     y: (pageH - h * scale) / 2 - top * scale,
   };
+}
+
+/**
+ * Shrink a fitted shape by `s` about the middle of the page, so it stays
+ * centred. Used when the shape's size follows the book's length.
+ */
+export function shrinkFit(fit: ShapeFit, s: number, pageW: number, pageH: number): ShapeFit {
+  if (s === 1) return fit;
+  const cx = pageW / 2, cy = pageH / 2;
+  return { scale: fit.scale * s, x: cx - (cx - fit.x) * s, y: cy - (cy - fit.y) * s };
 }
 
 /** Paint the fitted shape on a context already set to page units. */

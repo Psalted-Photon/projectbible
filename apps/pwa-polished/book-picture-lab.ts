@@ -1,5 +1,5 @@
 /**
- * Book picture lab v1.0: one book per page, its whole text set inside a
+ * Book picture lab v1.1: one book per page, its whole text set inside a
  * symbol. Zoomed out you see the symbol, zoomed in you read the book.
  *
  * Runs the real code: lib/bookPicture/shapes.ts for the symbols and
@@ -10,6 +10,12 @@
  * Two looks: "Shape only" sets the text inside the symbol and nowhere else.
  * "Whole page" sets it across the whole page, paints the symbol's part in the
  * book color and leaves the rest faint. "Both" puts them side by side.
+ *
+ * Size: normally every symbol fills the page and the letter size changes per
+ * book. With "Size follows the book's length", the longest book fills the
+ * page and every other book's symbol shrinks by area to match its text, so
+ * the letters come out about the same size and the symbol shows how big the
+ * book is.
  *
  * Drawing: a full-page picture is rendered once per change and stretched
  * while a pinch or scroll is moving; when it settles, just the words on
@@ -36,6 +42,7 @@ import {
   shapeById,
   fitShape,
   paintFitted,
+  shrinkFit,
   type BookShape,
   type ShapeFit,
 } from './src/lib/bookPicture/shapes';
@@ -56,7 +63,7 @@ type ThemeId = 'dark' | 'light' | 'black';
 interface Values {
   book: string;
   symbol: string;
-  /** 'book', or a category whose color to borrow. */
+  /** 'book', 'cream' (chapter starts in the book color), or a category whose color to borrow. */
   color: string;
   look: Look;
   font: string;
@@ -69,6 +76,8 @@ interface Values {
   margin: number;
   thicken: number;
   minSpan: number;
+  /** The longest book fills the page; the rest shrink so the letters match. */
+  sizeByLength: boolean;
   theme: ThemeId;
 }
 
@@ -87,6 +96,7 @@ const DEFAULTS: Values = {
   margin: 6,
   thicken: 0,
   minSpan: 1.5,
+  sizeByLength: true,
   theme: 'dark',
 };
 
@@ -220,6 +230,8 @@ interface Built {
   fit: ShapeFit;
   mask: Mask;
   pageH: number;
+  /** Symbol width next to the longest book's (1 when it fills the page). */
+  size: number;
   shapeLayout: Layout | null;
   pageLayout: Layout | null;
 }
@@ -235,12 +247,27 @@ function bookInfo(book: string): BookInfo | undefined {
   return BIBLE_BOOKS.find((b) => b.name === book);
 }
 
+function bookColor(): string {
+  const info = bookInfo(V.book);
+  return info ? CATEGORY_COLORS[info.category] : '#8a8f98';
+}
+
+/** The app's cream; on the cream page it would vanish, so that page gets dark ink. */
+const CREAM = '#fffaed';
+const CREAM_ON_LIGHT = '#3a3226';
+
 function textColor(): string {
+  if (V.color === 'cream') return (THEMES[V.theme] ?? THEMES.dark).light ? CREAM_ON_LIGHT : CREAM;
   if (V.color !== 'book' && V.color in CATEGORY_COLORS) {
     return CATEGORY_COLORS[V.color as BookInfo['category']];
   }
-  const info = bookInfo(V.book);
-  return info ? CATEGORY_COLORS[info.category] : '#8a8f98';
+  return bookColor();
+}
+
+/** Chapter-start words: the book color on cream text, otherwise a brighter text color. */
+function markColor(color: string, light: boolean): string {
+  if (V.color === 'cream') return bookColor();
+  return mix(color, light ? '#000000' : '#ffffff', light ? 0.4 : 0.55);
 }
 
 function mix(hex: string, toward: string, t: number): string {
@@ -250,6 +277,41 @@ function mix(hex: string, toward: string, t: number): string {
     return Math.round(x + (y - x) * t);
   };
   return `rgb(${ch(16)}, ${ch(8)}, ${ch(0)})`;
+}
+
+// ─── Size by length ────────────────────────────────────────────────────────
+
+let longest: string | null = null;
+let refKey = '';
+let refTotal = 1;
+
+/** The book with the most words in the NET (every book is read once to find it). */
+function longestBook(): string {
+  if (longest) return longest;
+  let best = BIBLE_BOOKS[0].name, bestN = -1;
+  for (const b of BIBLE_BOOKS) {
+    const n = bookText(b.name).words.length;
+    if (n > bestN) {
+      bestN = n;
+      best = b.name;
+    }
+  }
+  return (longest = best);
+}
+
+/**
+ * How wide this book's symbol is next to the longest book's, which fills the
+ * page. Scaled by area (square root of the text's length), so the font size
+ * that fills it comes out about the same in every book.
+ */
+function sizeFactor(set: WordSet, fontCss: string): number {
+  const ref = longestBook();
+  const key = `${V.font}|${V.weight}`;
+  if (key !== refKey) {
+    refTotal = ref === V.book ? set.total : measureWords(bookText(ref).words, fontCss, V.weight).total;
+    refKey = key;
+  }
+  return Math.min(1, Math.sqrt(set.total / Math.max(1e-6, refTotal)));
 }
 
 let buildGen = 0;
@@ -278,9 +340,10 @@ async function rebuild(): Promise<void> {
   }
   const pageH = (PAGES[V.page] ?? PAGES.portrait).h;
   const margin = (V.margin / 100) * PAGE_W;
-  const sk = `${V.symbol}|${V.page}|${V.margin}|${V.thicken}`;
+  const size = V.sizeByLength ? sizeFactor(measured, font.css) : 1;
+  const sk = `${V.symbol}|${V.page}|${V.margin}|${V.thicken}|${size}`;
   if (sk !== maskKey || !maskBuilt) {
-    const fit = fitShape(shape, V.thicken, PAGE_W, pageH, margin);
+    const fit = shrinkFit(fitShape(shape, V.thicken, PAGE_W, pageH, margin), size, PAGE_W, pageH);
     const mask = buildMask(PAGE_W, pageH, MASK_SCALE, (c) => paintFitted(c, shape, fit, V.thicken));
     maskBuilt = { shape, fit, mask };
     maskKey = sk;
@@ -315,6 +378,7 @@ async function rebuild(): Promise<void> {
     fit: maskBuilt.fit,
     mask: maskBuilt.mask,
     pageH,
+    size,
     shapeLayout: wantShape ? layoutFor('shape') : null,
     pageLayout: wantPage ? layoutFor('page') : null,
   };
@@ -467,7 +531,7 @@ function renderScene(
   c.fillRect(0, 0, W, H);
   if (!built) return;
   const color = textColor();
-  const mark = V.chapterMarks ? mix(color, theme.light ? '#000000' : '#ffffff', theme.light ? 0.4 : 0.55) : null;
+  const mark = V.chapterMarks ? markColor(color, theme.light) : null;
   const K = k * ratio;
   for (const pg of pages()) {
     const X = (tx + pg.ox * k) * ratio, Y = ty * ratio;
@@ -860,7 +924,7 @@ function showTapped(cx: number, cy: number): void {
   if (!built || i < 0) return;
   const ref = built.text.refs[i];
   const ch = Math.floor(ref / 1000), vs = ref % 1000;
-  tappedBox.innerHTML = `<b style="color:${textColor()}">${escapeHtml(bookTitle(V.book))} ${ch}:${vs}</b> · “${escapeHtml(built.set.words[i])}”`;
+  tappedBox.innerHTML = `<b style="color:${V.color === 'cream' ? bookColor() : textColor()}">${escapeHtml(bookTitle(V.book))} ${ch}:${vs}</b> · “${escapeHtml(built.set.words[i])}”`;
 }
 
 // ─── Stats ─────────────────────────────────────────────────────────────────
@@ -870,6 +934,11 @@ function showStats(): void {
   const lines: string[] = [];
   const total = built.set.words.length;
   lines.push(`<b>${escapeHtml(bookTitle(V.book))}</b> · ${total.toLocaleString()} words`);
+  if (V.sizeByLength && longest) {
+    lines.push(longest === V.book || built.size >= 1
+      ? `The longest book, so its symbol fills the page.`
+      : `Its symbol is ${Math.round(built.size * 100)}% as wide as ${escapeHtml(bookTitle(longest))}'s, the longest book, which fills the page.`);
+  }
   const describe = (lay: Layout, label: string) => {
     let used = 0;
     for (let l = 0; l < lay.lines; l++) if (lay.lineFirst[l + 1] > lay.lineFirst[l]) used++;
@@ -936,7 +1005,7 @@ fillSelect(bookSel, [], categories.map((cat) => [
   BIBLE_BOOKS.filter((b) => b.category === cat).map((b) => [b.name, bookTitle(b.name)] as [string, string]),
 ]));
 fillSelect(symbolSel, SHAPES.map((s) => [s.id, s.label]));
-fillSelect(colorSel, [['book', 'Book color'], ...categories.map((c) => [c, CATEGORY_LABELS[c]] as [string, string])]);
+fillSelect(colorSel, [['book', 'Book color'], ['cream', 'Cream white'], ...categories.map((c) => [c, CATEGORY_LABELS[c]] as [string, string])]);
 fillSelect(fontSel, Object.entries(FONTS).map(([id, f]) => [id, f.label]));
 fillSelect(pageSel, Object.entries(PAGES).map(([id, p]) => [id, p.label]));
 fillSelect(themeSel, Object.entries(THEMES).map(([id, t]) => [id, t.label]));
@@ -964,6 +1033,7 @@ function syncControls(): void {
   }
   $<HTMLInputElement>('chapterMarks').checked = V.chapterMarks;
   $<HTMLInputElement>('faintInColor').checked = V.faintInColor;
+  $<HTMLInputElement>('sizeByLength').checked = V.sizeByLength;
   for (const s of sliders) {
     $<HTMLInputElement>(s.key).value = String(V[s.key]);
     $<HTMLOutputElement>(`${s.key}Out`).textContent = s.fmt(V[s.key]);
@@ -991,12 +1061,16 @@ function changed(needsRebuild: boolean): void {
 }
 
 bookSel.addEventListener('change', () => {
+  // A new book shows its group's symbol when that one is drawn, unless a
+  // different symbol (the circle, say) was picked on purpose.
+  const prev = bookInfo(V.book);
+  const prevGroup = prev ? GROUP_SYMBOLS[prev.category] : null;
+  const followGroup = !prevGroup?.id || V.symbol === prevGroup.id;
   V.book = bookSel.value;
   tappedBox.textContent = 'Tap a word to see where it is in the book.';
-  // A new book shows its group's symbol when that one is drawn.
   const info = bookInfo(V.book);
   const group = info ? GROUP_SYMBOLS[info.category] : null;
-  if (group?.id) {
+  if (followGroup && group?.id) {
     V.symbol = group.id;
     symbolSel.value = V.symbol;
   }
@@ -1046,6 +1120,10 @@ $<HTMLInputElement>('chapterMarks').addEventListener('change', (e) => {
 $<HTMLInputElement>('faintInColor').addEventListener('change', (e) => {
   V.faintInColor = (e.target as HTMLInputElement).checked;
   changed(false);
+});
+$<HTMLInputElement>('sizeByLength').addEventListener('change', (e) => {
+  V.sizeByLength = (e.target as HTMLInputElement).checked;
+  changed(true);
 });
 for (const s of sliders) {
   const input = $<HTMLInputElement>(s.key);

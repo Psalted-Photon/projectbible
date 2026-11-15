@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Book picture lab v1.0</title>
+<title>Book picture lab v1.1</title>
 <style>
   /* The app's own reader fonts, from public/fonts (same rules as index.html). */
   @font-face {
@@ -221,14 +221,14 @@
     </div>
 
     <aside class="drawer">
-      <h1>Book picture lab v1.0</h1>
+      <h1>Book picture lab v1.1</h1>
       <p class="note">One book per page, its whole text set inside a symbol. Zoomed out you see the symbol; pinch, scroll or double-tap to zoom in and read it. The text is the NET from the starter pack.</p>
 
       <div class="row"><label for="book">Book</label><select id="book"></select></div>
       <div class="row"><label for="symbol">Symbol</label><select id="symbol"></select></div>
       <p class="hint" id="symbolNote"></p>
       <div class="row"><label for="color">Color</label><select id="color"></select></div>
-      <p class="hint">Book color is the book's own group color. The others try a different group's color on this book.</p>
+      <p class="hint">Book color is the book's own group color. Cream white is plain cream text with the first word of each chapter in the book color (with Mark chapter starts on). The others try a different group's color on this book.</p>
       <div class="row">
         <label>Look</label>
         <div class="segs" id="look">
@@ -255,14 +255,15 @@
       <div class="row"><label for="lineSpacing">Line spacing</label><input type="range" id="lineSpacing" min="0.9" max="1.6" step="0.01" /><output id="lineSpacingOut"></output></div>
       <p class="hint">Space between lines, as a multiple of the letter size. Tighter is a more solid symbol; looser is easier to read.</p>
       <div class="checks"><label><input type="checkbox" id="chapterMarks" /> Mark chapter starts</label></div>
-      <p class="hint">The first word of each chapter is drawn a little brighter, since there are no chapter or verse numbers.</p>
+      <p class="hint">The first word of each chapter is drawn a little brighter (in the book color on cream white text), since there are no chapter or verse numbers.</p>
       <div class="row"><label for="faint">Faint text</label><input type="range" id="faint" min="0.04" max="0.5" step="0.01" /><output id="faintOut"></output></div>
       <div class="checks"><label><input type="checkbox" id="faintInColor" /> Faint text in the book color</label></div>
       <p class="hint">Whole page look only: how strong the text outside the symbol is, and whether it is plain or a faint copy of the color.</p>
 
       <h2><span>Shape</span></h2>
       <div class="row"><label for="pageShape">Page</label><select id="pageShape"></select></div>
-      <p class="hint">The page is a fixed size, so the letter size changes per book: a long book is a fine weave, a short one is big letters.</p>
+      <div class="checks"><label><input type="checkbox" id="sizeByLength" /> Size follows the book's length</label></div>
+      <p class="hint">On: the longest book fills the page and every other book's symbol is smaller to match how much text it has, so the letters are about the same size in every book and the symbol shows how big the book is. Off: every symbol fills the page, so a long book is a fine weave and a short one is big letters.</p>
       <div class="row"><label for="margin">Margin</label><input type="range" id="margin" min="0" max="20" step="0.5" /><output id="marginOut"></output></div>
       <p class="hint">Empty space around the symbol, as a share of the page width.</p>
       <div class="row"><label for="thicken">Thicken</label><input type="range" id="thicken" min="0" max="16" step="0.5" /><output id="thickenOut"></output></div>
