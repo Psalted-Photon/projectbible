@@ -320,6 +320,8 @@ export default defineConfig({
         //                     Its helpers and name list stay out as well.
         //   clock-lab.html    the look gallery for the bedside clock, a separate
         //                     app. Self-contained, like gem-lab.
+        //   book-picture-lab  a book's whole text set inside a symbol. Built
+        //                     from the app's source, like connections-lab.
         //   reset.html       the recovery page. It exists for the case where
         //                     the worker itself is what is broken, so it is the
         //                     one page that must never be served by the worker.
@@ -349,6 +351,8 @@ export default defineConfig({
           '**/voice-control-lab/**',
           '**/name-lab*',
           '**/clock-lab.html',
+          '**/book-picture-lab.html',
+          '**/assets/book-picture-lab-*.js',
         ],
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
@@ -364,6 +368,7 @@ export default defineConfig({
           /^\/voice-control-lab\.html$/,
           /^\/name-lab\.html$/,
           /^\/clock-lab\.html$/,
+          /^\/book-picture-lab\.html$/,
         ],
         runtimeCaching: [
           {
@@ -478,7 +483,8 @@ export default defineConfig({
         'tree-motion-lab': resolve(__dirname, 'tree-motion-lab.html'),
         'connections-lab': resolve(__dirname, 'connections-lab.html'),
         'connections-grid-lab': resolve(__dirname, 'connections-grid-lab.html'),
-        'connections-chord-lab': resolve(__dirname, 'connections-chord-lab.html')
+        'connections-chord-lab': resolve(__dirname, 'connections-chord-lab.html'),
+        'book-picture-lab': resolve(__dirname, 'book-picture-lab.html')
       }
     }
   }
