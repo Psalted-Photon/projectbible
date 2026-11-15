@@ -84,6 +84,17 @@ Two complete English editions are included and read like any other book:
 - **Reference shorthand is understood** — "Ex 20:21", "Am 5:18-20", or a bare "3:14" while you're already in a book all resolve correctly. Common abbreviations and alternate book spellings are recognized.
 - **The toolbar follows your scrolling** — as you scroll into a new chapter, the book and chapter shown in the toolbar update to match, without yanking the page around.
 
+### 2.3 Story Mode
+
+Read and get around by complete stories instead of chapters, which often break a story in an odd place.
+
+- **Canonical / Story Mode switch** at the top of the book and chapter picker. Canonical is the usual chapter grid. Your choice is kept on this device.
+- **Bigger stories, then smaller ones** — in Story Mode each book opens to its bigger stories (The Plagues, Through the Sea, Paul's Second Journey), and each of those opens to the smaller stories inside it. Every story shows its chapters in brackets, like "Joseph Sold into Egypt (37–38) › Sold by His Brothers (37)". Tap a smaller story to start at its first verse.
+- **Every book** — all 66 books, about 490 bigger stories and 2,800 smaller ones. Books that aren't stories get the same two levels: Psalms by its five books, then each psalm; letters by their main sections; prophets by their groups of messages. Some books are split into their clear parts, such as Isaiah 1–39 and 40–66.
+- **The story you're in** stays pinned in a slim title under the top bar and changes as you scroll. Tap it to open the picker right at that story. It sits over the page rather than pushing it down, so your saved place doesn't move, and it never marks the verse text.
+- **"How it's built" cards** on 25 books, such as Genesis, Proverbs, Mark and Revelation: a short note at the top of the book on how it's put together, closed until you tap it.
+- **Links between tellings** — a story told in more than one book links to the other telling: Samuel and Kings to Chronicles, and Matthew and Luke to Mark. Twelve psalms link to the moment in David's life they were written. Following a link leaves a crumb to come back by.
+
 ## 3. Translations
 
 - **Translation picker** — switch between every translation you have installed from the toolbar.

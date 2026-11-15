@@ -116,6 +116,18 @@ Primary files: `src/stores/navigationStore.ts`, `src/components/NavigationBar.sv
 | Reading session | `src/stores/readingSessionStore.ts`. `src/stores/harmonyNavStore.ts` is a backwards-compatibility re-export only — it exports `readingSessionStore` under the old `harmonyNavStore` name. |
 | Chronological mode | `isChronologicalMode` flag on `NavigationState`, with `setChronologicalMode()`; persisted. **No UI control found** — see [Known gaps](#known-gaps). |
 
+### 2.3 Story Mode
+
+| Feature | Detail |
+|---|---|
+| Sources | One hand-written file per book, `scripts/stories/NN-book.txt`. Smaller stories started from the BSB section headings (tiny ones merged); bigger-story groupings and titles are our own. Optional extras: `card:` with `- ` / `> ` lines, `=== Divider`, `\| info line` under a smaller story, `-> Book c:v–c:v \| Label` link line (no label = "Written when"). |
+| Build | `node scripts/build-stories.mjs` checks every book (each verse in exactly one smaller story inside one bigger story, starts in order, every reference and link exists; Psalms info lines against `PSALM_KINDS`) and writes `apps/pwa-polished/public/stories.json`. Chapter ranges (`e`) are worked out from the starts, never typed. Precached through `includeAssets` in `vite.config`. |
+| Data | `{ books, cards }`, keyed by core book names. A story is `{ t, c, v, e }`; it runs until the next one starts. Bigger stories hold `s` (smaller) and may carry a divider `d`/`de`; smaller ones may carry `i` (info line) and `l` (link). |
+| Store | `src/lib/stories.ts`: `loadStories()` fetches once and re-keys through `normalizeBookName` ("Psalms" → "Psalm"); `storyBooks`, `storyCards`; `storyModeChosen` (localStorage `projectbible_story_mode`, not synced); `storyMode`; `storyAt()` finds a verse's story; `chapterSpan()`. |
+| Picker | `NavigationBar.svelte`: sticky `.story-toggle` at the top of `.reference-dropdown` (hidden in By Heart's `pickOnly` reader). A story tap goes through BibleReader's `goToStory` — scrolls if the verse is on the page, otherwise moves there by hand with no mark and no crumb. A link tap leaves a crumb and marks its verse. |
+| Pinned title | `StoryTitle.svelte`, a 0-height sticky dock laid over the text under the nav bar, so saved places don't change. Follows `readPosition(probe)`; `landingOffset` adds its height while it shows. Title swaps use the app's fade and follow the Motion setting. Shows in the reader, windows and side-by-side panes. |
+| Coverage | All 66 books: 492 bigger stories, 2,820 smaller stories, 25 cards. |
+
 ## 3. Translations
 
 | Feature | Detail |

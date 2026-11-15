@@ -28,7 +28,6 @@
   import type { Suggestion } from "../lib/search/searchWorker";
   import { addedWords, leadCategory, readIntent, topMatch } from "../lib/search/queryIntent";
   import { scrollBookItemToTop } from "../lib/bookPickerScroll";
-  import { devOptionsUnlocked } from "../lib/devOptions";
   import { storyMode, storyModeChosen, storyBooks, storyCards, storyAt, chapterSpan, loadStories, type SmallerStory, type StoryLink } from "../lib/stories";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import { portal } from "../lib/portal";
@@ -193,10 +192,9 @@
   let expandedBooks = new Set<string>();
 
   // ── Story Mode ─────────────────────────────────────────────────────────────
-  // The Canonical / Story Mode switch sits at the top of the Bible dropdown,
-  // in Dev Options only until every book has its stories. By Heart's simple
-  // reader keeps the plain chapter list.
-  $: showStoryToggle = $devOptionsUnlocked && !pickOnly;
+  // The Canonical / Story Mode switch sits at the top of the Bible dropdown.
+  // By Heart's simple reader keeps the plain chapter list.
+  $: showStoryToggle = !pickOnly;
   $: storiesOn = $storyMode && !pickOnly;
   /** The bigger story open in the dropdown, as "book#index". One at a time, like books. */
   let expandedStory: string | null = null;

@@ -30,6 +30,20 @@ export const NAVBAR_TIPS: Tip[] = [
     extra: 'colors',
   },
   {
+    id: 'nav-story-mode',
+    area,
+    target: '.reference-dropdown .story-toggle',
+    title: 'Story Mode',
+    body: 'Switch the book list from chapters to stories. Each book opens to its bigger stories, each of those opens to smaller ones, and every story shows its chapters in brackets. Tap a story to start at its first verse. Some books have a “How it’s built” card at the top, and some stories link to where the same events are told in another book. Switch back to Canonical for the chapter numbers. Your choice is kept on this device.',
+  },
+  {
+    id: 'nav-story-title',
+    area,
+    target: '.story-title-bar',
+    title: 'The story you’re in',
+    body: 'In Story Mode, the bigger and smaller story you’re reading stay pinned under the top bar and change as you scroll. Tap it to open the book list right at that story.',
+  },
+  {
     id: 'nav-trail',
     area,
     target: '.crumb-btn',

@@ -1,5 +1,4 @@
 import { derived, writable, type Readable } from 'svelte/store';
-import { devOptionsUnlocked } from './devOptions';
 import { normalizeBookName } from './bibleData';
 
 /**
@@ -133,15 +132,8 @@ export const storyModeChosen = {
   },
 };
 
-/**
- * Whether Story Mode is in force. Dev Options only until every book has its
- * stories: hiding Dev Options puts the app back to Canonical without losing
- * the choice.
- */
-export const storyMode: Readable<boolean> = derived(
-  [chosen, devOptionsUnlocked],
-  ([on, unlocked]) => on && unlocked,
-);
+/** Whether Story Mode is in force: the choice on this device. */
+export const storyMode: Readable<boolean> = derived(chosen, (on) => on);
 
 storyMode.subscribe((on) => {
   if (on) void loadStories();
