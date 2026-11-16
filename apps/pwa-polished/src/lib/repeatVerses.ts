@@ -19,6 +19,7 @@ import { IndexedDBSearchIndex } from '../adapters/SearchIndex';
 import { renderVerseHtml, extractHeading } from './verseRendering';
 import { normalizeRepeatWord } from '../stores/repeatsStore';
 import { BIBLE_BOOKS, normalizeBookName } from './bibleData';
+import { FILLER_WORDS } from './fillerWords';
 
 export type RepeatVersesScope = 'book' | 'all';
 
@@ -34,19 +35,6 @@ export type RepeatVerses =
 
 /** Past this many verses a list is no help to anyone. */
 export const MAX_LISTED = 5000;
-
-/** Words that carry no study value however few verses they are in. */
-const FILLER_WORDS = new Set([
-  'a', 'an', 'the', 'and', 'or', 'nor', 'but', 'yet', 'so', 'if', 'as', 'than',
-  'of', 'to', 'in', 'on', 'at', 'by', 'for', 'from', 'with', 'into', 'unto',
-  'upon', 'out', 'up', 'off', 'over', 'about',
-  'it', 'its', 'i', 'me', 'my', 'mine', 'we', 'us', 'our', 'you', 'your', 'ye',
-  'thee', 'thou', 'thy', 'thine', 'he', 'him', 'his', 'she', 'her', 'hers',
-  'they', 'them', 'their', 'this', 'that', 'these', 'those', 'which', 'who',
-  'whom', 'what', 'there', 'then',
-  'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
-  'hath', 'do', 'did', 'does', 'shall', 'will', 'not', 'no',
-]);
 
 const textStore = new IndexedDBTextStore();
 const searchIndex = new IndexedDBSearchIndex();

@@ -1,5 +1,5 @@
 /**
- * Book picture lab v1.1: one book per page, its whole text set inside a
+ * Book picture lab v1.2: one book per page, its whole text set inside a
  * symbol. Zoomed out you see the symbol, zoomed in you read the book.
  *
  * Runs the real code: lib/bookPicture/shapes.ts for the symbols and
@@ -7,9 +7,16 @@
  * (cleanVersePreviewText) to strip notes from the NET in public/starter.sqlite.
  * Nothing in the app uses any of this yet; it is here to try the look.
  *
- * Two looks: "Shape only" sets the text inside the symbol and nowhere else.
- * "Whole page" sets it across the whole page, paints the symbol's part in the
- * book color and leaves the rest faint. "Both" puts them side by side.
+ * Two views. "One book" is the book picture. "All books" is the Bubbles map
+ * (bubbles.ts): every book a circle sized by its length, splitting into its
+ * chapters and then its verses as you zoom in, with a word box that lights up
+ * every verse holding a word, and word clouds (cloud.ts) inside the bubbles.
+ * Under both is the small map (miniMap.ts), the share card and Read Aloud look.
+ *
+ * Looks in One book: "Shape only" sets the text inside the symbol and nowhere
+ * else. "Whole page" sets it across the whole page, paints the symbol's part
+ * in the book color and leaves the rest faint. "Both" puts them side by side.
+ * "Word cloud" packs the book's most used words into the symbol instead.
  *
  * Size: normally every symbol fills the page and the letter size changes per
  * book. With "Size follows the book's length", the longest book fills the
@@ -33,9 +40,12 @@ import {
   CATEGORY_LABELS,
   bookTitle,
   normalizeBookName,
+  shortBookName,
   type BookInfo,
 } from './src/lib/bibleData';
 import { cleanVersePreviewText, extractHeading } from './src/lib/verseRendering';
+import { normalizeRepeatWord } from './src/stores/repeatsStore';
+import { FILLER_WORDS } from './src/lib/fillerWords';
 import {
   SHAPES,
   GROUP_SYMBOLS,
@@ -54,13 +64,35 @@ import {
   type Mask,
   type WordSet,
 } from './src/lib/bookPicture/layout';
+import {
+  layoutBubbles,
+  verseShare,
+  verseSpot,
+  type BookBubble,
+  type BubbleMap,
+  type ChapterBubble,
+} from './src/lib/bookPicture/bubbles';
+import { cloudWordAt, countCloudWords, packCloud, type Cloud, type CloudWord } from './src/lib/bookPicture/cloud';
+import {
+  bookVerseCounts,
+  drawMiniMap,
+  miniMapLayout,
+  verseAtIndex,
+  verseEnd,
+  verseMiddle,
+  type MiniMap,
+} from './src/lib/bookPicture/miniMap';
 
 // ─── Settings ──────────────────────────────────────────────────────────────
 
-type Look = 'shape' | 'page' | 'both';
+type View = 'book' | 'bubbles';
+type Look = 'shape' | 'page' | 'both' | 'cloud';
+type MiniLook = 'mark' | 'fill';
 type ThemeId = 'dark' | 'light' | 'black';
 
 interface Values {
+  /** One book's picture, or every book as Bubbles. */
+  view: View;
   book: string;
   symbol: string;
   /** 'book', 'cream' (chapter starts in the book color), or a category whose color to borrow. */
@@ -78,10 +110,19 @@ interface Values {
   minSpan: number;
   /** The longest book fills the page; the rest shrink so the letters match. */
   sizeByLength: boolean;
+  /** Word cloud look: the most words it places. */
+  cloudWords: number;
+  /** Each book's word cloud inside its bubble, zoomed out. */
+  bubbleClouds: boolean;
+  /** The word lit up on the Bubbles, as typed. */
+  glow: string;
+  miniLook: MiniLook;
+  miniLines: number;
   theme: ThemeId;
 }
 
 const DEFAULTS: Values = {
+  view: 'book',
   book: 'Mark',
   symbol: 'cross',
   color: 'book',
@@ -97,6 +138,11 @@ const DEFAULTS: Values = {
   thicken: 0,
   minSpan: 1.5,
   sizeByLength: true,
+  cloudWords: 160,
+  bubbleClouds: true,
+  glow: '',
+  miniLook: 'mark',
+  miniLines: 18,
   theme: 'dark',
 };
 
@@ -159,6 +205,29 @@ const statsBox = $<HTMLDivElement>('stats');
 const tappedBox = $<HTMLDivElement>('tapped');
 const symbolNote = $<HTMLParagraphElement>('symbolNote');
 const valuesBox = $<HTMLTextAreaElement>('values');
+const glowInput = $<HTMLInputElement>('glow');
+const glowStats = $<HTMLDivElement>('glowStats');
+const miniBig = $<HTMLCanvasElement>('miniBig');
+const miniSmall = $<HTMLCanvasElement>('miniSmall');
+const miniVerseInput = $<HTMLInputElement>('miniVerse');
+const miniVerseOut = $<HTMLOutputElement>('miniVerseOut');
+
+const TAP_HINT_BOOK = 'Tap a word to see where it is in the book.';
+const TAP_HINT_BUBBLES = 'Tap a book, a chapter or a verse to see it.';
+
+function nextPaint(): Promise<void> {
+  return new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+}
+
+/** A steady number per name, so a cloud or a small map comes out the same each time. */
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
 
 // ─── Book text ─────────────────────────────────────────────────────────────
 
@@ -221,6 +290,79 @@ function bookText(book: string): BookText {
   return out;
 }
 
+/** A book cut into chapters and verses, for the Bubbles and the word glow. */
+interface BookIndex {
+  text: BookText;
+  /** Per verse: chapter * 1000 + verse. */
+  verseRef: Int32Array;
+  /** Per verse: its first word. One extra entry at the end. */
+  verseTok: Int32Array;
+  /** Per verse: which chapter (index into `chapters`) and its place in that chapter. */
+  verseChapter: Int32Array;
+  verseInChapter: Int32Array;
+  /** `first` is the chapter's first verse, as an index into the verse arrays. */
+  chapters: Array<{ chapter: number; words: number; verses: number; first: number }>;
+  /** Every word normalized the way Repeats does, made when first needed. */
+  norm: string[] | null;
+  cloud: CloudWord[] | null;
+}
+
+const bookIndexes = new Map<string, BookIndex>();
+
+function bookIndex(book: string): BookIndex {
+  const cached = bookIndexes.get(book);
+  if (cached) return cached;
+  const text = bookText(book);
+  const refs = text.refs;
+  const vRef: number[] = [], vTok: number[] = [], vCh: number[] = [], vIn: number[] = [];
+  const chapters: BookIndex['chapters'] = [];
+  let last = -1;
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i];
+    if (ref !== last) {
+      const ch = Math.floor(ref / 1000);
+      if (!chapters.length || chapters[chapters.length - 1].chapter !== ch) {
+        chapters.push({ chapter: ch, words: 0, verses: 0, first: vRef.length });
+      }
+      const cur = chapters[chapters.length - 1];
+      vRef.push(ref);
+      vTok.push(i);
+      vCh.push(chapters.length - 1);
+      vIn.push(cur.verses);
+      cur.verses++;
+      last = ref;
+    }
+    chapters[chapters.length - 1].words++;
+  }
+  vTok.push(refs.length);
+  const out: BookIndex = {
+    text,
+    verseRef: Int32Array.from(vRef),
+    verseTok: Int32Array.from(vTok),
+    verseChapter: Int32Array.from(vCh),
+    verseInChapter: Int32Array.from(vIn),
+    chapters,
+    norm: null,
+    cloud: null,
+  };
+  bookIndexes.set(book, out);
+  return out;
+}
+
+function normOf(ix: BookIndex): string[] {
+  return (ix.norm ??= ix.text.words.map(normalizeRepeatWord));
+}
+
+/** The book's words counted for its cloud, most used first, filler left out. */
+function cloudWordsOf(ix: BookIndex): CloudWord[] {
+  return (ix.cloud ??= countCloudWords(ix.text.words, normalizeRepeatWord, FILLER_WORDS));
+}
+
+function colorOf(book: string): string {
+  const info = bookInfo(book);
+  return info ? CATEGORY_COLORS[info.category] : '#8a8f98';
+}
+
 // ─── Building the picture ──────────────────────────────────────────────────
 
 interface Built {
@@ -234,9 +376,15 @@ interface Built {
   size: number;
   shapeLayout: Layout | null;
   pageLayout: Layout | null;
+  /** The Word cloud look, packed into the same symbol. */
+  cloud: Cloud | null;
 }
 
 let built: Built | null = null;
+/** The book changed while the Bubbles were showing; set it again on the way back. */
+let bookStale = false;
+let cloudKey = '';
+let bookCloud: Cloud | null = null;
 let measureKey = '';
 let measured: WordSet | null = null;
 let maskKey = '';
@@ -318,6 +466,11 @@ let buildGen = 0;
 
 async function rebuild(): Promise<void> {
   if (!db) return;
+  if (V.view !== 'book') {
+    bookStale = true;
+    return;
+  }
+  bookStale = false;
   const gen = ++buildGen;
   busy.textContent = 'Setting the text…';
   busy.hidden = false;
@@ -328,8 +481,13 @@ async function rebuild(): Promise<void> {
     shape.font ? document.fonts.load(shape.font, 'ΑΩ') : Promise.resolve([]),
   ]).catch(() => undefined);
   // Let the "Setting the text" note paint before the work starts.
-  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  await nextPaint();
   if (gen !== buildGen) return;
+  if (V.view !== 'book') {
+    bookStale = true;
+    busy.hidden = true;
+    return;
+  }
 
   const text = bookText(V.book);
   const mk = `${V.book}|${V.font}|${V.weight}`;
@@ -368,8 +526,23 @@ async function rebuild(): Promise<void> {
     }
     return lay;
   };
-  const wantShape = V.look !== 'page';
-  const wantPage = V.look !== 'shape';
+  const wantShape = V.look === 'shape' || V.look === 'both';
+  const wantPage = V.look === 'page' || V.look === 'both';
+  let cloud: Cloud | null = null;
+  if (V.look === 'cloud') {
+    const ck = `${mk}|${sk}|${V.cloudWords}`;
+    if (ck !== cloudKey || !bookCloud) {
+      bookCloud = packCloud(cloudWordsOf(bookIndex(V.book)), maskBuilt.mask, {
+        family: font.css,
+        weight: V.weight,
+        maxWords: V.cloudWords,
+        fill: 0.5,
+        seed: hashSeed(V.book),
+      });
+      cloudKey = ck;
+    }
+    cloud = bookCloud;
+  }
   const prevWorld = built ? worldSize() : null;
   built = {
     text,
@@ -381,6 +554,7 @@ async function rebuild(): Promise<void> {
     size,
     shapeLayout: wantShape ? layoutFor('shape') : null,
     pageLayout: wantPage ? layoutFor('page') : null,
+    cloud,
   };
   busy.hidden = true;
   const world = worldSize();
@@ -414,6 +588,7 @@ function pages(): PageDraw[] {
 }
 
 function worldSize(): { w: number; h: number } {
+  if (V.view === 'bubbles') return { w: BUBBLE_WORLD, h: BUBBLE_WORLD };
   const n = pages().length || 1;
   return { w: n * PAGE_W + (n - 1) * PAGE_GAP, h: built?.pageH ?? 1333 };
 }
@@ -529,10 +704,24 @@ function renderScene(
   c.globalCompositeOperation = 'source-over';
   c.fillStyle = theme.bg;
   c.fillRect(0, 0, W, H);
+  if (V.view === 'bubbles') {
+    renderBubbles(c, W, H, k, tx, ty, ratio);
+    return;
+  }
   if (!built) return;
   const color = textColor();
   const mark = V.chapterMarks ? markColor(color, theme.light) : null;
   const K = k * ratio;
+  if (built.cloud) {
+    const X = tx * ratio, Y = ty * ratio;
+    c.fillStyle = theme.page;
+    c.fillRect(X, Y, PAGE_W * K, built.pageH * K);
+    c.strokeStyle = theme.border;
+    c.lineWidth = Math.max(1, ratio);
+    c.strokeRect(X, Y, PAGE_W * K, built.pageH * K);
+    drawCloud(c, built.cloud, K, X, Y, W, H, color);
+    return;
+  }
   for (const pg of pages()) {
     const X = (tx + pg.ox * k) * ratio, Y = ty * ratio;
     if (X > W || X + PAGE_W * K < 0 || Y > H || Y + built.pageH * K < 0) continue;
@@ -574,6 +763,485 @@ function renderScene(
   }
 }
 
+/** The Word cloud look: biggest words first, fading a little down the list. */
+function drawCloud(
+  c: CanvasRenderingContext2D,
+  cloud: Cloud,
+  K: number,
+  X: number,
+  Y: number,
+  W: number,
+  H: number,
+  color: string,
+): void {
+  const font = FONTS[V.font] ?? FONTS.gentium;
+  const accent = bookColor();
+  const n = cloud.placed.length;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
+  for (let i = 0; i < n; i++) {
+    const p = cloud.placed[i];
+    const dx = X + p.x * K, dy = Y + p.y * K, fpx = p.f * K;
+    if (dx > W || dx + p.w * K < 0 || dy - fpx > H || dy + fpx * 0.4 < 0) continue;
+    // On cream white text the top few words carry the book color.
+    c.fillStyle = V.color === 'cream' && i < 5 ? accent : color;
+    c.globalAlpha = 1 - 0.35 * (i / Math.max(1, n - 1));
+    if (fpx < 2) {
+      c.fillRect(dx, dy - 0.46 * fpx, p.w * K, Math.max(0.5, 0.46 * fpx));
+      continue;
+    }
+    c.font = `${V.weight} ${fpx}px ${font.css}`;
+    c.fillText(p.text, dx, dy);
+  }
+  c.globalAlpha = 1;
+}
+
+// ─── Bubbles ───────────────────────────────────────────────────────────────
+
+/** The Bubbles world is a square this many units wide. */
+const BUBBLE_WORLD = 1000;
+/** A bubble's cloud is packed in a circle in a box this wide, then scaled onto the bubble. */
+const BUBBLE_BOX = 200;
+const BUBBLE_CLOUD_WORDS = 40;
+/** A book's chapters fade in while its circle grows across this range of radius, in CSS px. */
+const CHAPTERS_FROM = 90;
+const CHAPTERS_TO = 190;
+const TAU = Math.PI * 2;
+
+let bubbles: BubbleMap | null = null;
+const bubbleByBook = new Map<string, BookBubble>();
+
+/** Read every book once, then pack the map. */
+async function ensureBubbles(): Promise<void> {
+  if (bubbles || !db) return;
+  busy.textContent = 'Measuring all 66 books…';
+  busy.hidden = false;
+  await nextPaint();
+  bubbles = layoutBubbles(
+    BIBLE_BOOKS.map((b) => {
+      const ix = bookIndex(b.name);
+      return { book: b.name, words: ix.text.words.length, chapters: ix.chapters };
+    }),
+    BUBBLE_WORLD,
+  );
+  for (const b of bubbles.books) bubbleByBook.set(b.book, b);
+  busy.hidden = true;
+}
+
+// Clouds in the bubbles: one per book, packed a few at a time between frames.
+let bubbleMask: Mask | null = null;
+let bubbleCloudKey = '';
+const bubbleClouds = new Map<string, Cloud>();
+let cloudTimer = 0;
+
+/**
+ * A bubble's cloud shape: its circle with the top cut off, where the book's
+ * name sits.
+ */
+function bubbleCloudMask(): Mask {
+  return (bubbleMask ??= buildMask(BUBBLE_BOX, BUBBLE_BOX, 2, (c) => {
+    const h = BUBBLE_BOX / 2;
+    c.save();
+    c.beginPath();
+    c.rect(0, h * 0.26, BUBBLE_BOX, BUBBLE_BOX);
+    c.clip();
+    c.beginPath();
+    c.arc(h, h, h * 0.96, 0, TAU);
+    c.fill();
+    c.restore();
+  }));
+}
+
+function queueBubbleClouds(): void {
+  const font = FONTS[V.font] ?? FONTS.gentium;
+  const key = `${V.font}|${V.weight}`;
+  if (key !== bubbleCloudKey) {
+    bubbleClouds.clear();
+    bubbleCloudKey = key;
+  }
+  const queue = BIBLE_BOOKS.map((b) => b.name).filter((n) => !bubbleClouds.has(n));
+  if (!queue.length) return;
+  clearTimeout(cloudTimer);
+  void document.fonts
+    .load(`${V.weight} 16px ${font.css}`, 'The LORD')
+    .catch(() => undefined)
+    .then(() => {
+      const step = () => {
+        if (key !== bubbleCloudKey) return;
+        const t0 = performance.now();
+        while (queue.length && performance.now() - t0 < 14) {
+          const name = queue.shift()!;
+          bubbleClouds.set(
+            name,
+            packCloud(cloudWordsOf(bookIndex(name)), bubbleCloudMask(), {
+              family: font.css,
+              weight: V.weight,
+              maxWords: BUBBLE_CLOUD_WORDS,
+              fill: 0.5,
+              seed: hashSeed(name),
+            }),
+          );
+        }
+        if (V.view === 'bubbles') requestFrame();
+        if (queue.length) cloudTimer = window.setTimeout(step, 0);
+      };
+      step();
+    });
+}
+
+function cloudsShown(): boolean {
+  return V.bubbleClouds && !glow;
+}
+
+function smooth(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/** How far a book has split into its chapters at this zoom (0 to 1). */
+function chapterMix(b: BookBubble, kk: number): number {
+  return b.chapters.length ? smooth(CHAPTERS_FROM, CHAPTERS_TO, b.r * kk) : 0;
+}
+
+// The word glow: every verse holding the word, per book.
+interface Glow {
+  word: string;
+  label: string;
+  /** Book → the verses (indexes into its BookIndex) with the word. */
+  perBook: Map<string, Int32Array>;
+  verses: number;
+  books: number;
+}
+
+let glow: Glow | null = null;
+
+function computeGlow(raw: string): Glow | null {
+  const word = normalizeRepeatWord(raw);
+  if (!word) return null;
+  const perBook = new Map<string, Int32Array>();
+  let verses = 0;
+  for (const b of BIBLE_BOOKS) {
+    const ix = bookIndex(b.name);
+    const norm = normOf(ix);
+    const hits: number[] = [];
+    let v = 0;
+    for (let i = 0; i < norm.length; i++) {
+      if (norm[i] !== word) continue;
+      while (ix.verseTok[v + 1] <= i) v++;
+      if (hits[hits.length - 1] !== v) hits.push(v);
+    }
+    if (hits.length) {
+      perBook.set(b.name, Int32Array.from(hits));
+      verses += hits.length;
+    }
+  }
+  return { word, label: raw.trim(), perBook, verses, books: perBook.size };
+}
+
+let normsReady = false;
+
+async function setGlow(raw: string): Promise<void> {
+  const label = raw.trim();
+  V.glow = label;
+  saveValues();
+  if (glowInput.value.trim() !== label) glowInput.value = label;
+  if (!label || !db) {
+    glow = null;
+  } else {
+    if (!normsReady) {
+      busy.textContent = 'Reading every book…';
+      busy.hidden = false;
+      await nextPaint();
+    }
+    glow = computeGlow(label);
+    normsReady = true;
+    busy.hidden = true;
+  }
+  showGlowStats();
+  if (V.view === 'bubbles') renderCrisp();
+}
+
+function showGlowStats(): void {
+  if (!glow) {
+    glowStats.textContent = 'No word lit. Type one above, or tap a word in a cloud.';
+    return;
+  }
+  if (!glow.verses) {
+    glowStats.innerHTML = `No verse in the NET has “${escapeHtml(glow.label)}”.`;
+    return;
+  }
+  const top = [...glow.perBook].sort((a, b) => b[1].length - a[1].length).slice(0, 5);
+  glowStats.innerHTML =
+    `<b>“${escapeHtml(glow.label)}”</b> is in ${glow.verses.toLocaleString()} verse${glow.verses === 1 ? '' : 's'} ` +
+    `across ${glow.books} book${glow.books === 1 ? '' : 's'}.<br>Most: ` +
+    top.map(([book, h]) => `<span style="color:${colorOf(book)}">${escapeHtml(bookTitle(book))}</span> ${h.length}`).join(', ') +
+    (FILLER_WORDS.has(glow.word) ? `<br><span class="warn">A filler word: Repeats won't list its verses.</span>` : '');
+}
+
+function renderBubbles(
+  c: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  kk: number,
+  ox: number,
+  oy: number,
+  ratio: number,
+): void {
+  if (!bubbles) return;
+  const theme = THEMES[V.theme] ?? THEMES.dark;
+  const font = FONTS[V.font] ?? FONTS.gentium;
+  const K = kk * ratio, X = ox * ratio, Y = oy * ratio;
+  const showClouds = cloudsShown();
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  for (const b of bubbles.books) {
+    const sx = X + b.x * K, sy = Y + b.y * K, sr = b.r * K;
+    if (sx + sr < 0 || sx - sr > W || sy + sr < 0 || sy - sr > H) continue;
+    const color = colorOf(b.book);
+    const hits = glow ? glow.perBook.get(b.book) ?? null : null;
+    const dim = glow && !hits ? 0.25 : 1;
+    const tc = chapterMix(b, kk);
+    const ix = bookIndex(b.book);
+
+    c.beginPath();
+    c.arc(sx, sy, sr, 0, TAU);
+    c.globalAlpha = dim * (theme.light ? 0.18 : 0.14) * (1 - tc * 0.5);
+    c.fillStyle = color;
+    c.fill();
+    c.globalAlpha = dim * 0.75;
+    c.strokeStyle = color;
+    c.lineWidth = Math.max(1, ratio * 1.2);
+    c.stroke();
+
+    if (tc > 0.01) drawChapters(c, b, ix, K, X, Y, W, H, ratio, dim * tc, color, !!glow);
+
+    const cloud = showClouds ? bubbleClouds.get(b.book) : undefined;
+    const cloudAlpha = cloud ? dim * (1 - tc) : 0;
+    if (cloud && cloudAlpha > 0.01) drawBubbleCloud(c, b, cloud, K, X, Y, cloudAlpha, color);
+
+    if (hits) drawGlowDots(c, b, ix, hits, K, X, Y, W, H, ratio, color);
+
+    drawBubbleName(c, b, sx, sy, sr, ratio, dim, showClouds && !!cloud ? 0 : 1 - tc, hits?.length ?? 0, font.css);
+  }
+  c.globalAlpha = 1;
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
+}
+
+function drawChapters(
+  c: CanvasRenderingContext2D,
+  b: BookBubble,
+  ix: BookIndex,
+  K: number,
+  X: number,
+  Y: number,
+  W: number,
+  H: number,
+  ratio: number,
+  alpha: number,
+  color: string,
+  glowing: boolean,
+): void {
+  const theme = THEMES[V.theme] ?? THEMES.dark;
+  const font = FONTS[V.font] ?? FONTS.gentium;
+  c.textAlign = 'center';
+  b.chapters.forEach((ch, ci) => {
+    const cx = X + ch.x * K, cy = Y + ch.y * K, cr = ch.r * K;
+    if (cx + cr < 0 || cx - cr > W || cy + cr < 0 || cy - cr > H) return;
+    c.beginPath();
+    c.arc(cx, cy, cr, 0, TAU);
+    c.globalAlpha = alpha * 0.08;
+    c.fillStyle = color;
+    c.fill();
+    c.globalAlpha = alpha * 0.55;
+    c.strokeStyle = color;
+    c.lineWidth = Math.max(0.75, ratio * 0.9);
+    c.stroke();
+    const share = verseShare(ch, ch.verses) * K;
+    if (share / ratio >= 5) {
+      // Close enough to see the verses: numbers when there's room, dots when not.
+      const numbers = share / ratio >= 13;
+      c.fillStyle = theme.neutral;
+      c.globalAlpha = alpha * (glowing ? 0.3 : 0.5);
+      c.textBaseline = 'middle';
+      if (numbers) c.font = `${Math.min(share * 0.7, 15 * ratio)}px ${font.css}`;
+      const first = ix.chapters[ci]?.first ?? 0;
+      for (let v = 0; v < ch.verses; v++) {
+        const p = verseSpot(ch, v, ch.verses);
+        const px = X + p.x * K, py = Y + p.y * K;
+        if (px < -20 || px > W + 20 || py < -20 || py > H + 20) continue;
+        if (numbers) c.fillText(String(ix.verseRef[first + v] % 1000), px, py);
+        else c.fillRect(px - ratio, py - ratio, 2 * ratio, 2 * ratio);
+      }
+      // The chapter's name in the ring the verses leave free at the edge.
+      const fs = Math.min(cr * 0.06, 14 * ratio);
+      if (fs / ratio >= 7) {
+        c.globalAlpha = alpha;
+        c.fillStyle = color;
+        c.font = `600 ${fs}px ${font.css}`;
+        c.fillText(`${bookTitle(b.book)} ${ch.chapter}`, cx, cy - cr * 0.955);
+      }
+      c.textBaseline = 'alphabetic';
+    } else if (cr / ratio >= 9) {
+      c.globalAlpha = alpha * (glowing ? 0.45 : 0.8);
+      c.fillStyle = theme.neutral;
+      c.font = `${Math.min(cr * 0.6, 26 * ratio)}px ${font.css}`;
+      c.textBaseline = 'middle';
+      c.fillText(String(ch.chapter), cx, cy);
+      c.textBaseline = 'alphabetic';
+    }
+  });
+  c.globalAlpha = 1;
+}
+
+function drawBubbleCloud(
+  c: CanvasRenderingContext2D,
+  b: BookBubble,
+  cloud: Cloud,
+  K: number,
+  X: number,
+  Y: number,
+  alpha: number,
+  color: string,
+): void {
+  const theme = THEMES[V.theme] ?? THEMES.dark;
+  const font = FONTS[V.font] ?? FONTS.gentium;
+  const s = (b.r / (BUBBLE_BOX / 2)) * K;
+  const ox = X + (b.x - b.r) * K, oy = Y + (b.y - b.r) * K;
+  const ink = theme.light ? mix(color, '#000000', 0.35) : mix(color, '#ffffff', 0.35);
+  const n = cloud.placed.length;
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
+  c.fillStyle = ink;
+  for (let i = 0; i < n; i++) {
+    const p = cloud.placed[i];
+    const fpx = p.f * s;
+    if (fpx < 2.2) continue;
+    c.globalAlpha = alpha * (1 - (0.4 * i) / Math.max(1, n - 1));
+    c.font = `${V.weight} ${fpx.toFixed(1)}px ${font.css}`;
+    c.fillText(p.text, ox + p.x * s, oy + p.y * s);
+  }
+  c.globalAlpha = 1;
+}
+
+function drawGlowDots(
+  c: CanvasRenderingContext2D,
+  b: BookBubble,
+  ix: BookIndex,
+  hits: Int32Array,
+  K: number,
+  X: number,
+  Y: number,
+  W: number,
+  H: number,
+  ratio: number,
+  color: string,
+): void {
+  const theme = THEMES[V.theme] ?? THEMES.dark;
+  const core = theme.light ? mix(color, '#000000', 0.2) : mix(color, '#ffffff', 0.6);
+  c.save();
+  if (!theme.light) c.globalCompositeOperation = 'lighter';
+  for (let h = 0; h < hits.length; h++) {
+    const v = hits[h];
+    const ch = b.chapters[ix.verseChapter[v]];
+    if (!ch) continue;
+    const p = verseSpot(ch, ix.verseInChapter[v], ch.verses);
+    const px = X + p.x * K, py = Y + p.y * K;
+    if (px < -24 || px > W + 24 || py < -24 || py > H + 24) continue;
+    const share = verseShare(ch, ch.verses) * K;
+    if (share / ratio >= 13) {
+      // Verse numbers are showing: ring the number rather than cover it.
+      const rr = Math.min(share * 0.62, 17 * ratio);
+      c.globalAlpha = 0.28;
+      c.fillStyle = color;
+      c.beginPath();
+      c.arc(px, py, rr, 0, TAU);
+      c.fill();
+      c.globalAlpha = 1;
+      c.strokeStyle = core;
+      c.lineWidth = 1.6 * ratio;
+      c.stroke();
+      continue;
+    }
+    const rr = Math.min(7 * ratio, Math.max(1.3 * ratio, share * 0.5));
+    c.globalAlpha = 0.35;
+    c.fillStyle = color;
+    c.beginPath();
+    c.arc(px, py, rr * 2.2, 0, TAU);
+    c.fill();
+    c.globalAlpha = 1;
+    c.fillStyle = core;
+    c.beginPath();
+    c.arc(px, py, rr, 0, TAU);
+    c.fill();
+  }
+  c.restore();
+}
+
+/**
+ * The book's name: big in the middle of a plain bubble, or small in the band
+ * at the top once a cloud or the chapters fill it. `center` blends the two.
+ */
+function drawBubbleName(
+  c: CanvasRenderingContext2D,
+  b: BookBubble,
+  sx: number,
+  sy: number,
+  sr: number,
+  ratio: number,
+  dim: number,
+  center: number,
+  count: number,
+  family: string,
+): void {
+  const theme = THEMES[V.theme] ?? THEMES.dark;
+  const name = shortBookName(b.book);
+  const lit = mix(colorOf(b.book), theme.light ? '#000000' : '#ffffff', theme.light ? 0.2 : 0.55);
+  c.textAlign = 'center';
+  c.textBaseline = 'alphabetic';
+  if (center > 0.01) {
+    c.font = `600 100px ${family}`;
+    const wd = c.measureText(name).width / 100;
+    const fs = Math.min(sr * 0.36, (sr * 1.55) / Math.max(0.1, wd));
+    if (fs / ratio >= 6) {
+      c.globalAlpha = dim * center * 0.9;
+      c.fillStyle = theme.neutral;
+      c.font = `600 ${fs}px ${family}`;
+      c.fillText(name, sx, count ? sy - fs * 0.05 : sy + fs * 0.33);
+      if (count) {
+        c.fillStyle = lit;
+        c.font = `600 ${fs * 0.8}px ${family}`;
+        c.fillText(count.toLocaleString(), sx, sy + fs * 0.85);
+      }
+    }
+  }
+  const top = 1 - center;
+  if (top > 0.01) {
+    const fs = Math.min(sr * 0.15, 30 * ratio);
+    if (fs / ratio >= 5.5) {
+      const label = count ? `${name} · ${count.toLocaleString()}` : name;
+      const y = sy - sr * 0.78;
+      c.font = `600 ${fs}px ${family}`;
+      c.globalAlpha = dim * top;
+      c.lineJoin = 'round';
+      c.lineWidth = Math.max(2 * ratio, fs * 0.28);
+      c.strokeStyle = theme.bg;
+      c.strokeText(label, sx, y);
+      c.fillStyle = count ? lit : theme.neutral;
+      c.fillText(label, sx, y);
+    }
+  }
+  c.globalAlpha = 1;
+}
+
+function zoomToBook(book: string): void {
+  const b = bubbleByBook.get(book);
+  if (!b) return;
+  const [kMin, kMax] = kLimits();
+  const nk = Math.min(kMax, Math.max(kMin, (Math.min(cssW, cssH) * 0.42) / b.r));
+  animateTo(nk, cssW / 2 - b.x * nk, cssH / 2 - b.y * nk);
+}
+
 // ─── View ──────────────────────────────────────────────────────────────────
 
 let dpr = 1;
@@ -593,8 +1261,22 @@ function smallestF(): number {
   return fs.length ? Math.min(...fs) : 1;
 }
 
+/** The Word cloud look's smallest word, in page units. */
+function smallestCloudF(): number {
+  const placed = built?.cloud?.placed;
+  if (!placed?.length) return 1;
+  let f = Infinity;
+  for (const p of placed) f = Math.min(f, p.f);
+  return f;
+}
+
 function kLimits(): [number, number] {
   const kf = fitK();
+  if (V.view === 'bubbles') {
+    // Far enough in that the smallest chapter shows its verses.
+    return [kf * 0.5, Math.max(kf * 8, 160 / (bubbles?.minChapterR ?? 1))];
+  }
+  if (built?.cloud) return [kf * 0.5, Math.max(kf * 2, 24 / smallestCloudF())];
   return [kf * 0.5, Math.max(kf * 2, 56 / smallestF())];
 }
 
@@ -640,7 +1322,7 @@ function resize(): void {
     ty = cssH / 2 - cy * k;
     clampView();
   }
-  if (built) renderCrisp();
+  renderCrisp();
 }
 
 // ─── Rendering ─────────────────────────────────────────────────────────────
@@ -664,7 +1346,8 @@ function renderBase(): void {
 
 function ensureBase(): void {
   clearTimeout(baseTimer);
-  if (!built || !baseStale) return;
+  // The Bubbles are cheap enough to draw sharp every frame.
+  if (V.view === 'bubbles' || !built || !baseStale) return;
   baseStale = false;
   const { w, h } = worldSize();
   const maxSide = 4096, maxPx = 8e6;
@@ -720,7 +1403,7 @@ function requestFrame(): void {
   if (!raf) {
     raf = requestAnimationFrame(() => {
       raf = 0;
-      if (wordsOnScreen() < 2500) renderCrisp();
+      if (V.view === 'bubbles' || wordsOnScreen() < 2500) renderCrisp();
       else drawStretched();
     });
   }
@@ -767,8 +1450,17 @@ function animateZoomAt(cx: number, cy: number, factor: number): void {
 }
 
 function updateReadout(): void {
+  if (V.view === 'bubbles') {
+    readout.textContent = bubbles ? `zoom ${(k / fitK()).toFixed(1)}×` : '';
+    return;
+  }
   if (!built) {
     readout.textContent = '';
+    return;
+  }
+  if (built.cloud) {
+    const big = built.cloud.placed[0]?.f ?? 0;
+    readout.textContent = `zoom ${(k / fitK()).toFixed(1)}× · biggest word ${(big * k).toFixed(0)} px`;
     return;
   }
   const f = pages()[0]?.layout.f ?? 1;
@@ -855,7 +1547,8 @@ function endPointer(e: PointerEvent): void {
         lastTap = { t: 0, x: 0, y: 0 };
       } else {
         lastTap = { t: now, x: p.x, y: p.y };
-        showTapped(p.x, p.y);
+        if (V.view === 'bubbles') tapBubbles(p.x, p.y);
+        else showTapped(p.x, p.y);
       }
     }
     press = null;
@@ -885,7 +1578,8 @@ $('fit').addEventListener('click', () => {
 $('zoomIn').addEventListener('click', () => animateZoomAt(cssW / 2, cssH / 2, 2));
 $('zoomOut').addEventListener('click', () => animateZoomAt(cssW / 2, cssH / 2, 0.5));
 $('readSize').addEventListener('click', () => {
-  const f = pages()[0]?.layout.f;
+  if (V.view !== 'book') return;
+  const f = built?.cloud ? smallestCloudF() : pages()[0]?.layout.f;
   if (!f) return;
   animateZoomAt(cssW / 2, cssH / 2, 16 / f / k);
 });
@@ -895,6 +1589,7 @@ $('readSize').addEventListener('click', () => {
 function wordAt(cx: number, cy: number): number {
   if (!built) return -1;
   const wx = (cx - tx) / k, wy = (cy - ty) / k;
+  if (built.cloud) return cloudWordAt(built.cloud, wx, wy, 4 / k);
   for (const pg of pages()) {
     const px = wx - pg.ox;
     if (px < 0 || px > PAGE_W || wy < 0 || wy > built.pageH) continue;
@@ -922,9 +1617,151 @@ function escapeHtml(s: string): string {
 function showTapped(cx: number, cy: number): void {
   const i = wordAt(cx, cy);
   if (!built || i < 0) return;
+  if (built.cloud) {
+    void tapCloudWord(V.book, built.cloud.placed[i].word);
+    return;
+  }
   const ref = built.text.refs[i];
   const ch = Math.floor(ref / 1000), vs = ref % 1000;
   tappedBox.innerHTML = `<b style="color:${V.color === 'cream' ? bookColor() : textColor()}">${escapeHtml(bookTitle(V.book))} ${ch}:${vs}</b> · “${escapeHtml(built.set.words[i])}”`;
+  setMiniVerse(ch, vs);
+}
+
+/** A cloud word was tapped (in One book or in a bubble): it becomes the glow word. */
+async function tapCloudWord(book: string, wordIndex: number): Promise<void> {
+  const w = cloudWordsOf(bookIndex(book))[wordIndex];
+  if (!w) return;
+  const said = `<b style="color:${colorOf(book)}">“${escapeHtml(w.text)}”</b> · ${w.count.toLocaleString()} time${w.count === 1 ? '' : 's'} in ${escapeHtml(bookTitle(book))}.`;
+  tappedBox.innerHTML = said;
+  await setGlow(w.text);
+  if (!glow) return;
+  tappedBox.innerHTML = said +
+    ` Now lit on All books: ${glow.verses.toLocaleString()} verses in ${glow.books} books.` +
+    (V.view === 'book' ? ` <button data-act="bubbles">See it on All books</button>` : '');
+}
+
+// ─── Taps on the Bubbles ───────────────────────────────────────────────────
+
+/** What a tap on the Bubbles picks: a glow dot, a cloud word, a verse, a chapter, then a book. */
+function tapBubbles(cx: number, cy: number): void {
+  if (!bubbles) return;
+  const wx = (cx - tx) / k, wy = (cy - ty) / k;
+  if (glow) {
+    let best: { book: string; v: number } | null = null;
+    let bd = 14;
+    for (const [book, hits] of glow.perBook) {
+      const b = bubbleByBook.get(book);
+      if (!b || Math.hypot(wx - b.x, wy - b.y) > b.r + 14 / k) continue;
+      const ix = bookIndex(book);
+      for (const v of hits) {
+        const ch = b.chapters[ix.verseChapter[v]];
+        if (!ch) continue;
+        const p = verseSpot(ch, ix.verseInChapter[v], ch.verses);
+        const d = Math.hypot(p.x * k + tx - cx, p.y * k + ty - cy);
+        if (d < bd) {
+          bd = d;
+          best = { book, v };
+        }
+      }
+    }
+    if (best) {
+      showVerse(best.book, best.v);
+      return;
+    }
+  }
+  let b: BookBubble | null = null;
+  for (const x of bubbles.books) {
+    if ((wx - x.x) ** 2 + (wy - x.y) ** 2 <= x.r * x.r) {
+      b = x;
+      break;
+    }
+  }
+  if (!b) return;
+  const tc = chapterMix(b, k);
+  if (cloudsShown() && tc < 0.5) {
+    const cloud = bubbleClouds.get(b.book);
+    if (cloud) {
+      const s = b.r / (BUBBLE_BOX / 2);
+      const i = cloudWordAt(cloud, (wx - (b.x - b.r)) / s, (wy - (b.y - b.r)) / s, 6 / (k * s));
+      if (i >= 0) {
+        void tapCloudWord(b.book, cloud.placed[i].word);
+        return;
+      }
+    }
+  }
+  if (tc >= 0.5) {
+    const ci = b.chapters.findIndex((ch) => (wx - ch.x) ** 2 + (wy - ch.y) ** 2 <= ch.r * ch.r);
+    if (ci >= 0) {
+      const ch = b.chapters[ci];
+      if (verseShare(ch, ch.verses) * k >= 5) {
+        let bv = 0, bd = Infinity;
+        for (let v = 0; v < ch.verses; v++) {
+          const p = verseSpot(ch, v, ch.verses);
+          const d = (p.x - wx) ** 2 + (p.y - wy) ** 2;
+          if (d < bd) {
+            bd = d;
+            bv = v;
+          }
+        }
+        showVerse(b.book, (bookIndex(b.book).chapters[ci]?.first ?? 0) + bv);
+      } else {
+        showChapter(b, ch, ci);
+      }
+      return;
+    }
+  }
+  showBook(b);
+}
+
+/** How many of a book's lit verses fall in [from, to). */
+function litBetween(book: string, from: number, to: number): number {
+  const hits = glow?.perBook.get(book);
+  if (!hits) return 0;
+  let n = 0;
+  for (const v of hits) if (v >= from && v < to) n++;
+  return n;
+}
+
+function showVerse(book: string, v: number): void {
+  const ix = bookIndex(book);
+  const ref = ix.verseRef[v];
+  const ch = Math.floor(ref / 1000), vs = ref % 1000;
+  const words = ix.text.words.slice(ix.verseTok[v], ix.verseTok[v + 1]);
+  const color = colorOf(book);
+  const html = words
+    .map((w) => (glow && normalizeRepeatWord(w) === glow.word ? `<b style="color:${color}">${escapeHtml(w)}</b>` : escapeHtml(w)))
+    .join(' ');
+  tappedBox.innerHTML = `<b style="color:${color}">${escapeHtml(bookTitle(book))} ${ch}:${vs}</b> · ${html}`;
+  pickBook(book);
+  setMiniVerse(ch, vs);
+}
+
+function showChapter(b: BookBubble, ch: ChapterBubble, ci: number): void {
+  const first = bookIndex(b.book).chapters[ci]?.first ?? 0;
+  const lit = glow ? litBetween(b.book, first, first + ch.verses) : 0;
+  tappedBox.innerHTML =
+    `<b style="color:${colorOf(b.book)}">${escapeHtml(bookTitle(b.book))} ${ch.chapter}</b> · ` +
+    `${ch.verses} verses · ${ch.words.toLocaleString()} words` +
+    (glow ? ` · “${escapeHtml(glow.label)}” in ${lit}` : '');
+  pickBook(b.book);
+  setMiniVerse(ch.chapter, 1);
+}
+
+function showBook(b: BookBubble): void {
+  const verses = bookIndex(b.book).verseRef.length;
+  const lit = glow?.perBook.get(b.book)?.length ?? 0;
+  tappedBox.innerHTML =
+    `<b style="color:${colorOf(b.book)}">${escapeHtml(bookTitle(b.book))}</b> · ` +
+    `${b.chapters.length} chapter${b.chapters.length === 1 ? '' : 's'} · ${verses.toLocaleString()} verses · ${b.words.toLocaleString()} words` +
+    (glow ? ` · “${escapeHtml(glow.label)}” in ${lit}` : '');
+  pickBook(b.book);
+}
+
+/** A tap on the Bubbles makes that the book: the small map shows it, and One book opens on it. */
+function pickBook(book: string): void {
+  if (book === V.book) return;
+  setBook(book);
+  bookStale = true;
 }
 
 // ─── Stats ─────────────────────────────────────────────────────────────────
@@ -956,6 +1793,16 @@ function showStats(): void {
   };
   if (built.shapeLayout) describe(built.shapeLayout, 'Shape only');
   if (built.pageLayout) describe(built.pageLayout, 'Whole page');
+  if (built.cloud) {
+    const all = cloudWordsOf(bookIndex(V.book));
+    const placed = built.cloud.placed.length;
+    lines.push(
+      `Word cloud: ${all.length.toLocaleString()} different words once filler words are left out; ` +
+      `the ${placed.toLocaleString()} most used are in the cloud` +
+      (built.cloud.skipped ? ` <span class="warn">(${built.cloud.skipped} more found no room)</span>` : '') +
+      `. Most used: ${all.slice(0, 6).map((w) => `${escapeHtml(w.text)} ${w.count.toLocaleString()}`).join(', ')}.`,
+    );
+  }
   statsBox.innerHTML = lines.join('<br>');
 }
 
@@ -975,6 +1822,101 @@ function showSymbolNote(): void {
     symbolNote.textContent = `The ${groupName} group symbol.`;
   }
 }
+
+// ─── Small map ─────────────────────────────────────────────────────────────
+
+let mini: MiniMap | null = null;
+let miniKey = '';
+/** The chosen verse, counted through the whole book from 0. */
+let miniVerse = 0;
+let playTimer = 0;
+
+function miniMap(): MiniMap {
+  const key = `${V.book}|${V.miniLines}`;
+  if (!mini || key !== miniKey) {
+    if (!mini || !miniKey.startsWith(`${V.book}|`)) miniVerse = 0;
+    mini = miniMapLayout(bookVerseCounts(V.book), V.miniLines, hashSeed(V.book));
+    miniKey = key;
+    miniVerseInput.max = String(mini.totalVerses - 1);
+  }
+  return mini;
+}
+
+function drawMini(): void {
+  const map = miniMap();
+  miniVerse = Math.max(0, Math.min(miniVerse, map.totalVerses - 1));
+  miniVerseInput.value = String(miniVerse);
+  const { chapter, verse } = verseAtIndex(map, miniVerse);
+  miniVerseOut.textContent = `${chapter}:${verse}`;
+  const theme = THEMES[V.theme] ?? THEMES.dark;
+  const color = bookColor();
+  const ratio = Math.min(3, window.devicePixelRatio || 1);
+  for (const cv of [miniBig, miniSmall]) {
+    const css = cv.clientWidth || (cv === miniBig ? 168 : 44);
+    const px = Math.max(1, Math.round(css * ratio));
+    if (cv.width !== px || cv.height !== px) {
+      cv.width = px;
+      cv.height = px;
+    }
+    const c = cv.getContext('2d')!;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1;
+    c.fillStyle = theme.page;
+    c.fillRect(0, 0, px, px);
+    drawMiniMap(c, map, {
+      cx: px / 2,
+      cy: px / 2,
+      r: (px / 2) * 0.9,
+      color,
+      ink: theme.neutral,
+      inkAlpha: theme.light ? 0.3 : 0.24,
+      mark: V.miniLook === 'mark' ? verseMiddle(map, chapter, verse) : null,
+      fill: V.miniLook === 'fill' ? verseEnd(map, chapter, verse) : null,
+      minMark: 1.6 * ratio,
+    });
+  }
+}
+
+/** Point the small map at a verse of the current book. */
+function setMiniVerse(chapter: number, verse: number): void {
+  const map = miniMap();
+  miniVerse = (map.chapterBefore[chapter - 1] ?? 0) + verse - 1;
+  drawMini();
+}
+
+function stopPlay(): void {
+  clearInterval(playTimer);
+  playTimer = 0;
+  $('miniPlay').textContent = 'Play';
+}
+
+$('miniPlay').addEventListener('click', () => {
+  if (playTimer) {
+    stopPlay();
+    return;
+  }
+  V.miniLook = 'fill';
+  saveValues();
+  syncControls();
+  const map = miniMap();
+  if (miniVerse >= map.totalVerses - 1) miniVerse = 0;
+  $('miniPlay').textContent = 'Stop';
+  drawMini();
+  // One redraw per verse, the beat the player's verse highlight keeps.
+  playTimer = window.setInterval(() => {
+    if (miniVerse >= miniMap().totalVerses - 1) {
+      stopPlay();
+      return;
+    }
+    miniVerse++;
+    drawMini();
+  }, 600);
+});
+
+miniVerseInput.addEventListener('input', () => {
+  miniVerse = Number(miniVerseInput.value);
+  drawMini();
+});
 
 // ─── Controls ──────────────────────────────────────────────────────────────
 
@@ -1010,13 +1952,23 @@ fillSelect(fontSel, Object.entries(FONTS).map(([id, f]) => [id, f.label]));
 fillSelect(pageSel, Object.entries(PAGES).map(([id, p]) => [id, p.label]));
 fillSelect(themeSel, Object.entries(THEMES).map(([id, t]) => [id, t.label]));
 
-const sliders: Array<{ key: 'lineSpacing' | 'faint' | 'margin' | 'thicken' | 'minSpan'; fmt: (v: number) => string; rebuild: boolean }> = [
+type SliderKey = 'lineSpacing' | 'faint' | 'margin' | 'thicken' | 'minSpan' | 'cloudWords' | 'miniLines';
+const sliders: Array<{ key: SliderKey; fmt: (v: number) => string; rebuild: boolean; mini?: boolean }> = [
   { key: 'lineSpacing', fmt: (v) => v.toFixed(2), rebuild: true },
   { key: 'faint', fmt: (v) => `${Math.round(v * 100)}%`, rebuild: false },
   { key: 'margin', fmt: (v) => `${v}%`, rebuild: true },
   { key: 'thicken', fmt: (v) => v.toFixed(1), rebuild: true },
   { key: 'minSpan', fmt: (v) => v.toFixed(1), rebuild: true },
+  { key: 'cloudWords', fmt: (v) => String(v), rebuild: true },
+  { key: 'miniLines', fmt: (v) => String(v), rebuild: false, mini: true },
 ];
+
+const VIEW_HINTS: Record<View, string> = {
+  book: "One book's whole text set inside a symbol, or its words as a cloud.",
+  bubbles:
+    'Every book as a circle, sized by how much text it has and colored by its group: Genesis in the middle, Revelation near the edge. ' +
+    'Pinch or scroll in and a book splits into its chapters; further in, each chapter shows its verses, verse 1 in the middle and the rest spiraling out.',
+};
 
 function syncControls(): void {
   bookSel.value = V.book;
@@ -1025,19 +1977,34 @@ function syncControls(): void {
   fontSel.value = V.font;
   pageSel.value = V.page;
   themeSel.value = V.theme;
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#view button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.view === V.view));
+  }
   for (const b of document.querySelectorAll<HTMLButtonElement>('#look button')) {
     b.setAttribute('aria-pressed', String(b.dataset.look === V.look));
   }
   for (const b of document.querySelectorAll<HTMLButtonElement>('#weight button')) {
     b.setAttribute('aria-pressed', String(Number(b.dataset.weight) === V.weight));
   }
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#miniLook button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.mini === V.miniLook));
+  }
   $<HTMLInputElement>('chapterMarks').checked = V.chapterMarks;
   $<HTMLInputElement>('faintInColor').checked = V.faintInColor;
   $<HTMLInputElement>('sizeByLength').checked = V.sizeByLength;
+  $<HTMLInputElement>('bubbleClouds').checked = V.bubbleClouds;
+  if (document.activeElement !== glowInput) glowInput.value = V.glow;
   for (const s of sliders) {
     $<HTMLInputElement>(s.key).value = String(V[s.key]);
     $<HTMLOutputElement>(`${s.key}Out`).textContent = s.fmt(V[s.key]);
   }
+  const bubblesView = V.view === 'bubbles';
+  $('bookControls').hidden = bubblesView;
+  $('bubbleControls').hidden = !bubblesView;
+  $('cloudRow').hidden = V.look !== 'cloud';
+  $('readSize').hidden = bubblesView;
+  $('fit').textContent = bubblesView ? 'All books' : 'Whole page';
+  $('viewHint').textContent = VIEW_HINTS[V.view];
   showSymbolNote();
 }
 
@@ -1060,20 +2027,68 @@ function changed(needsRebuild: boolean): void {
   });
 }
 
-bookSel.addEventListener('change', () => {
-  // A new book shows its group's symbol when that one is drawn, unless a
-  // different symbol (the circle, say) was picked on purpose.
+/**
+ * Change the book. It shows its group's symbol when that one is drawn,
+ * unless a different symbol (the circle, say) was picked on purpose.
+ */
+function setBook(name: string): void {
+  if (name === V.book) return;
   const prev = bookInfo(V.book);
   const prevGroup = prev ? GROUP_SYMBOLS[prev.category] : null;
   const followGroup = !prevGroup?.id || V.symbol === prevGroup.id;
-  V.book = bookSel.value;
-  tappedBox.textContent = 'Tap a word to see where it is in the book.';
-  const info = bookInfo(V.book);
+  V.book = name;
+  bookSel.value = name;
+  const info = bookInfo(name);
   const group = info ? GROUP_SYMBOLS[info.category] : null;
   if (followGroup && group?.id) {
     V.symbol = group.id;
     symbolSel.value = V.symbol;
   }
+  stopPlay();
+  saveValues();
+  showSymbolNote();
+  drawMini();
+}
+
+async function setView(view: View): Promise<void> {
+  V.view = view;
+  saveValues();
+  syncControls();
+  viewSet = false;
+  tappedBox.textContent = view === 'bubbles' ? TAP_HINT_BUBBLES : TAP_HINT_BOOK;
+  if (view === 'bubbles') {
+    await ensureBubbles();
+    if (V.view !== 'bubbles') return;
+    if (V.glow && glow?.label !== V.glow) await setGlow(V.glow);
+    if (V.bubbleClouds) queueBubbleClouds();
+    fitView();
+    clampView();
+    renderCrisp();
+    return;
+  }
+  if (!built || bookStale) {
+    await rebuild();
+  } else {
+    fitView();
+    clampView();
+    renderBase();
+    renderCrisp();
+  }
+}
+
+for (const b of document.querySelectorAll<HTMLButtonElement>('#view button')) {
+  b.addEventListener('click', () => {
+    if (b.dataset.view !== V.view) void setView(b.dataset.view as View);
+  });
+}
+bookSel.addEventListener('change', () => {
+  setBook(bookSel.value);
+  if (V.view === 'bubbles') {
+    bookStale = true;
+    zoomToBook(V.book);
+    return;
+  }
+  tappedBox.textContent = TAP_HINT_BOOK;
   viewSet = false;
   changed(true);
 });
@@ -1097,6 +2112,7 @@ pageSel.addEventListener('change', () => {
 themeSel.addEventListener('change', () => {
   V.theme = themeSel.value as ThemeId;
   changed(false);
+  drawMini();
 });
 for (const b of document.querySelectorAll<HTMLButtonElement>('#look button')) {
   b.addEventListener('click', () => {
@@ -1113,6 +2129,15 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('#weight button')) 
     changed(true);
   });
 }
+for (const b of document.querySelectorAll<HTMLButtonElement>('#miniLook button')) {
+  b.addEventListener('click', () => {
+    stopPlay();
+    V.miniLook = b.dataset.mini as MiniLook;
+    saveValues();
+    syncControls();
+    drawMini();
+  });
+}
 $<HTMLInputElement>('chapterMarks').addEventListener('change', (e) => {
   V.chapterMarks = (e.target as HTMLInputElement).checked;
   changed(false);
@@ -1125,14 +2150,45 @@ $<HTMLInputElement>('sizeByLength').addEventListener('change', (e) => {
   V.sizeByLength = (e.target as HTMLInputElement).checked;
   changed(true);
 });
+$<HTMLInputElement>('bubbleClouds').addEventListener('change', (e) => {
+  V.bubbleClouds = (e.target as HTMLInputElement).checked;
+  saveValues();
+  if (V.bubbleClouds && V.view === 'bubbles') queueBubbleClouds();
+  renderCrisp();
+});
 for (const s of sliders) {
   const input = $<HTMLInputElement>(s.key);
   input.addEventListener('input', () => {
     V[s.key] = Number(input.value);
     $<HTMLOutputElement>(`${s.key}Out`).textContent = s.fmt(V[s.key]);
+    if (s.mini) {
+      saveValues();
+      drawMini();
+      return;
+    }
     changed(s.rebuild);
   });
 }
+
+let glowTimer = 0;
+glowInput.addEventListener('input', () => {
+  clearTimeout(glowTimer);
+  glowTimer = window.setTimeout(() => void setGlow(glowInput.value), 350);
+});
+glowInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  clearTimeout(glowTimer);
+  void setGlow(glowInput.value);
+  glowInput.blur();
+});
+$('glowClear').addEventListener('click', () => {
+  clearTimeout(glowTimer);
+  glowInput.value = '';
+  void setGlow('');
+});
+tappedBox.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).closest('[data-act="bubbles"]')) void setView('bubbles');
+});
 
 $('copy').addEventListener('click', async () => {
   const text = JSON.stringify(V, null, 2);
@@ -1144,9 +2200,13 @@ $('copy').addEventListener('click', async () => {
   }
 });
 $('reset').addEventListener('click', () => {
-  Object.assign(V, DEFAULTS);
+  const view = V.view;
+  Object.assign(V, DEFAULTS, { view });
   syncControls();
   viewSet = false;
+  void setGlow('');
+  drawMini();
+  if (V.view === 'bubbles' && V.bubbleClouds) queueBubbleClouds();
   changed(true);
 });
 
@@ -1155,9 +2215,12 @@ $('reset').addEventListener('click', () => {
 new ResizeObserver(() => resize()).observe(stage);
 syncControls();
 resize();
+drawMini();
+showGlowStats();
+tappedBox.textContent = V.view === 'bubbles' ? TAP_HINT_BUBBLES : TAP_HINT_BOOK;
 
 openStarter()
-  .then(() => rebuild())
+  .then(() => (V.view === 'bubbles' ? setView('bubbles') : rebuild()))
   .catch((err) => {
     console.error(err);
     busy.textContent = `Couldn't load the NET: ${err instanceof Error ? err.message : String(err)}`;

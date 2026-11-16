@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Book picture lab v1.1</title>
+<title>Book picture lab v1.2</title>
 <style>
   /* The app's own reader fonts, from public/fonts (same rules as index.html). */
   @font-face {
@@ -170,6 +170,8 @@
   .row select, .row .segs { grid-column: 2 / 4; width: 100%; }
   .segs { display: flex; gap: 4px; }
   .segs button { flex: 1; padding: 7px 4px; }
+  #look { flex-wrap: wrap; }
+  #look button { flex: 1 1 40%; }
   input[type=range] { width: 100%; accent-color: #b07a3c; }
 
   .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 4px; }
@@ -204,6 +206,28 @@
     min-height: 38px;
   }
   .picked b { color: #e8dcc8; font-weight: 600; }
+  .picked button { padding: 4px 9px; font-size: 12px; margin-top: 4px; }
+  [hidden] { display: none !important; }
+
+  .wordbox { display: flex; gap: 6px; margin: 8px 0 6px; }
+  .wordbox input {
+    flex: 1;
+    min-width: 0;
+    background: #0d0c0a;
+    color: #e8dcc8;
+    border: 1px solid #3a342a;
+    border-radius: 7px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 14px;
+  }
+  .wordbox input:focus { outline: none; border-color: #6b5d3a; }
+
+  .minis { display: flex; align-items: flex-end; gap: 18px; margin: 6px 0 10px; }
+  .minis canvas { cursor: default; border-radius: 8px; touch-action: auto; }
+  #miniBig { width: 168px; height: 168px; }
+  #miniSmall { width: 44px; height: 44px; border-radius: 6px; }
+  .minis .cap { font-size: 11px; color: #6b6153; margin-top: 4px; text-align: center; }
 </style>
 </head>
 <body>
@@ -221,10 +245,35 @@
     </div>
 
     <aside class="drawer">
-      <h1>Book picture lab v1.1</h1>
-      <p class="note">One book per page, its whole text set inside a symbol. Zoomed out you see the symbol; pinch, scroll or double-tap to zoom in and read it. The text is the NET from the starter pack.</p>
+      <h1>Book picture lab v1.2</h1>
+      <p class="note">One book per page, its whole text set inside a symbol, or every book at once as Bubbles. Pinch, scroll or double-tap to zoom in. The text is the NET from the starter pack.</p>
 
+      <div class="row">
+        <label>View</label>
+        <div class="segs" id="view">
+          <button data-view="book">One book</button>
+          <button data-view="bubbles">All books</button>
+        </div>
+      </div>
+      <p class="hint" id="viewHint"></p>
       <div class="row"><label for="book">Book</label><select id="book"></select></div>
+      <div class="picked" id="tapped"></div>
+
+      <div id="bubbleControls" hidden>
+        <h2><span>Word glow</span></h2>
+        <div class="wordbox">
+          <input type="search" id="glow" placeholder="A word to light up: love, mercy…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" />
+          <button id="glowClear">Clear</button>
+        </div>
+        <p class="hint">Every verse with the word lights up as a dot in its chapter, placed the way the verses are: verse 1 in the middle and the rest spiraling out. Books without it fade, and each book shows how many verses have it. Tap a dot to read the verse. It matches by spelling, the way Repeats does.</p>
+        <div class="picked" id="glowStats"></div>
+
+        <h2><span>Word clouds</span></h2>
+        <div class="checks"><label><input type="checkbox" id="bubbleClouds" /> Word clouds in the bubbles</label></div>
+        <p class="hint">Zoomed out, each book shows its own cloud: its most used words, sized by how often it uses them. Pinch in and the cloud gives way to the chapters. A lit word swaps the clouds for its dots. Tap a cloud word to light it up.</p>
+      </div>
+
+      <div id="bookControls">
       <div class="row"><label for="symbol">Symbol</label><select id="symbol"></select></div>
       <p class="hint" id="symbolNote"></p>
       <div class="row"><label for="color">Color</label><select id="color"></select></div>
@@ -235,12 +284,16 @@
           <button data-look="shape">Shape only</button>
           <button data-look="page">Whole page</button>
           <button data-look="both">Both</button>
+          <button data-look="cloud">Word cloud</button>
         </div>
       </div>
-      <p class="hint">Shape only: the text fills the symbol and nothing else. Whole page: the text fills the page, with the symbol's part in the color and the rest faint. Both: the two side by side.</p>
+      <p class="hint">Shape only: the text fills the symbol and nothing else. Whole page: the text fills the page, with the symbol's part in the color and the rest faint. Both: the two side by side. Word cloud: each of the book's words once, sized by how often the book uses it, packed into the symbol, with filler words (the, and, of…) left out. Tap a cloud word to light it up on All books.</p>
+      <div id="cloudRow">
+        <div class="row"><label for="cloudWords">Cloud words</label><input type="range" id="cloudWords" min="40" max="400" step="10" /><output id="cloudWordsOut"></output></div>
+        <p class="hint">How many of the book's most used words go in the cloud. More fills the edges with small words.</p>
+      </div>
 
       <div class="picked" id="stats">…</div>
-      <div class="picked" id="tapped">Tap a word to see where it is in the book.</div>
 
       <h2><span>Text</span></h2>
       <div class="row"><label for="font">Font</label><select id="font"></select></div>
@@ -270,6 +323,24 @@
       <p class="hint">Fattens every edge of the symbol. Thin parts (the anchor's arms, the quill's stem) hold only a word or two per line; this gives them room, mostly for short books.</p>
       <div class="row"><label for="minSpan">Gap jump</label><input type="range" id="minSpan" min="0.5" max="5" step="0.1" /><output id="minSpanOut"></output></div>
       <p class="hint">Any piece of a line narrower than this many letters is left empty and the text jumps over it. Lower fills thin tips and edges; higher keeps squeezed words out.</p>
+      </div>
+
+      <h2><span>Small map</span></h2>
+      <div class="minis">
+        <div><canvas id="miniBig"></canvas><div class="cap">Share card size</div></div>
+        <div><canvas id="miniSmall"></canvas><div class="cap">Player size</div></div>
+      </div>
+      <div class="row">
+        <label>Look</label>
+        <div class="segs" id="miniLook">
+          <button data-mini="mark">Share mark</button>
+          <button data-mini="fill">Read Aloud fill</button>
+        </div>
+      </div>
+      <div class="row"><label for="miniVerse">Verse</label><input type="range" id="miniVerse" min="0" max="0" step="1" /><output id="miniVerseOut"></output></div>
+      <div class="row"><label for="miniLines">Lines</label><input type="range" id="miniLines" min="8" max="40" step="1" /><output id="miniLinesOut"></output></div>
+      <div class="checks"><button id="miniPlay">Play</button></div>
+      <p class="hint">The book's circle drawn as faint lines, like text from far away; the book runs along the lines in reading order. Share mark: one bright mark where the verse sits, the share card look. Read Aloud fill: the lines fill up to the verse, the pulled-out player look; Play steps one verse at a time the way the player would. It works from verse counts only, so it never loads the book's text. Tapping a word or a verse above moves it there.</p>
 
       <h2><span>Background</span></h2>
       <div class="row"><label for="theme">Background</label><select id="theme"></select></div>
