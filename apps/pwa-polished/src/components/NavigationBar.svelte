@@ -124,9 +124,11 @@
     MapPin,
     Tag,
     BookOpen,
+    CirclesThree,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
   import { repeatsStore } from "../stores/repeatsStore";
+  import { bubbleView, goFromBubbles, showOnBubbles } from "../stores/bubbleViewStore";
   import { repeatCountsStore } from "../stores/repeatCountsStore";
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightScope } from "../stores/repeatBulkStore";
@@ -1013,7 +1015,19 @@
 
   function openRepeatVerse(book: string, chapter: number, verse: number) {
     repeatVerses = null;
+    // Over the Bubbles the way back is to the Bubbles. The list is numbered
+    // the way the translation being read numbers it.
+    if ($bubbleView.open && !windowId) {
+      goFromBubbles(book, chapter, verse, currentTranslation);
+      return;
+    }
     navigateToResult(book, chapter, verse);
+  }
+
+  /** "See on the Bubbles": every English Repeat lights up there. */
+  function seeRepeatOnBubbles(label: string) {
+    closeRepeatDropdown();
+    showOnBubbles(label);
   }
 
   // A word taken off the bar takes its list with it.
@@ -1370,6 +1384,7 @@
     devotional: BookBookmark,
     link: Graph,
     voice: Microphone,
+    bubbles: CirclesThree,
     // Left by the trail, not a link: there is no "how you left" to show.
     plain: null,
   };
@@ -3954,10 +3969,19 @@
         style="--rp-bg: {REPEAT_COLORS[grp.colorIndex].pill}; --rp-fg: {REPEAT_COLORS[grp.colorIndex].pillText};"
       >
         {#if repeatDropdownView === 'main'}
-          <button class="repeat-menu-item" on:click|stopPropagation={() => { repeatDropdownView = 'scope'; positionRepeatDropdown(); }}>
-            <span>Highlight all</span>
-            <CaretRight size={11} weight="bold" />
-          </button>
+          <!-- Over the Bubbles, "Highlight all" is about a chapter that isn't on screen. -->
+          {#if !$bubbleView.open}
+            <button class="repeat-menu-item" on:click|stopPropagation={() => { repeatDropdownView = 'scope'; positionRepeatDropdown(); }}>
+              <span>Highlight all</span>
+              <CaretRight size={11} weight="bold" />
+            </button>
+            {#if !grp.strongs}
+              <button class="repeat-menu-item repeat-menu-bubbles" on:click|stopPropagation={() => seeRepeatOnBubbles(grp.label)}>
+                <span>See on the Bubbles</span>
+                <CirclesThree size={12} weight="bold" />
+              </button>
+            {/if}
+          {/if}
           <button class="repeat-menu-item" on:click|stopPropagation={() => { repeatDropdownView = 'versesScope'; positionRepeatDropdown(); }}>
             <span>Show verses</span>
             <CaretRight size={11} weight="bold" />

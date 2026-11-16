@@ -47,6 +47,7 @@
   import { renderVersePreviewHtml } from '../lib/verseRendering';
   import { navigationStore } from '../stores/navigationStore';
   import CompanionLine from './CompanionLine.svelte';
+  import { normalizeRepeatWord } from '../stores/repeatsStore';
 
   export let book: string;
   export let chapter: number;
@@ -63,6 +64,21 @@
   export let markColor: string | null = null;
   /** Preview in this translation rather than the reader's. */
   export let translation = '';
+  /** Each marked word's own background, by the word as Repeats keeps it (the Bubbles' verse card). */
+  export let markColors: Record<string, string> | null = null;
+  /** The whole verse, not two lines of it. */
+  export let full = false;
+
+  $: html = text ? colorMarks(renderVersePreviewHtml(text, { highlight, maxLength: full ? 900 : 150 }), markColors) : '';
+
+  /** Give each <mark> its word's color. */
+  function colorMarks(h: string, colors: Record<string, string> | null): string {
+    if (!colors) return h;
+    return h.replace(/<mark>([\s\S]*?)<\/mark>/g, (whole, inner: string) => {
+      const c = colors[normalizeRepeatWord(inner.replace(/<[^>]+>/g, '').replace(/&[#\w]+;/g, ''))];
+      return c ? `<mark style="background:${c}">${inner}</mark>` : whole;
+    });
+  }
 
   $: color = getBookColor(book);
   $: shownIn = translation || $navigationStore.translation;
@@ -80,13 +96,14 @@
 
 <button
   class="ref-row"
-  class:own-mark={!!markColor}
+  class:own-mark={!!markColor || !!markColors}
+  class:full
   style="border-left-color:{color};{markColor ? ` --ref-mark-bg:${markColor};` : ''}"
   on:click={onOpen}
 >
   <span class="ref-row-label" style={inkStyle(color)}>{label ?? `${book} ${chapter}:${verse}`}</span>
   {#if text}
-    <span class="ref-row-text" dir="auto">{@html renderVersePreviewHtml(text, { highlight, maxLength: 150 })}</span>
+    <span class="ref-row-text" dir="auto">{@html html}</span>
   {/if}
   <CompanionLine shown={shownIn} {book} {chapter} {verse} {englishRef} maxLength={150} />
 </button>
@@ -130,6 +147,13 @@
     font-size: 12.5px;
     line-height: 1.4;
     margin-top: 2px;
+  }
+  .full .ref-row-text {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    font-size: 14px;
+    line-height: 1.5;
   }
   /* Same mark as search results unless the list brings its own color. */
   .ref-row-text :global(mark) {

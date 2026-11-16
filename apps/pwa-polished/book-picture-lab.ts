@@ -40,7 +40,7 @@ import {
   CATEGORY_LABELS,
   bookTitle,
   normalizeBookName,
-  shortBookName,
+  outlineColorFor,
   type BookInfo,
 } from './src/lib/bibleData';
 import { cleanVersePreviewText, extractHeading } from './src/lib/verseRendering';
@@ -65,16 +65,22 @@ import {
   type WordSet,
 } from './src/lib/bookPicture/layout';
 import {
-  BUBBLE_ZOOM,
   bubbleZoomLimits,
-  chapterMix,
   layoutBubbles,
-  verseShare,
-  verseSpot,
   type BookBubble,
   type BubbleMap,
   type ChapterBubble,
 } from './src/lib/bookPicture/bubbles';
+import {
+  ZoomView,
+  bookZoomK,
+  drawBubbles,
+  hashSeed,
+  hitBubbles,
+  queueBubbleClouds as packBubbleClouds,
+  type BubbleGlow,
+  type BubbleLook,
+} from './src/lib/bookPicture/bubbleScene';
 import { cloudWordAt, countCloudWords, packCloud, type Cloud, type CloudWord } from './src/lib/bookPicture/cloud';
 import {
   bookVerseCounts,
@@ -220,16 +226,6 @@ const TAP_HINT_BUBBLES = 'Tap a book, a chapter or a verse to see it.';
 
 function nextPaint(): Promise<void> {
   return new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-}
-
-/** A steady number per name, so a cloud or a small map comes out the same each time. */
-function hashSeed(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
 }
 
 // ─── Book text ─────────────────────────────────────────────────────────────
@@ -562,8 +558,8 @@ async function rebuild(): Promise<void> {
   busy.hidden = true;
   const world = worldSize();
   // A new page shape or a change between one and two pages starts at the whole view.
-  if (!prevWorld || prevWorld.w !== world.w || prevWorld.h !== world.h || !viewSet) fitView();
-  clampView();
+  if (!prevWorld || prevWorld.w !== world.w || prevWorld.h !== world.h || !view.viewSet) view.fitView();
+  view.clampView();
   renderBase();
   renderCrisp();
   showStats();
@@ -708,7 +704,7 @@ function renderScene(
   c.fillStyle = theme.bg;
   c.fillRect(0, 0, W, H);
   if (V.view === 'bubbles') {
-    renderBubbles(c, W, H, k, tx, ty, ratio);
+    if (bubbles) drawBubbles(c, bubbles, bubbleLook(), W, H, k, tx, ty, ratio);
     return;
   }
   if (!built) return;
@@ -801,13 +797,11 @@ function drawCloud(
 }
 
 // ─── Bubbles ───────────────────────────────────────────────────────────────
+// The drawing, the taps and the pan and zoom are shared with the app's Bubble
+// view (src/lib/bookPicture/bubbleScene.ts), so the two stay alike.
 
 /** The Bubbles world is a square this many units wide. */
 const BUBBLE_WORLD = 1000;
-/** A bubble's cloud is packed in a circle in a box this wide, then scaled onto the bubble. */
-const BUBBLE_BOX = 200;
-const BUBBLE_CLOUD_WORDS = 40;
-const TAU = Math.PI * 2;
 
 let bubbles: BubbleMap | null = null;
 const bubbleByBook = new Map<string, BookBubble>();
@@ -830,64 +824,27 @@ async function ensureBubbles(): Promise<void> {
 }
 
 // Clouds in the bubbles: one per book, packed a few at a time between frames.
-let bubbleMask: Mask | null = null;
 let bubbleCloudKey = '';
 const bubbleClouds = new Map<string, Cloud>();
-let cloudTimer = 0;
-
-/**
- * A bubble's cloud shape: its circle with the top cut off, where the book's
- * name sits.
- */
-function bubbleCloudMask(): Mask {
-  return (bubbleMask ??= buildMask(BUBBLE_BOX, BUBBLE_BOX, 2, (c) => {
-    const h = BUBBLE_BOX / 2;
-    c.save();
-    c.beginPath();
-    c.rect(0, h * 0.26, BUBBLE_BOX, BUBBLE_BOX);
-    c.clip();
-    c.beginPath();
-    c.arc(h, h, h * 0.96, 0, TAU);
-    c.fill();
-    c.restore();
-  }));
-}
+let stopClouds: () => void = () => {};
 
 function queueBubbleClouds(): void {
   const font = FONTS[V.font] ?? FONTS.gentium;
   const key = `${V.font}|${V.weight}`;
+  stopClouds();
   if (key !== bubbleCloudKey) {
     bubbleClouds.clear();
     bubbleCloudKey = key;
   }
-  const queue = BIBLE_BOOKS.map((b) => b.name).filter((n) => !bubbleClouds.has(n));
-  if (!queue.length) return;
-  clearTimeout(cloudTimer);
-  void document.fonts
-    .load(`${V.weight} 16px ${font.css}`, 'The LORD')
-    .catch(() => undefined)
-    .then(() => {
-      const step = () => {
-        if (key !== bubbleCloudKey) return;
-        const t0 = performance.now();
-        while (queue.length && performance.now() - t0 < 14) {
-          const name = queue.shift()!;
-          bubbleClouds.set(
-            name,
-            packCloud(cloudWordsOf(bookIndex(name)), bubbleCloudMask(), {
-              family: font.css,
-              weight: V.weight,
-              maxWords: BUBBLE_CLOUD_WORDS,
-              fill: 0.5,
-              seed: hashSeed(name),
-            }),
-          );
-        }
-        if (V.view === 'bubbles') requestFrame();
-        if (queue.length) cloudTimer = window.setTimeout(step, 0);
-      };
-      step();
-    });
+  stopClouds = packBubbleClouds(
+    BIBLE_BOOKS.map((b) => b.name),
+    (name) => cloudWordsOf(bookIndex(name)),
+    { family: font.css, weight: V.weight },
+    bubbleClouds,
+    () => {
+      if (V.view === 'bubbles') view.requestFrame();
+    },
+  );
 }
 
 function cloudsShown(): boolean {
@@ -969,282 +926,40 @@ function showGlowStats(): void {
     (FILLER_WORDS.has(glow.word) ? `<br><span class="warn">A filler word: Repeats won't list its verses.</span>` : '');
 }
 
-function renderBubbles(
-  c: CanvasRenderingContext2D,
-  W: number,
-  H: number,
-  kk: number,
-  ox: number,
-  oy: number,
-  ratio: number,
-): void {
-  if (!bubbles) return;
+let glowsFor: Glow | null = null;
+let glowsList: BubbleGlow[] = [];
+
+/** The one glow word, drawn in each book's own color. One list per word, so its counts are worked out once. */
+function glowList(): BubbleGlow[] {
+  if (glowsFor !== glow) {
+    glowsFor = glow;
+    glowsList = glow ? [{ color: null, perBook: glow.perBook }] : [];
+  }
+  return glowsList;
+}
+
+/** The lab's settings as the shared drawing reads them. */
+function bubbleLook(): BubbleLook {
   const theme = THEMES[V.theme] ?? THEMES.dark;
   const font = FONTS[V.font] ?? FONTS.gentium;
-  const K = kk * ratio, X = ox * ratio, Y = oy * ratio;
-  const showClouds = cloudsShown();
-  c.setTransform(1, 0, 0, 1, 0, 0);
-  for (const b of bubbles.books) {
-    const sx = X + b.x * K, sy = Y + b.y * K, sr = b.r * K;
-    if (sx + sr < 0 || sx - sr > W || sy + sr < 0 || sy - sr > H) continue;
-    const color = colorOf(b.book);
-    const hits = glow ? glow.perBook.get(b.book) ?? null : null;
-    const dim = glow && !hits ? 0.25 : 1;
-    const tc = chapterMix(b, kk);
-    const ix = bookIndex(b.book);
-
-    c.beginPath();
-    c.arc(sx, sy, sr, 0, TAU);
-    c.globalAlpha = dim * (theme.light ? 0.18 : 0.14) * (1 - tc * 0.5);
-    c.fillStyle = color;
-    c.fill();
-    c.globalAlpha = dim * 0.75;
-    c.strokeStyle = color;
-    c.lineWidth = Math.max(1, ratio * 1.2);
-    c.stroke();
-
-    if (tc > 0.01) drawChapters(c, b, ix, K, X, Y, W, H, ratio, dim * tc, color, !!glow);
-
-    const cloud = showClouds ? bubbleClouds.get(b.book) : undefined;
-    const cloudAlpha = cloud ? dim * (1 - tc) : 0;
-    if (cloud && cloudAlpha > 0.01) drawBubbleCloud(c, b, cloud, K, X, Y, cloudAlpha, color);
-
-    if (hits) drawGlowDots(c, b, ix, hits, K, X, Y, W, H, ratio, color);
-
-    drawBubbleName(c, b, sx, sy, sr, ratio, dim, showClouds && !!cloud ? 0 : 1 - tc, hits?.length ?? 0, font.css);
-  }
-  c.globalAlpha = 1;
-  c.textAlign = 'left';
-  c.textBaseline = 'alphabetic';
-}
-
-function drawChapters(
-  c: CanvasRenderingContext2D,
-  b: BookBubble,
-  ix: BookIndex,
-  K: number,
-  X: number,
-  Y: number,
-  W: number,
-  H: number,
-  ratio: number,
-  alpha: number,
-  color: string,
-  glowing: boolean,
-): void {
-  const theme = THEMES[V.theme] ?? THEMES.dark;
-  const font = FONTS[V.font] ?? FONTS.gentium;
-  c.textAlign = 'center';
-  b.chapters.forEach((ch, ci) => {
-    const cx = X + ch.x * K, cy = Y + ch.y * K, cr = ch.r * K;
-    if (cx + cr < 0 || cx - cr > W || cy + cr < 0 || cy - cr > H) return;
-    c.beginPath();
-    c.arc(cx, cy, cr, 0, TAU);
-    c.globalAlpha = alpha * 0.08;
-    c.fillStyle = color;
-    c.fill();
-    c.globalAlpha = alpha * 0.55;
-    c.strokeStyle = color;
-    c.lineWidth = Math.max(0.75, ratio * 0.9);
-    c.stroke();
-    const share = verseShare(ch, ch.verses) * K;
-    if (share / ratio >= BUBBLE_ZOOM.verseDots) {
-      // Close enough to see the verses: numbers when there's room, dots when not.
-      const numbers = share / ratio >= BUBBLE_ZOOM.verseNumbers;
-      c.fillStyle = theme.neutral;
-      c.globalAlpha = alpha * (glowing ? 0.3 : 0.5);
-      c.textBaseline = 'middle';
-      if (numbers) c.font = `${Math.min(share * 0.7, BUBBLE_ZOOM.verseNumberMax * ratio)}px ${font.css}`;
-      const first = ix.chapters[ci]?.first ?? 0;
-      for (let v = 0; v < ch.verses; v++) {
-        const p = verseSpot(ch, v, ch.verses);
-        const px = X + p.x * K, py = Y + p.y * K;
-        if (px < -20 || px > W + 20 || py < -20 || py > H + 20) continue;
-        if (numbers) c.fillText(String(ix.verseRef[first + v] % 1000), px, py);
-        else c.fillRect(px - ratio, py - ratio, 2 * ratio, 2 * ratio);
-      }
-      // The chapter's name in the ring the verses leave free at the edge.
-      const fs = Math.min(cr * 0.06, 14 * ratio);
-      if (fs / ratio >= 7) {
-        c.globalAlpha = alpha;
-        c.fillStyle = color;
-        c.font = `600 ${fs}px ${font.css}`;
-        c.fillText(`${bookTitle(b.book)} ${ch.chapter}`, cx, cy - cr * 0.955);
-      }
-      c.textBaseline = 'alphabetic';
-    } else if (cr / ratio >= 9) {
-      c.globalAlpha = alpha * (glowing ? 0.45 : 0.8);
-      c.fillStyle = theme.neutral;
-      c.font = `${Math.min(cr * 0.6, 26 * ratio)}px ${font.css}`;
-      c.textBaseline = 'middle';
-      c.fillText(String(ch.chapter), cx, cy);
-      c.textBaseline = 'alphabetic';
-    }
-  });
-  c.globalAlpha = 1;
-}
-
-function drawBubbleCloud(
-  c: CanvasRenderingContext2D,
-  b: BookBubble,
-  cloud: Cloud,
-  K: number,
-  X: number,
-  Y: number,
-  alpha: number,
-  color: string,
-): void {
-  const theme = THEMES[V.theme] ?? THEMES.dark;
-  const font = FONTS[V.font] ?? FONTS.gentium;
-  const s = (b.r / (BUBBLE_BOX / 2)) * K;
-  const ox = X + (b.x - b.r) * K, oy = Y + (b.y - b.r) * K;
-  const ink = theme.light ? mix(color, '#000000', 0.35) : mix(color, '#ffffff', 0.35);
-  const n = cloud.placed.length;
-  c.textAlign = 'left';
-  c.textBaseline = 'alphabetic';
-  c.fillStyle = ink;
-  for (let i = 0; i < n; i++) {
-    const p = cloud.placed[i];
-    const fpx = p.f * s;
-    if (fpx < 2.2) continue;
-    c.globalAlpha = alpha * (1 - (0.4 * i) / Math.max(1, n - 1));
-    c.font = `${V.weight} ${fpx.toFixed(1)}px ${font.css}`;
-    c.fillText(p.text, ox + p.x * s, oy + p.y * s);
-  }
-  c.globalAlpha = 1;
-}
-
-function drawGlowDots(
-  c: CanvasRenderingContext2D,
-  b: BookBubble,
-  ix: BookIndex,
-  hits: Int32Array,
-  K: number,
-  X: number,
-  Y: number,
-  W: number,
-  H: number,
-  ratio: number,
-  color: string,
-): void {
-  const theme = THEMES[V.theme] ?? THEMES.dark;
-  const core = theme.light ? mix(color, '#000000', 0.2) : mix(color, '#ffffff', 0.6);
-  c.save();
-  if (!theme.light) c.globalCompositeOperation = 'lighter';
-  for (let h = 0; h < hits.length; h++) {
-    const v = hits[h];
-    const ch = b.chapters[ix.verseChapter[v]];
-    if (!ch) continue;
-    const p = verseSpot(ch, ix.verseInChapter[v], ch.verses);
-    const px = X + p.x * K, py = Y + p.y * K;
-    if (px < -24 || px > W + 24 || py < -24 || py > H + 24) continue;
-    const share = verseShare(ch, ch.verses) * K;
-    if (share / ratio >= BUBBLE_ZOOM.verseNumbers) {
-      // Verse numbers are showing: ring the number rather than cover it.
-      const rr = Math.min(share * 0.62, (BUBBLE_ZOOM.verseNumberMax + 3) * ratio);
-      c.globalAlpha = 0.28;
-      c.fillStyle = color;
-      c.beginPath();
-      c.arc(px, py, rr, 0, TAU);
-      c.fill();
-      c.globalAlpha = 1;
-      c.strokeStyle = core;
-      c.lineWidth = 1.6 * ratio;
-      c.stroke();
-      continue;
-    }
-    const rr = Math.min(7 * ratio, Math.max(1.3 * ratio, share * 0.5));
-    c.globalAlpha = 0.35;
-    c.fillStyle = color;
-    c.beginPath();
-    c.arc(px, py, rr * 2.2, 0, TAU);
-    c.fill();
-    c.globalAlpha = 1;
-    c.fillStyle = core;
-    c.beginPath();
-    c.arc(px, py, rr, 0, TAU);
-    c.fill();
-  }
-  c.restore();
-}
-
-/**
- * The book's name: big in the middle of a plain bubble, or small in the band
- * at the top once a cloud or the chapters fill it. `center` blends the two.
- */
-function drawBubbleName(
-  c: CanvasRenderingContext2D,
-  b: BookBubble,
-  sx: number,
-  sy: number,
-  sr: number,
-  ratio: number,
-  dim: number,
-  center: number,
-  count: number,
-  family: string,
-): void {
-  const theme = THEMES[V.theme] ?? THEMES.dark;
-  const name = shortBookName(b.book);
-  const lit = mix(colorOf(b.book), theme.light ? '#000000' : '#ffffff', theme.light ? 0.2 : 0.55);
-  c.textAlign = 'center';
-  c.textBaseline = 'alphabetic';
-  if (center > 0.01) {
-    c.font = `600 100px ${family}`;
-    const wd = c.measureText(name).width / 100;
-    const fs = Math.min(sr * 0.36, (sr * 1.55) / Math.max(0.1, wd));
-    if (fs / ratio >= 6) {
-      c.globalAlpha = dim * center * 0.9;
-      c.fillStyle = theme.neutral;
-      c.font = `600 ${fs}px ${family}`;
-      c.fillText(name, sx, count ? sy - fs * 0.05 : sy + fs * 0.33);
-      if (count) {
-        c.fillStyle = lit;
-        c.font = `600 ${fs * 0.8}px ${family}`;
-        c.fillText(count.toLocaleString(), sx, sy + fs * 0.85);
-      }
-    }
-  }
-  const top = 1 - center;
-  if (top > 0.01) {
-    const fs = Math.min(sr * 0.15, 30 * ratio);
-    if (fs / ratio >= 5.5) {
-      const label = count ? `${name} · ${count.toLocaleString()}` : name;
-      const y = sy - sr * 0.78;
-      c.font = `600 ${fs}px ${family}`;
-      c.globalAlpha = dim * top;
-      c.lineJoin = 'round';
-      c.lineWidth = Math.max(2 * ratio, fs * 0.28);
-      c.strokeStyle = theme.bg;
-      c.strokeText(label, sx, y);
-      c.fillStyle = count ? lit : theme.neutral;
-      c.fillText(label, sx, y);
-    }
-  }
-  c.globalAlpha = 1;
+  return {
+    ground: { bg: theme.bg, neutral: theme.neutral, light: theme.light },
+    family: font.css,
+    weight: V.weight,
+    colorOf,
+    ringOf: outlineColorFor,
+    verses: bookIndex,
+    clouds: cloudsShown() ? bubbleClouds : null,
+    glows: glowList(),
+  };
 }
 
 function zoomToBook(book: string): void {
   const b = bubbleByBook.get(book);
-  if (!b) return;
-  const [kMin, kMax] = kLimits();
-  const nk = Math.min(kMax, Math.max(kMin, (Math.min(cssW, cssH) * 0.42) / b.r));
-  animateTo(nk, cssW / 2 - b.x * nk, cssH / 2 - b.y * nk);
+  if (b) view.animateCenter(b.x, b.y, bookZoomK(b, view.cssW, view.cssH));
 }
 
 // ─── View ──────────────────────────────────────────────────────────────────
-
-let dpr = 1;
-let cssW = 1, cssH = 1;
-/** World → CSS px: css = world * k + t. */
-let k = 1, tx = 0, ty = 0;
-let viewSet = false;
-
-function fitK(): number {
-  const { w, h } = worldSize();
-  const pad = 16;
-  return Math.max(1e-4, Math.min((cssW - pad * 2) / w, (cssH - pad * 2) / h));
-}
 
 function smallestF(): number {
   const fs = pages().map((p) => p.layout.f);
@@ -1260,8 +975,7 @@ function smallestCloudF(): number {
   return f;
 }
 
-function kLimits(): [number, number] {
-  const kf = fitK();
+function kLimits(kf: number): [number, number] {
   if (V.view === 'bubbles') {
     // Far enough in that every chapter shows its verse numbers.
     return bubbles ? bubbleZoomLimits(bubbles, kf) : [kf * 0.5, kf * 8];
@@ -1270,50 +984,19 @@ function kLimits(): [number, number] {
   return [kf * 0.5, Math.max(kf * 2, 56 / smallestF())];
 }
 
-function fitView(): void {
-  const { w, h } = worldSize();
-  k = fitK();
-  tx = (cssW - w * k) / 2;
-  ty = (cssH - h * k) / 2;
-  viewSet = true;
-}
-
-/** Keep some of the pages on screen. */
-function clampView(): void {
-  const { w, h } = worldSize();
-  const [kMin, kMax] = kLimits();
-  k = Math.min(kMax, Math.max(kMin, k));
-  const keep = 60;
-  tx = Math.min(cssW - keep, Math.max(keep - w * k, tx));
-  ty = Math.min(cssH - keep, Math.max(keep - h * k, ty));
-}
-
-function zoomAt(cx: number, cy: number, factor: number): void {
-  const [kMin, kMax] = kLimits();
-  const nk = Math.min(kMax, Math.max(kMin, k * factor));
-  tx = cx - (cx - tx) * (nk / k);
-  ty = cy - (cy - ty) * (nk / k);
-  k = nk;
-  clampView();
-}
-
-function resize(): void {
-  const r = stage.getBoundingClientRect();
-  const cx = (cssW / 2 - tx) / k, cy = (cssH / 2 - ty) / k;
-  cssW = Math.max(1, r.width);
-  cssH = Math.max(1, r.height);
-  dpr = Math.min(3, window.devicePixelRatio || 1);
-  canvas.width = Math.round(cssW * dpr);
-  canvas.height = Math.round(cssH * dpr);
-  if (!viewSet) fitView();
-  else {
-    // Keep the same point in the middle.
-    tx = cssW / 2 - cx * k;
-    ty = cssH / 2 - cy * k;
-    clampView();
-  }
-  renderCrisp();
-}
+/** Pinch, scroll, drag and double-tap (bubbleScene.ts). World → CSS px: css = world * k + t. */
+const view = new ZoomView(canvas, {
+  world: worldSize,
+  limits: kLimits,
+  draw: (settled) => {
+    if (settled || V.view === 'bubbles' || wordsOnScreen() < 2500) renderCrisp();
+    else drawStretched();
+  },
+  tap: (x, y) => {
+    if (V.view === 'bubbles') tapBubbles(x, y);
+    else showTapped(x, y);
+  },
+});
 
 // ─── Rendering ─────────────────────────────────────────────────────────────
 
@@ -1351,7 +1034,7 @@ function ensureBase(): void {
 }
 
 function renderCrisp(): void {
-  renderScene(ctx, canvas.width, canvas.height, k, tx, ty, dpr, 'screen');
+  renderScene(ctx, canvas.width, canvas.height, view.k, view.tx, view.ty, view.dpr, 'screen');
   updateReadout();
 }
 
@@ -1362,10 +1045,10 @@ function drawStretched(): void {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (base) {
-    const s = (k * dpr) / baseK;
+    const s = (view.k * view.dpr) / baseK;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(base, tx * dpr, ty * dpr, base.width * s, base.height * s);
+    ctx.drawImage(base, view.tx * view.dpr, view.ty * view.dpr, base.width * s, base.height * s);
   }
   updateReadout();
 }
@@ -1373,6 +1056,7 @@ function drawStretched(): void {
 /** About how many words are on screen, to decide whether a sharp frame is cheap. */
 function wordsOnScreen(): number {
   let total = 0;
+  const { k, tx, ty, cssW, cssH } = view;
   for (const pg of pages()) {
     const lay = pg.layout;
     const y0 = -ty / k, y1 = (cssH - ty) / k;
@@ -1386,62 +1070,9 @@ function wordsOnScreen(): number {
   return total;
 }
 
-let raf = 0;
-let settleTimer = 0;
-
-function requestFrame(): void {
-  if (!raf) {
-    raf = requestAnimationFrame(() => {
-      raf = 0;
-      if (V.view === 'bubbles' || wordsOnScreen() < 2500) renderCrisp();
-      else drawStretched();
-    });
-  }
-  clearTimeout(settleTimer);
-  settleTimer = window.setTimeout(() => renderCrisp(), 160);
-}
-
-let anim = 0;
-
-function animateTo(nk: number, ntx: number, nty: number): void {
-  cancelAnimationFrame(anim);
-  const k0 = k, tx0 = tx, ty0 = ty;
-  const t0 = performance.now();
-  const dur = 240;
-  // Interpolate the zoom in log space so it feels even, and keep the
-  // screen centre moving in a straight line.
-  const step = (now: number) => {
-    const t = Math.min(1, (now - t0) / dur);
-    const e = 1 - Math.pow(1 - t, 3);
-    k = k0 * Math.pow(nk / k0, e);
-    const c0x = (cssW / 2 - tx0) / k0, c1x = (cssW / 2 - ntx) / nk;
-    const c0y = (cssH / 2 - ty0) / k0, c1y = (cssH / 2 - nty) / nk;
-    tx = cssW / 2 - (c0x + (c1x - c0x) * e) * k;
-    ty = cssH / 2 - (c0y + (c1y - c0y) * e) * k;
-    if (t < 1) {
-      requestFrame();
-      anim = requestAnimationFrame(step);
-    } else {
-      k = nk;
-      tx = ntx;
-      ty = nty;
-      clampView();
-      clearTimeout(settleTimer);
-      renderCrisp();
-    }
-  };
-  anim = requestAnimationFrame(step);
-}
-
-function animateZoomAt(cx: number, cy: number, factor: number): void {
-  const [kMin, kMax] = kLimits();
-  const nk = Math.min(kMax, Math.max(kMin, k * factor));
-  animateTo(nk, cx - (cx - tx) * (nk / k), cy - (cy - ty) * (nk / k));
-}
-
 function updateReadout(): void {
   if (V.view === 'bubbles') {
-    readout.textContent = bubbles ? `zoom ${(k / fitK()).toFixed(1)}×` : '';
+    readout.textContent = bubbles ? `zoom ${(view.k / view.fitK()).toFixed(1)}×` : '';
     return;
   }
   if (!built) {
@@ -1450,136 +1081,29 @@ function updateReadout(): void {
   }
   if (built.cloud) {
     const big = built.cloud.placed[0]?.f ?? 0;
-    readout.textContent = `zoom ${(k / fitK()).toFixed(1)}× · biggest word ${(big * k).toFixed(0)} px`;
+    readout.textContent = `zoom ${(view.k / view.fitK()).toFixed(1)}× · biggest word ${(big * view.k).toFixed(0)} px`;
     return;
   }
   const f = pages()[0]?.layout.f ?? 1;
-  readout.textContent = `zoom ${(k / fitK()).toFixed(1)}× · text ${(f * k).toFixed(1)} px`;
+  readout.textContent = `zoom ${(view.k / view.fitK()).toFixed(1)}× · text ${(f * view.k).toFixed(1)} px`;
 }
 
-// ─── Gestures ──────────────────────────────────────────────────────────────
-
-const pointers = new Map<number, { x: number; y: number }>();
-let pinch: { d: number; mx: number; my: number; k: number; tx: number; ty: number } | null = null;
-let press: { x: number; y: number; t: number; moved: boolean } | null = null;
-let lastTap = { t: 0, x: 0, y: 0 };
-
-function localPoint(e: PointerEvent | WheelEvent | MouseEvent): { x: number; y: number } {
-  const r = canvas.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
-}
-
-function startPinch(): void {
-  const [a, b] = [...pointers.values()];
-  pinch = {
-    d: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)),
-    mx: (a.x + b.x) / 2,
-    my: (a.y + b.y) / 2,
-    k,
-    tx,
-    ty,
-  };
-}
-
-canvas.addEventListener('pointerdown', (e) => {
-  cancelAnimationFrame(anim);
-  canvas.setPointerCapture(e.pointerId);
-  const p = localPoint(e);
-  pointers.set(e.pointerId, p);
-  if (pointers.size === 1) press = { x: p.x, y: p.y, t: performance.now(), moved: false };
-  else {
-    press = null;
-    if (pointers.size === 2) startPinch();
-  }
-});
-
-canvas.addEventListener('pointermove', (e) => {
-  const prev = pointers.get(e.pointerId);
-  if (!prev) return;
-  const p = localPoint(e);
-  pointers.set(e.pointerId, p);
-  if (pointers.size === 1) {
-    if (press && Math.hypot(p.x - press.x, p.y - press.y) > 6) press.moved = true;
-    if (press && !press.moved) return;
-    tx += p.x - prev.x;
-    ty += p.y - prev.y;
-    clampView();
-    requestFrame();
-  } else if (pointers.size === 2 && pinch) {
-    const [a, b] = [...pointers.values()];
-    const d = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    const [kMin, kMax] = kLimits();
-    const nk = Math.min(kMax, Math.max(kMin, pinch.k * (d / pinch.d)));
-    // The world point that was under the starting midpoint stays under the fingers.
-    const wx = (pinch.mx - pinch.tx) / pinch.k, wy = (pinch.my - pinch.ty) / pinch.k;
-    k = nk;
-    tx = mx - wx * nk;
-    ty = my - wy * nk;
-    clampView();
-    requestFrame();
-  }
-});
-
-function endPointer(e: PointerEvent): void {
-  if (!pointers.has(e.pointerId)) return;
-  pointers.delete(e.pointerId);
-  if (pointers.size === 1) {
-    pinch = null;
-    press = null;
-  } else if (pointers.size === 0) {
-    pinch = null;
-    if (press && !press.moved && e.type === 'pointerup') {
-      const p = localPoint(e);
-      const now = performance.now();
-      if (now - lastTap.t < 320 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 30) {
-        animateZoomAt(p.x, p.y, 3);
-        lastTap = { t: 0, x: 0, y: 0 };
-      } else {
-        lastTap = { t: now, x: p.x, y: p.y };
-        if (V.view === 'bubbles') tapBubbles(p.x, p.y);
-        else showTapped(p.x, p.y);
-      }
-    }
-    press = null;
-  }
-}
-canvas.addEventListener('pointerup', endPointer);
-canvas.addEventListener('pointercancel', endPointer);
-
-canvas.addEventListener(
-  'wheel',
-  (e) => {
-    e.preventDefault();
-    cancelAnimationFrame(anim);
-    const p = localPoint(e);
-    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-    zoomAt(p.x, p.y, Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0018)));
-    requestFrame();
-  },
-  { passive: false },
-);
-
-$('fit').addEventListener('click', () => {
-  const { w, h } = worldSize();
-  const nk = fitK();
-  animateTo(nk, (cssW - w * nk) / 2, (cssH - h * nk) / 2);
-});
-$('zoomIn').addEventListener('click', () => animateZoomAt(cssW / 2, cssH / 2, 2));
-$('zoomOut').addEventListener('click', () => animateZoomAt(cssW / 2, cssH / 2, 0.5));
+$('fit').addEventListener('click', () => view.animateFit());
+$('zoomIn').addEventListener('click', () => view.animateZoomAt(view.cssW / 2, view.cssH / 2, 2));
+$('zoomOut').addEventListener('click', () => view.animateZoomAt(view.cssW / 2, view.cssH / 2, 0.5));
 $('readSize').addEventListener('click', () => {
   if (V.view !== 'book') return;
   const f = built?.cloud ? smallestCloudF() : pages()[0]?.layout.f;
   if (!f) return;
-  animateZoomAt(cssW / 2, cssH / 2, 16 / f / k);
+  view.animateZoomAt(view.cssW / 2, view.cssH / 2, 16 / f / view.k);
 });
 
 // ─── Word under a tap ──────────────────────────────────────────────────────
 
 function wordAt(cx: number, cy: number): number {
   if (!built) return -1;
-  const wx = (cx - tx) / k, wy = (cy - ty) / k;
-  if (built.cloud) return cloudWordAt(built.cloud, wx, wy, 4 / k);
+  const wx = (cx - view.tx) / view.k, wy = (cy - view.ty) / view.k;
+  if (built.cloud) return cloudWordAt(built.cloud, wx, wy, 4 / view.k);
   for (const pg of pages()) {
     const px = wx - pg.ox;
     if (px < 0 || px > PAGE_W || wy < 0 || wy > built.pageH) continue;
@@ -1635,72 +1159,20 @@ async function tapCloudWord(book: string, wordIndex: number): Promise<void> {
 /** What a tap on the Bubbles picks: a glow dot, a cloud word, a verse, a chapter, then a book. */
 function tapBubbles(cx: number, cy: number): void {
   if (!bubbles) return;
-  const wx = (cx - tx) / k, wy = (cy - ty) / k;
-  if (glow) {
-    let best: { book: string; v: number } | null = null;
-    let bd = 14;
-    for (const [book, hits] of glow.perBook) {
-      const b = bubbleByBook.get(book);
-      if (!b || Math.hypot(wx - b.x, wy - b.y) > b.r + 14 / k) continue;
-      const ix = bookIndex(book);
-      for (const v of hits) {
-        const ch = b.chapters[ix.verseChapter[v]];
-        if (!ch) continue;
-        const p = verseSpot(ch, ix.verseInChapter[v], ch.verses);
-        const d = Math.hypot(p.x * k + tx - cx, p.y * k + ty - cy);
-        if (d < bd) {
-          bd = d;
-          best = { book, v };
-        }
-      }
-    }
-    if (best) {
-      showVerse(best.book, best.v);
-      return;
-    }
+  const hit = hitBubbles(bubbles, bubbleLook(), view.k, view.tx, view.ty, cx, cy);
+  if (!hit) return;
+  if (hit.kind === 'verse') {
+    showVerse(hit.book, hit.v);
+    return;
   }
-  let b: BookBubble | null = null;
-  for (const x of bubbles.books) {
-    if ((wx - x.x) ** 2 + (wy - x.y) ** 2 <= x.r * x.r) {
-      b = x;
-      break;
-    }
+  if (hit.kind === 'cloud') {
+    void tapCloudWord(hit.book, hit.word);
+    return;
   }
+  const b = bubbleByBook.get(hit.book);
   if (!b) return;
-  const tc = chapterMix(b, k);
-  if (cloudsShown() && tc < 0.5) {
-    const cloud = bubbleClouds.get(b.book);
-    if (cloud) {
-      const s = b.r / (BUBBLE_BOX / 2);
-      const i = cloudWordAt(cloud, (wx - (b.x - b.r)) / s, (wy - (b.y - b.r)) / s, 6 / (k * s));
-      if (i >= 0) {
-        void tapCloudWord(b.book, cloud.placed[i].word);
-        return;
-      }
-    }
-  }
-  if (tc >= 0.5) {
-    const ci = b.chapters.findIndex((ch) => (wx - ch.x) ** 2 + (wy - ch.y) ** 2 <= ch.r * ch.r);
-    if (ci >= 0) {
-      const ch = b.chapters[ci];
-      if (verseShare(ch, ch.verses) * k >= BUBBLE_ZOOM.verseDots) {
-        let bv = 0, bd = Infinity;
-        for (let v = 0; v < ch.verses; v++) {
-          const p = verseSpot(ch, v, ch.verses);
-          const d = (p.x - wx) ** 2 + (p.y - wy) ** 2;
-          if (d < bd) {
-            bd = d;
-            bv = v;
-          }
-        }
-        showVerse(b.book, (bookIndex(b.book).chapters[ci]?.first ?? 0) + bv);
-      } else {
-        showChapter(b, ch, ci);
-      }
-      return;
-    }
-  }
-  showBook(b);
+  if (hit.kind === 'chapter') showChapter(b, b.chapters[hit.ci], hit.ci);
+  else showBook(b);
 }
 
 /** How many of a book's lit verses fall in [from, to). */
@@ -1770,7 +1242,7 @@ function showStats(): void {
     let used = 0;
     for (let l = 0; l < lay.lines; l++) if (lay.lineFirst[l + 1] > lay.lineFirst[l]) used++;
     const perLine = used ? total / used : 0;
-    const zoom = 16 / lay.f / fitK();
+    const zoom = 16 / lay.f / view.fitK();
     let s = `${label}: ${used.toLocaleString()} lines, about ${perLine.toFixed(1)} words a line. ` +
       `The letters are ${lay.f.toFixed(2)} units on a 1,000-wide page; on this screen they need about ${zoom.toFixed(1)}× zoom to read at 16 px.`;
     if (!lay.fits) s += ` <span class="warn">${(total - lay.n).toLocaleString()} words didn't fit.</span>`;
@@ -2040,27 +1512,27 @@ function setBook(name: string): void {
   drawMini();
 }
 
-async function setView(view: View): Promise<void> {
-  V.view = view;
+async function setView(next: View): Promise<void> {
+  V.view = next;
   saveValues();
   syncControls();
-  viewSet = false;
-  tappedBox.textContent = view === 'bubbles' ? TAP_HINT_BUBBLES : TAP_HINT_BOOK;
-  if (view === 'bubbles') {
+  view.viewSet = false;
+  tappedBox.textContent = next === 'bubbles' ? TAP_HINT_BUBBLES : TAP_HINT_BOOK;
+  if (next === 'bubbles') {
     await ensureBubbles();
     if (V.view !== 'bubbles') return;
     if (V.glow && glow?.label !== V.glow) await setGlow(V.glow);
     if (V.bubbleClouds) queueBubbleClouds();
-    fitView();
-    clampView();
+    view.fitView();
+    view.clampView();
     renderCrisp();
     return;
   }
   if (!built || bookStale) {
     await rebuild();
   } else {
-    fitView();
-    clampView();
+    view.fitView();
+    view.clampView();
     renderBase();
     renderCrisp();
   }
@@ -2079,7 +1551,7 @@ bookSel.addEventListener('change', () => {
     return;
   }
   tappedBox.textContent = TAP_HINT_BOOK;
-  viewSet = false;
+  view.viewSet = false;
   changed(true);
 });
 symbolSel.addEventListener('change', () => {
@@ -2096,7 +1568,7 @@ fontSel.addEventListener('change', () => {
 });
 pageSel.addEventListener('change', () => {
   V.page = pageSel.value;
-  viewSet = false;
+  view.viewSet = false;
   changed(true);
 });
 themeSel.addEventListener('change', () => {
@@ -2108,7 +1580,7 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('#look button')) {
   b.addEventListener('click', () => {
     V.look = b.dataset.look as Look;
     syncControls();
-    viewSet = false;
+    view.viewSet = false;
     changed(true);
   });
 }
@@ -2190,10 +1662,10 @@ $('copy').addEventListener('click', async () => {
   }
 });
 $('reset').addEventListener('click', () => {
-  const view = V.view;
-  Object.assign(V, DEFAULTS, { view });
+  const shown = V.view;
+  Object.assign(V, DEFAULTS, { view: shown });
   syncControls();
-  viewSet = false;
+  view.viewSet = false;
   void setGlow('');
   drawMini();
   if (V.view === 'bubbles' && V.bubbleClouds) queueBubbleClouds();
@@ -2202,9 +1674,13 @@ $('reset').addEventListener('click', () => {
 
 // ─── Start ─────────────────────────────────────────────────────────────────
 
-new ResizeObserver(() => resize()).observe(stage);
+function fitStage(): void {
+  const r = stage.getBoundingClientRect();
+  view.resize(r.width, r.height);
+}
+new ResizeObserver(fitStage).observe(stage);
 syncControls();
-resize();
+fitStage();
 drawMini();
 showGlowStats();
 tappedBox.textContent = V.view === 'bubbles' ? TAP_HINT_BUBBLES : TAP_HINT_BOOK;

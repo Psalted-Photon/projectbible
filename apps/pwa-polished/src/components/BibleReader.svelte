@@ -80,7 +80,7 @@
 </script>
 
 <script lang="ts">
-  import { CaretUp, CaretDown, CaretRight, CaretLeft, NotePencil, ArrowRight } from "phosphor-svelte";
+  import { CaretUp, CaretDown, CaretRight, CaretLeft, NotePencil, ArrowRight, CirclesThree } from "phosphor-svelte";
   import { onMount, tick } from "svelte";
   import { get, writable } from "svelte/store";
   import { motionLevel } from "../lib/motion";
@@ -256,6 +256,8 @@
   import type { HarmonyPassage, HarmonySection } from "@projectbible/core";
   import CloseX from "./CloseX.svelte";
   import ReaderConnectionsStrip from "./ReaderConnectionsStrip.svelte";
+  import BubbleView from "./BubbleView.svelte";
+  import { bubbleView, showOnBubbles } from "../stores/bubbleViewStore";
 
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
 
@@ -1082,6 +1084,11 @@
   let storyTitleFrame = 0;
 
   $: storyTitleOn = $storyMode && !pickOnly;
+
+  /** The Bubbles, open under this reader's navbar (the main reader only). */
+  $: bubblesOpen = !windowId && $bubbleView.open;
+  // Its tabs and their menus are how you work the Bubbles, so the bar stays down.
+  $: if (bubblesOpen) navBarOffset = 0;
   $: storyTitleTop = Math.max(0, navBarHeight + navBarOffset);
   /** Only while it is up: a book with no stories yet shows no title. */
   $: storyTitleShown = storyTitleOn && !!storyPlace;
@@ -3987,8 +3994,8 @@
       const scrollDelta = scrollTop - lastScrollTop;
 
       // Update navbar offset based on scroll - it moves with the content
-      if (navBarPinned || barHeldFrom !== null) {
-        // Pinned down, or held for the Read Aloud player: scrolling never moves it.
+      if (navBarPinned || barHeldFrom !== null || bubblesOpen) {
+        // Pinned down, held for the Read Aloud player, or over the Bubbles: scrolling never moves it.
         navBarOffset = 0;
       } else if (performance.now() < navBarStillUntil) {
         // One of our own nudges is moving the page, not the reader.
@@ -6476,6 +6483,12 @@
     repeatHighlightAllRequest.set({ word: rec.word, label: rec.label, scope, colorIndex: 0 });
   }
 
+  /** The highlighted word lit on the Bubbles, which makes it a Repeat again. */
+  function introSeeOnBubbles(rec: IntroPill) {
+    introMenuKey = null;
+    showOnBubbles(rec.label, { translation: currentTranslation });
+  }
+
   async function introDeselect(rec: IntroPill) {
     introMenuKey = null;
     for (const id of rec.highlightIds) {
@@ -7644,6 +7657,10 @@
 />
 
 
+{#if bubblesOpen}
+  <BubbleView top={navBarHeight} />
+{/if}
+
 <div
   class="bible-reader"
   class:drag-selecting={dragSelecting}
@@ -7652,7 +7669,7 @@
   bind:this={readerElement}
   bind:clientWidth={readerClientWidth}
 >
-  {#if storyTitleShown && storyPlace}
+  {#if storyTitleShown && storyPlace && !bubblesOpen}
     <StoryTitle
       place={storyPlace}
       top={storyTitleTop}
@@ -7746,6 +7763,7 @@
                     <div class="intro-repeat-menu" on:click|stopPropagation on:keydown|stopPropagation role="menu" tabindex="-1">
                       {#if introMenuView === 'main'}
                         <button class="intro-repeat-item" on:click|stopPropagation={() => (introMenuView = 'scope')}>Highlight all <CaretRight size="1em" weight="bold" class="ph-inline" /></button>
+                        <button class="intro-repeat-item intro-repeat-bubbles" on:click|stopPropagation={() => introSeeOnBubbles(rec)}>See on the Bubbles <CirclesThree size="1em" weight="bold" class="ph-inline" /></button>
                         <button class="intro-repeat-item" on:click|stopPropagation={() => introDeselect(rec)}>Deselect all</button>
                       {:else}
                         <button class="intro-repeat-item intro-repeat-back" on:click|stopPropagation={() => (introMenuView = 'main')}><CaretLeft size="1em" weight="bold" class="ph-inline" /> Highlight all in…</button>

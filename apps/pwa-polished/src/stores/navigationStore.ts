@@ -140,6 +140,8 @@ export type CrumbKind =
   | 'link'
   /** A place a voice command went to; there is no panel to bring back. */
   | 'voice'
+  /** A verse tapped on the Bubbles; the crumb opens them again at the same zoom. */
+  | 'bubbles'
   /**
    * A spot you left by the trail rather than by a link, where nothing recorded
    * a panel to bring back. Drawn without an icon.
