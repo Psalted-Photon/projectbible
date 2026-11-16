@@ -350,9 +350,30 @@ A study tool for tracking a word through the text — the digital version of cir
 - **Pills in the toolbar** — each tracked word gets a colored pill. The pill and the in-text highlight always match.
 - **Counts per book** — see how many times your word occurs in the book you're reading.
 - **Highlight All** — turn a tracked word into permanent saved highlights in one go.
+- **See on the Bubbles** — light a tracked word across the whole Bible at once (below).
 - **Tracking survives restarts** — your tracked words are still there tomorrow.
 
 The repeat colors are deliberately softer and more translucent than the saved-highlight colors, so this layer reads as temporary scratch work rather than something you've committed to.
+
+### 11.1 The Bubbles
+
+The whole Bible on one screen, with your words lit up in it.
+
+- **Every book a bubble** — sized by how much text it has and colored by its group, Genesis in the middle and Revelation near the edge. Zoom in and a book splits into its chapters; further in, each chapter shows its verses, verse 1 in the middle and the rest spiraling out.
+- **Your words light up** — every English word on your tabs lights the verses that hold it, each in its own Repeats color. A verse with two of your words is split into slices, one color each. Books without any of them fade, and each book shows how many verses have each word, in that word's color.
+- **Three ways in** — "See on the Bubbles" in a word tab's menu (or on a highlighted word's pill under a book's chapter 1 title); the "See “love” on the Bubbles" row under the top match when you search one word; or the "Add a word" box at the top of the Bubbles. Every word you light becomes a tab, up to seven, so you can stack them and compare. Filler words like "the" and "and" are too common to light.
+- **Word clouds inside** — zoomed out, each bubble holds its book's most used words. Tap one to light it.
+- **Tap to read** — tap a book or chapter to zoom into it, or a verse to see it on a card at the bottom with your words marked. Tap the card to go there; a Bubbles crumb brings you back at the same zoom.
+- **Where you are** — the book you were reading has a soft ring, so you can find it when the Bubbles open zoomed out.
+- **The same map for everyone** — bubble sizes come from the NET whatever you read. Your words are found in the translation you're reading, or the NET if you're reading Greek or Hebrew. Greek and Hebrew words keep their tabs but don't light the Bubbles yet.
+- **Light or Dark** — black or the app's cream behind it. It follows your reader theme until you pick one, and the choice syncs with your account.
+- **Getting around** — pinch, scroll, drag, double-tap, or the + and − buttons. The Bubbles open under the top bar, so your word tabs and their menus still work, and close by × or Escape.
+
+### 11.2 Book word clouds
+
+- **Under every book's title** — a small round cloud of the book's most used words sits under its chapter 1 title. The Introduction sheet has a wide one across its top.
+- **Full screen** — tap either to open the cloud full screen. Zoom in to read the small words, and switch Light or Dark the same as the Bubbles.
+- **Tap a word** — see how often the book uses it, then "See it on the Bubbles" or "Show verses in [book]". Both make it a tab.
 
 ## 12. Journal
 
@@ -566,7 +587,7 @@ Signing in syncs your personal data across devices:
 - Reading plans
 - Reading progress
 
-Plus a **subset of settings** that should follow you: theme, your custom theme and the Notes and Journal themes, timezone, your default translations, interlinear preferences, red-letter, section headings, art icons, and themed titles.
+Plus a **subset of settings** that should follow you: theme, your custom theme and the Notes and Journal themes, timezone, your default translations, interlinear preferences, red-letter, section headings, art icons, themed titles, and Light or Dark for the Bubbles and word clouds.
 
 Your wake alarm is stored with your account too — it has to be, since the alarm is sent from there.
 

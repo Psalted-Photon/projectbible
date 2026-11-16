@@ -267,10 +267,13 @@
   // ── Setup ─────────────────────────────────────────────────────────────────
 
   function onKey(e: KeyboardEvent): void {
-    if (e.key !== 'Escape') return;
+    // The navbar takes Escape first for whatever it has open, and says so.
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
     const t = e.target as HTMLElement | null;
     // Escape in a text box is the box's own.
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    // A tab's menu or its verse list over the Bubbles closes first, on its own.
+    if (document.querySelector('.repeat-verses-panel, .repeat-dropdown')) return;
     closeBubbles();
   }
 

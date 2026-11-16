@@ -563,6 +563,29 @@ API: `clearRepeatsInSection()`, `applyRepeatsToSection()` (idempotent — clears
 
 `src/stores/repeatBulkStore.ts` carries a pending bulk request from a repeat pill into `HighlightModal` in bulk mode — `BibleReader.svelte`. A related flag handles opening the normal Highlight modal on a word that is also an active repeat.
 
+### 11.6 The Bubbles
+
+| Feature | Detail |
+|---|---|
+| Data | `scripts/build-bubble-data.mjs` (run with `npx tsx`) reads the NET from `packs/starter.sqlite`, cleaned with `extractHeading` + `cleanVersePreviewText`, and writes `src/lib/bookPicture/bubbleData.json`: per book its word count, `[chapter, words, verses]` per chapter (a verse list where the NET skips one), and its 160 most used words with counts (`countCloudWords`, `normalizeRepeatWord`, `FILLER_WORDS`). `loadBubbleData()` in `bubbleData.ts` imports it on first use (its own lazy chunk) and packs the map with `layoutBubbles`. Rerun after the starter pack's NET changes. |
+| Zoom points | `BUBBLE_ZOOM` in `bubbles.ts`, shared with the book picture lab: chapters fade in at book radius 140–260 CSS px, verse dots from an 8 px share, numbers from 18 px; `bubbleZoomLimits()` reaches every chapter's numbers. |
+| Drawing and touch | `src/lib/bookPicture/bubbleScene.ts`, shared with `book-picture-lab.ts`: `ZoomView` (pinch, scroll, drag, double-tap ×3, `animateCenter`, `spot()`/`goTo()`), `drawBubbles()`, `hitBubbles()` (lit dot, cloud word, verse, chapter, book), `queueBubbleClouds()` (40 words per bubble, a few books per frame). A verse lit by several words is drawn as slices; counts sit under each name in each word's color. |
+| View | `BubbleView.svelte`, mounted by the main `BibleReader` just under the navbar (`top={navBarHeight}`, z-index 999 under the bar's 1000); `navBarOffset` is held at 0 while open and the Story Mode title is hidden. Bar: "Add a word", Light/Dark, −/+, `CloseX`; closes by × or Escape only. In light and sepia the picture cancels the theme's invert; the bar and verse card follow the theme. |
+| Lit words | Every English Repeat (no `strongs`) that isn't a filler word, in `bubbleTranslation()` — the reader's translation, or `DEFAULT_TRANSLATION` under Greek or Hebrew. Verses come from the search worker's `wordVerses` action (`versesWithWord()` in `searchClient.ts`, `versesOfWord()` in `wordIndex.ts`): one exact word from the word lists, put into English numbering with `convertRef` when the text numbers differently (WEB). Colors: the Repeat's bright border color on Dark, its pill color on Light. |
+| Store | `src/stores/bubbleViewStore.ts`: `openBubbles`/`closeBubbles`; `showOnBubbles()` and `makeRepeat()` (filler words refused with "Too common to list", an eighth word refused); `goFromBubbles()` pushes a `'bubbles'` crumb (`CirclesThree` icon) carrying the zoom and card, and the crumb's `pendingRestore` reopens it. A screen surface (priority 3) does the same when you leave by the trail; any other jump to another book or chapter closes the view. |
+| Ways in | Repeat tab menu "See on the Bubbles" (`seeRepeatOnBubbles`, NavigationBar; "Highlight all" hidden while the Bubbles are open); chapter 1 intro pills (`introSeeOnBubbles`, BibleReader); search row `.bubbles-row` under the top match for one plain English word (`bubbleWordIn`); "Add a word"; a tapped cloud word. "Show verses" over the Bubbles goes back through `goFromBubbles`. |
+| Verse card | `VerseRefRow` with `full` (the whole verse) and `markColors` (each lit word in its Repeat's in-text color). |
+| Setting | `bubbleGround?: 'dark' \| 'light'` (synced; unset follows the theme's paleness), `src/lib/bookPicture/ground.ts` (`GROUNDS`, `bubbleGround()`, `setBubbleGround()`). |
+
+### 11.7 Book word clouds
+
+| Feature | Detail |
+|---|---|
+| Small clouds | `MiniWordCloud.svelte`: round (36 words, `circleMask(200)`, 140 px) under each chapter 1 title above the Connections strip, and `wide` (90 words, `rectMask(1000, 360)`) at the top of `BookIntroPanel`'s body. Packed and drawn only once an `IntersectionObserver` sees it near the screen; packs cached per book. Not in the `pickOnly` reader. |
+| Drawing | `src/lib/bookPicture/cloudDraw.ts`: `drawWordCloud()` — the ground's ink, the five most used words in the book color (darkened on cream, outlined on black for the prophets), fading down the list. Font `"Gentium Plus"`, loaded before packing (`cloudFontReady`). |
+| Full screen | `WordCloudView.svelte`, mounted in `App.svelte` from `wordCloudView` (z-index 10030), outside the theme's invert. 160 words in a rectangle shaped to the screen (repacked when it turns), `ZoomView` pan and zoom, Light/Dark, × and Escape. A tapped word shows its count with "See it on the Bubbles" and "Show verses in [book]" (`RepeatVersesPanel`, scope book). A verse picked goes through `WordCloudOpen.leave`, which BibleReader's `openCloudFor` supplies: through the Introduction's crumb when it is open, otherwise a `'link'` crumb on the chapter 1 title. |
+| Tutorial | Dots `nav-repeat-bubbles`, `nav-search-bubbles`, `reader-word-cloud`; `.bubble-view` and `.word-cloud-view` are in `OVERLAYS`. |
+
 ## 12. Journal
 
 Files: `src/components/JournalWriter.svelte` (251), `src/components/JournalCalendar.svelte` (396), `src/components/JournalNavigationBar.svelte`, `src/lib/components/LexicalEditor.svelte` (459), `src/adapters/JournalStore.ts` (215), `src/adapters/SyncedJournalStore.ts` (229).

@@ -87,7 +87,14 @@ export const READER_TIPS: Tip[] = [
     area,
     target: '.intro-repeat-pill',
     title: 'A word you’re tracking',
-    body: 'Tap to highlight every time it appears in this chapter or book, or to clear it.',
+    body: 'Tap to highlight every time it appears in this chapter or book, see it on the Bubbles, or clear it.',
+  },
+  {
+    id: 'reader-word-cloud',
+    area,
+    target: '.mini-cloud:not(.wide)',
+    title: 'This book’s words',
+    body: 'The book’s most used words, bigger the more it uses them. Tap to open the cloud full screen, then tap a word to see how often it comes up, light it on the Bubbles, or list its verses in this book.',
   },
   {
     id: 'reader-read-aloud',
