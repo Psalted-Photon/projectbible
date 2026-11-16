@@ -127,8 +127,9 @@
     CirclesThree,
   } from "phosphor-svelte";
   import { openDailyGreeting } from "../stores/dailyGreetingStore";
-  import { repeatsStore } from "../stores/repeatsStore";
-  import { bubbleView, goFromBubbles, showOnBubbles } from "../stores/bubbleViewStore";
+  import { repeatsStore, normalizeRepeatWord } from "../stores/repeatsStore";
+  import { bubbleTranslation, bubbleView, goFromBubbles, showOnBubbles } from "../stores/bubbleViewStore";
+  import { FILLER_WORDS } from "../lib/fillerWords";
   import { repeatCountsStore } from "../stores/repeatCountsStore";
   import { repeatHighlightAllRequest } from "../stores/repeatBulkStore";
   import type { RepeatHighlightScope } from "../stores/repeatBulkStore";
@@ -1164,6 +1165,23 @@
   $: markQuery = [shownIntent.text, ...addedWords(shownIntent)].join(" ");
   /** A person, place or topic the words name exactly, pinned above the results. */
   $: pinned = searchRan ? topMatch(searchResults, shownIntent) : null;
+  /** One plain word searched (not a reference, not a filler word): it can be lit on the Bubbles. */
+  $: bubbleWord = searchRan ? bubbleWordIn(shownIntent.text) : null;
+
+  function bubbleWordIn(text: string): string | null {
+    const word = text.trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (!word || /\s/.test(word)) return null;
+    if (readQueryAsRef(word) || closeQueryRef(word)) return null;
+    const key = normalizeRepeatWord(word);
+    // English only for now: Greek and Hebrew words don't light the Bubbles yet.
+    if (!/^[a-z]+$/.test(key) || FILLER_WORDS.has(key)) return null;
+    return word;
+  }
+
+  /** It becomes a Repeat, the search closes, and the Bubbles open with it lit. */
+  function seeSearchOnBubbles(word: string) {
+    if (showOnBubbles(word, { translation: bubbleTranslation(currentTranslation) })) clearSearch();
+  }
 
   /** "Search for shepard instead": the typed words, as typed, with no spelling put right. */
   function searchAsTyped() {
@@ -3649,6 +3667,18 @@
               </span>
               <span class="suggestion-kind">
                 {top.type === "character" ? "Person" : top.type === "topical" ? "Topic" : top.data?.isPlace ? "Place" : "Encyclopedia"}
+              </span>
+            </button>
+          </div>
+        {/if}
+        {#if bubbleWord}
+          {@const word = bubbleWord}
+          <div class="top-match bubbles-match">
+            <button type="button" class="suggestion-row top-match-row bubbles-row" on:click={() => seeSearchOnBubbles(word)}>
+              <span class="suggestion-icon"><CirclesThree size={14} weight="bold" /></span>
+              <span class="top-match-text">
+                <span class="top-match-title">See “{word}” on the Bubbles</span>
+                <span class="top-match-sub">Every verse with it, book by book</span>
               </span>
             </button>
           </div>

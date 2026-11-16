@@ -32,8 +32,10 @@
     closeBubbles,
     goFromBubbles,
     registerBubbleView,
+    showOnBubbles,
     type BubbleCard,
   } from '../stores/bubbleViewStore';
+  import { showNotice } from '../stores/noticeStore';
   import { REPEAT_COLORS } from '../lib/repeatColors';
   import { FILLER_WORDS } from '../lib/fillerWords';
   import { getBookColor, normalizeBookName, outlineColorFor } from '../lib/bibleData';
@@ -200,6 +202,32 @@
     view?.animateZoomAt(view.cssW / 2, view.cssH / 2, f);
   }
 
+  // ── Adding words ──────────────────────────────────────────────────────────
+
+  let typed = '';
+
+  /** "Add a word": it becomes a new Repeat tab, lit here with the rest. */
+  function addWord(): void {
+    const word = typed.trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    if (!word) return;
+    if (/\s/.test(word)) {
+      showNotice('One word at a time: Repeats light single words.', 'info');
+      return;
+    }
+    if (showOnBubbles(word, { translation: litIn })) typed = '';
+  }
+
+  function onAddKey(e: KeyboardEvent): void {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addWord();
+      (e.currentTarget as HTMLInputElement).blur();
+    } else if (e.key === 'Escape') {
+      typed = '';
+      (e.currentTarget as HTMLInputElement).blur();
+    }
+  }
+
   // ── Taps ──────────────────────────────────────────────────────────────────
 
   function tap(x: number, y: number): void {
@@ -216,13 +244,19 @@
       return;
     }
     card = null;
+    if (hit.kind === 'cloud') {
+      // A word in a book's cloud lights up like an added one.
+      const w = data.clouds.get(hit.book)?.[hit.word];
+      if (w) showOnBubbles(w.text, { translation: litIn });
+      return;
+    }
     if (!b) return;
     if (hit.kind === 'chapter') {
       const ch = b.chapters[hit.ci];
       view.animateCenter(ch.x, ch.y, chapterZoomK(ch, view.cssW, view.cssH));
       return;
     }
-    // A book, or a word in its cloud: in to its chapters.
+    // A book: in to its chapters.
     view.animateCenter(b.x, b.y, bookZoomK(b, view.cssW, view.cssH));
   }
 
@@ -310,17 +344,20 @@
 
 <div class="bubble-view" style="top:{top}px">
   <div class="bv-bar">
-    <div class="bv-lead">
-      {#if finding}
-        <span class="bv-note">Finding verses…</span>
-      {:else if note}
-        <span class="bv-note">{note}</span>
-      {:else if lit.length}
-        <span class="bv-note">Verses in the {litIn.toUpperCase()}</span>
-      {:else}
-        <span class="bv-note">Tap a book to zoom in</span>
-      {/if}
-    </div>
+    <form class="bv-add" on:submit|preventDefault={addWord}>
+      <input
+        type="text"
+        class="bv-add-input"
+        placeholder="Add a word"
+        aria-label="Add a word to light on the Bubbles"
+        enterkeyhint="go"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        bind:value={typed}
+        on:keydown={onAddKey}
+      />
+    </form>
     <div class="bv-ground" role="group" aria-label="Background">
       <button type="button" class:on={ground === 'light'} aria-pressed={ground === 'light'} on:click={() => setGround('light')}>Light</button>
       <button type="button" class:on={ground === 'dark'} aria-pressed={ground === 'dark'} on:click={() => setGround('dark')}>Dark</button>
@@ -336,6 +373,17 @@
   <div class="bv-body">
     <div class="bv-stage" bind:this={stage} style="background:{GROUNDS[ground].bg};color:{GROUNDS[ground].neutral}">
       <canvas bind:this={canvas} aria-label="Every book of the Bible as a bubble"></canvas>
+      <div class="bv-note-line">
+        {#if finding}
+          Finding verses…
+        {:else if note}
+          {note}
+        {:else if lit.length}
+          Verses in the {litIn.toUpperCase()}
+        {:else}
+          Tap a book to zoom in, or a word in its cloud to light it
+        {/if}
+      </div>
       {#if failed}
         <div class="bv-wait">The Bubbles couldn’t load. Close and try again.</div>
       {:else if !data}
@@ -389,19 +437,51 @@
     box-sizing: border-box;
   }
 
-  .bv-lead {
+  .bv-add {
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    margin: 0;
   }
 
-  .bv-note {
+  .bv-add-input {
+    width: 100%;
+    min-width: 0;
+    max-width: 260px;
+    box-sizing: border-box;
+    height: calc(30px * var(--bar-scale, 1));
+    padding: 0 calc(10px * var(--bar-scale, 1));
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    font: inherit;
+    /* 16px keeps a phone from zooming the page when the box is tapped. */
+    font-size: max(16px, 1em);
+  }
+
+  .bv-add-input::placeholder {
+    color: inherit;
+    opacity: 0.55;
+  }
+
+  .bv-add-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  .bv-note-line {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    right: 12px;
+    font-size: 12.5px;
+    line-height: 1.35;
+    opacity: 0.75;
+    pointer-events: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    opacity: 0.7;
   }
 
   .bv-ground {
