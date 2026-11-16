@@ -203,7 +203,7 @@
   import { soloRunsIn, segmentBySoloRuns } from "../lib/parallelIndex";
   import { openMapWindow } from "../lib/openMapWindow";
   import { openConnectionsWindow } from "../lib/openConnectionsWindow";
-  import { toEnglish } from "../lib/versification";
+  import { convertRef, toEnglish } from "../lib/versification";
   import { searchQuery, triggerSearch } from "../stores/searchStore";
   import { lexicalModalStore } from "../stores/lexicalModalStore";
   import { isbeModalStore } from "../stores/isbeModalStore";
@@ -257,7 +257,8 @@
   import CloseX from "./CloseX.svelte";
   import ReaderConnectionsStrip from "./ReaderConnectionsStrip.svelte";
   import BubbleView from "./BubbleView.svelte";
-  import { bubbleView, showOnBubbles } from "../stores/bubbleViewStore";
+  import MiniWordCloud from "./MiniWordCloud.svelte";
+  import { bubbleView, openWordCloud, showOnBubbles } from "../stores/bubbleViewStore";
 
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
 
@@ -1268,6 +1269,32 @@
       readerPending.set(null);
       restoreReaderOrigin(pending);
     }
+  }
+
+  /**
+   * A book's word cloud, full screen. A verse picked from it comes back here:
+   * through the Introduction when that is open (so its crumb brings the sheet
+   * back), otherwise with a crumb on the chapter 1 title the cloud sits under.
+   */
+  function openCloudFor(cloudBook: string) {
+    openWordCloud({
+      book: cloudBook,
+      translation: currentTranslation,
+      leave: (book, chapter, verse, from) => {
+        const to = convertRef(from, currentTranslation, { book, chapter, verse })[0] ?? { chapter, verse };
+        if (bookIntroPanelOpen) {
+          handleBookIntroNavigateTo(new CustomEvent('navigateTo', { detail: { book, chapter: to.chapter, verse: to.verse } }));
+          return;
+        }
+        pushCrumb('link', undefined, { book: cloudBook, chapter: 1, verse: null });
+        if (windowId) {
+          _windowScrollTarget = to.verse;
+          windowStore.updateContentState(windowId, { book, chapter: to.chapter, highlightedVerse: null });
+        } else {
+          navigationStore.navigateTo(currentTranslation, book, to.chapter, to.verse);
+        }
+      },
+    });
   }
 
   function handleBookIntroNavigateTo(e: CustomEvent<{ book: string; chapter: number; verse: number }>) {
@@ -7638,6 +7665,7 @@
   panelWidth={readerBoxWidth}
   on:close={() => (bookIntroPanelOpen = false)}
   on:navigateTo={handleBookIntroNavigateTo}
+  on:openCloud={(e) => openCloudFor(e.detail.book)}
 />
 
 <AnnotationPanel
@@ -7731,6 +7759,9 @@
                    it at the usual heading size. Later chapters keep "Psalm 2". -->
               <h1 class="book-title" style="--title-shadow:{getBookColor(chapterData.book)}">{bookTitle(chapterData.book)}</h1>
               <h1 style="--title-shadow:{getBookColor(chapterData.book)}">Chapter 1</h1>
+              {#if !pickOnly}
+                <MiniWordCloud book={chapterData.book} onOpen={() => openCloudFor(chapterData.book)} />
+              {/if}
             {:else}
               <h1 style="--title-shadow:{getBookColor(chapterData.book)}">{chapterData.book} {chapterData.chapter}</h1>
             {/if}

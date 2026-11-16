@@ -5,6 +5,8 @@
   import LookupModal from "./components/LookupModal.svelte";
   import FamilyTreeViewer from "./components/FamilyTreeViewer.svelte";
   import { familyTreeStore } from "./stores/familyTreeStore";
+  import WordCloudView from "./components/WordCloudView.svelte";
+  import { wordCloudView } from "./stores/bubbleViewStore";
   import { saveSession, restoreSession } from "./lib/sessionRestore";
   import ReadingPlanModal from "./components/ReadingPlanModal.svelte";
   import DailyGreetingModal from "./components/DailyGreetingModal.svelte";
@@ -439,6 +441,9 @@
     <!-- The family tree, full screen over everything else (roadmap #25).
          Nothing under it unmounts — this is an overlay, not a route. -->
     {#if $familyTreeStore.isOpen}<FamilyTreeViewer />{/if}
+
+    <!-- A book's word cloud, full screen, from its chapter 1 title or Introduction. -->
+    {#if $wordCloudView}<WordCloudView open={$wordCloudView} />{/if}
 
     <!-- Shared Reading Plan Modal -->
     <ReadingPlanModal bind:isOpen={showReadingPlanModal} />

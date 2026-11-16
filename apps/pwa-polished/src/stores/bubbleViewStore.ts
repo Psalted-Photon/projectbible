@@ -21,7 +21,7 @@ import {
   pendingRestore,
   registerScreenSurface,
 } from './navigationStore';
-import { normalizeRepeatWord, repeatsStore, type RepeatOrigin } from './repeatsStore';
+import { normalizeRepeatWord, repeatsStore, type RepeatGroup, type RepeatOrigin } from './repeatsStore';
 import { showNotice } from './noticeStore';
 import { MAX_REPEAT_GROUPS } from '../lib/repeatColors';
 import { FILLER_WORDS } from '../lib/fillerWords';
@@ -108,23 +108,53 @@ export function goFromBubbles(book: string, chapter: number, verse: number, from
  * first. Returns whether it opened.
  */
 export function showOnBubbles(label: string, from: RepeatOrigin = {}): boolean {
-  const shown = label.trim();
-  const word = normalizeRepeatWord(shown);
-  if (!word) return false;
-  if (FILLER_WORDS.has(word)) {
-    void refuseFiller(shown, word);
-    return false;
-  }
-  const groups = get(repeatsStore);
-  if (!groups.some((g) => g.word === word)) {
-    if (groups.length >= MAX_REPEAT_GROUPS) {
-      showNotice(`${MAX_REPEAT_GROUPS} words are lit, the most at once. Remove one from the tabs first.`, 'info');
-      return false;
-    }
-    repeatsStore.add(shown, from);
-  }
+  if (!makeRepeat(label, from)) return false;
+  closeWordCloud();
   if (!get(bubbleView).open) openBubbles();
   return true;
+}
+
+/**
+ * The word as a Repeat: the one already on the tabs, or a new one. Null,
+ * with a notice saying why, for a filler word or an eighth word.
+ */
+export function makeRepeat(label: string, from: RepeatOrigin = {}): RepeatGroup | null {
+  const shown = label.trim();
+  const word = normalizeRepeatWord(shown);
+  if (!word) return null;
+  if (FILLER_WORDS.has(word)) {
+    void refuseFiller(shown, word);
+    return null;
+  }
+  const groups = get(repeatsStore);
+  const had = groups.find((g) => g.word === word);
+  if (had) return had;
+  if (groups.length >= MAX_REPEAT_GROUPS) {
+    showNotice(`${MAX_REPEAT_GROUPS} words are lit, the most at once. Remove one from the tabs first.`, 'info');
+    return null;
+  }
+  return repeatsStore.add(shown, from);
+}
+
+// ── The full-screen word cloud ──────────────────────────────────────────────
+
+export interface WordCloudOpen {
+  book: string;
+  /** The translation of the reader it was opened from; its verse lists use it. */
+  translation: string;
+  /** Take that reader to a verse, numbered as `from` numbers it, leaving a crumb. */
+  leave: (book: string, chapter: number, verse: number, from: string) => void;
+}
+
+/** WordCloudView, open over everything for one book, or null. */
+export const wordCloudView = writable<WordCloudOpen | null>(null);
+
+export function openWordCloud(o: WordCloudOpen): void {
+  wordCloudView.set(o);
+}
+
+export function closeWordCloud(): void {
+  if (get(wordCloudView)) wordCloudView.set(null);
 }
 
 /** "Too common to list", with how many verses it is in when the word lists can say. */

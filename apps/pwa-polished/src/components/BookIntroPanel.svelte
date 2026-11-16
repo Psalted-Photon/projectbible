@@ -11,6 +11,7 @@
   import { navigationStore } from "../stores/navigationStore";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import CloseX from "./CloseX.svelte";
+  import MiniWordCloud from "./MiniWordCloud.svelte";
   import { Info } from "phosphor-svelte";
 
   export let open = false;
@@ -51,6 +52,8 @@
   const dispatch = createEventDispatcher<{
     close: void;
     navigateTo: { book: string; chapter: number; verse: number };
+    /** The word cloud at the top was tapped: open it full screen. */
+    openCloud: { book: string };
   }>();
 
   /** The translation the pill's verse was read in. */
@@ -144,6 +147,11 @@
     {#if panelLoading}
       <div class="panel-loading show-late">Loading…</div>
     {:else}
+      <!-- The book's most used words, full width. Only while open: it is
+           worked out when it first shows. -->
+      {#if open && book}
+        <MiniWordCloud {book} wide onOpen={() => dispatch('openCloud', { book })} />
+      {/if}
       <!-- Intro content -->
       {#if introHtml}
         <!-- svelte-ignore a11y-no-static-element-interactions -->
