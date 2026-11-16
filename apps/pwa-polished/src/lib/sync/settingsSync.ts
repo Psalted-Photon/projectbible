@@ -48,6 +48,8 @@ const SYNCED_KEYS: (keyof UserSettings)[] = [
   'connectionViews',
   // Black or cream behind the arcs: a taste, so it follows the account.
   'connectionsBackground',
+  // Light or Dark behind the Bubbles and the word clouds: a taste, the same.
+  'bubbleGround',
   // The strip of arcs under each chapter title: a taste, like the titles' color.
   'connectionsStrip',
   // English under Greek and Hebrew previews: a reading habit, like the strip.

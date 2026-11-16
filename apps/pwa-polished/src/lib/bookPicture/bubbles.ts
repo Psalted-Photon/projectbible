@@ -213,6 +213,47 @@ export interface BubbleMap {
   books: BookBubble[];
   /** The smallest chapter circle's radius, for how far in a zoom needs to go. */
   minChapterR: number;
+  /** The smallest share a verse gets in any chapter (verseShare), for the same. */
+  minVerseShare: number;
+}
+
+/**
+ * Where the Bubbles change as you zoom, in CSS px on screen. One place for
+ * the lab and the app, so both feel the same.
+ */
+export const BUBBLE_ZOOM = {
+  /** A book splits into its chapters while its circle's radius grows across this range. */
+  chaptersFrom: 140,
+  chaptersTo: 260,
+  /** A chapter's verses show as dots once each verse's share (verseShare) is this wide... */
+  verseDots: 8,
+  /** ...and as their numbers from this wide. */
+  verseNumbers: 18,
+  /** The furthest zoom makes the smallest chapter's circle this big. */
+  maxChapterR: 220,
+  /** Biggest a verse number is drawn. */
+  verseNumberMax: 17,
+};
+
+/**
+ * How far out and in the map may zoom, from the scale that fits it on screen:
+ * out to half that, in until every chapter shows its verse numbers with room
+ * to spare.
+ */
+export function bubbleZoomLimits(map: BubbleMap, fitK: number): [number, number] {
+  const kIn = Math.max(
+    fitK * 8,
+    BUBBLE_ZOOM.maxChapterR / map.minChapterR,
+    (BUBBLE_ZOOM.verseNumbers * 1.5) / map.minVerseShare,
+  );
+  return [fitK * 0.5, kIn];
+}
+
+/** How far a book has split into its chapters at zoom `k` (0 to 1). */
+export function chapterMix(b: BookBubble, k: number): number {
+  if (!b.chapters.length) return 0;
+  const t = Math.min(1, Math.max(0, (b.r * k - BUBBLE_ZOOM.chaptersFrom) / (BUBBLE_ZOOM.chaptersTo - BUBBLE_ZOOM.chaptersFrom)));
+  return t * t * (3 - 2 * t);
 }
 
 /** Chapter circles take up this much of their book's radius. */
@@ -234,6 +275,7 @@ export function layoutBubbles(input: BubbleInput[], size = 1000): BubbleMap {
   packCircles(books);
   fitInto(books, { x: size / 2, y: size / 2, r: size / 2 });
   let minChapterR = Infinity;
+  let minVerseShare = Infinity;
   input.forEach((b, i) => {
     const book = books[i];
     const chapters: ChapterBubble[] = b.chapters.map((c) => ({
@@ -246,10 +288,18 @@ export function layoutBubbles(input: BubbleInput[], size = 1000): BubbleMap {
     }));
     packCircles(chapters);
     fitInto(chapters, { x: book.x, y: book.y, r: book.r * CHAPTER_FILL });
-    for (const c of chapters) minChapterR = Math.min(minChapterR, c.r);
+    for (const c of chapters) {
+      minChapterR = Math.min(minChapterR, c.r);
+      minVerseShare = Math.min(minVerseShare, verseShare(c, c.verses));
+    }
     book.chapters = chapters;
   });
-  return { size, books, minChapterR: Number.isFinite(minChapterR) ? minChapterR : 1 };
+  return {
+    size,
+    books,
+    minChapterR: Number.isFinite(minChapterR) ? minChapterR : 1,
+    minVerseShare: Number.isFinite(minVerseShare) ? minVerseShare : 1,
+  };
 }
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));

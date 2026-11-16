@@ -207,6 +207,30 @@ function markVerses(index: WordIndex, w: number, into: Uint8Array): void {
   }
 }
 
+/** Every verse that uses the word, by verse number in Bible order; empty when the list does not have it. */
+export function versesOfWord(index: WordIndex, word: string): number[] {
+  const w = findWord(index, foldWord(word));
+  if (w === -1) return [];
+  const { postings } = index;
+  const out: number[] = [];
+  let at = index.starts[w];
+  const end = index.starts[w + 1];
+  let v = -1;
+  while (at < end) {
+    let gap = 0;
+    let shift = 0;
+    let byte: number;
+    do {
+      byte = postings[at++];
+      gap |= (byte & 0x7f) << shift;
+      shift += 7;
+    } while (byte & 0x80);
+    v += gap;
+    out.push(v);
+  }
+  return out;
+}
+
 function markWord(index: WordIndex, word: string, into: Uint8Array): void {
   const w = findWord(index, foldWord(word));
   if (w !== -1) markVerses(index, w, into);

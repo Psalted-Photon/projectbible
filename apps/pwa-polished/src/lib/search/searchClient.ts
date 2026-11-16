@@ -11,7 +11,7 @@
  * the old way instead. A worker that stopped isn't started again that session.
  */
 
-import type { Suggestions, TranslationHits, VerseQuery } from './searchWorker';
+import type { Suggestions, TranslationHits, VerseQuery, WordVerses } from './searchWorker';
 
 let worker: Worker | null = null;
 let broken = false;
@@ -99,6 +99,20 @@ export async function suggestFor(text: string): Promise<Suggestions | null> {
   warmSearchIndex();
   try {
     return await call<Suggestions>('suggest', { text });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every verse in one translation holding one exact word (the Bubbles' lit
+ * words), by book. Null when that translation has no word list or the worker
+ * can't answer.
+ */
+export async function versesWithWord(translation: string, word: string): Promise<WordVerses | null> {
+  warmSearchIndex();
+  try {
+    return await call<WordVerses | null>('wordVerses', { translation, word });
   } catch {
     return null;
   }

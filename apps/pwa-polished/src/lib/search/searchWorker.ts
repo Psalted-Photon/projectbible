@@ -13,7 +13,7 @@
 
 import { wordLookups, wordMatcher, type WordLookup } from '../searchWords';
 import { cleanVersePreviewText } from '../verseRendering';
-import { BIBLE_BOOKS, bookTitle, translationSortIndex } from '../bibleData';
+import { BIBLE_BOOKS, bookTitle, normalizeBookName, translationSortIndex } from '../bibleData';
 import { soundKey, typoDistance } from '../fuzzy';
 import {
   INDEX_FORMAT,
@@ -26,6 +26,7 @@ import {
   foldWord,
   matchVerses,
   verseAt,
+  versesOfWord,
   type VerseRow,
   type WordIndex,
 } from './wordIndex';
@@ -572,6 +573,42 @@ async function searchVerses({ query, limit, first, also }: VerseQuery): Promise<
   return out;
 }
 
+// ── One exact word ──────────────────────────────────────────────────────────
+
+/** Every verse of one translation holding one word, by book (as the app names it), as chapter * 1000 + verse. */
+export interface WordVerses {
+  translation: string;
+  books: Array<[book: string, refs: number[]]>;
+  total: number;
+}
+
+/**
+ * The Bubbles' lit words: every verse in `translation` that holds `word`, the
+ * word exactly as the list keeps it (lower case, a whole word), no other
+ * forms. Null when that translation has no word list.
+ */
+async function wordVerses(translation: string, word: string): Promise<WordVerses | null> {
+  await (syncing ?? sync());
+  if (syncFailed) await sync();
+  const tid = [...indexes.keys()].find((t) => t.toLowerCase() === translation.toLowerCase());
+  const index = tid ? indexes.get(tid) : undefined;
+  if (!index) return null;
+  const books: WordVerses['books'] = [];
+  let last = -1;
+  let refs: number[] = [];
+  const verses = versesOfWord(index, word.trim());
+  for (const v of verses) {
+    const b = index.bookOf[v];
+    if (b !== last) {
+      refs = [];
+      books.push([normalizeBookName(index.books[b]), refs]);
+      last = b;
+    }
+    refs.push(index.chapterOf[v] * 1000 + index.verseOf[v]);
+  }
+  return { translation: index.translation, books, total: verses.length };
+}
+
 self.onmessage = async (e: MessageEvent<{ id: number; action: string; payload?: any }>) => {
   const { id, action, payload } = e.data;
   try {
@@ -593,6 +630,10 @@ self.onmessage = async (e: MessageEvent<{ id: number; action: string; payload?: 
 
       case 'suggest':
         result = suggest(String(payload?.text ?? ''));
+        break;
+
+      case 'wordVerses':
+        result = await wordVerses(String(payload?.translation ?? ''), String(payload?.word ?? ''));
         break;
 
       default:

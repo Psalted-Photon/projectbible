@@ -1,5 +1,5 @@
 /**
- * Book picture lab v1.2: one book per page, its whole text set inside a
+ * Book picture lab v1.3: one book per page, its whole text set inside a
  * symbol. Zoomed out you see the symbol, zoomed in you read the book.
  *
  * Runs the real code: lib/bookPicture/shapes.ts for the symbols and
@@ -65,6 +65,9 @@ import {
   type WordSet,
 } from './src/lib/bookPicture/layout';
 import {
+  BUBBLE_ZOOM,
+  bubbleZoomLimits,
+  chapterMix,
   layoutBubbles,
   verseShare,
   verseSpot,
@@ -804,9 +807,6 @@ const BUBBLE_WORLD = 1000;
 /** A bubble's cloud is packed in a circle in a box this wide, then scaled onto the bubble. */
 const BUBBLE_BOX = 200;
 const BUBBLE_CLOUD_WORDS = 40;
-/** A book's chapters fade in while its circle grows across this range of radius, in CSS px. */
-const CHAPTERS_FROM = 90;
-const CHAPTERS_TO = 190;
 const TAU = Math.PI * 2;
 
 let bubbles: BubbleMap | null = null;
@@ -892,16 +892,6 @@ function queueBubbleClouds(): void {
 
 function cloudsShown(): boolean {
   return V.bubbleClouds && !glow;
-}
-
-function smooth(a: number, b: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-}
-
-/** How far a book has split into its chapters at this zoom (0 to 1). */
-function chapterMix(b: BookBubble, kk: number): number {
-  return b.chapters.length ? smooth(CHAPTERS_FROM, CHAPTERS_TO, b.r * kk) : 0;
 }
 
 // The word glow: every verse holding the word, per book.
@@ -1058,13 +1048,13 @@ function drawChapters(
     c.lineWidth = Math.max(0.75, ratio * 0.9);
     c.stroke();
     const share = verseShare(ch, ch.verses) * K;
-    if (share / ratio >= 5) {
+    if (share / ratio >= BUBBLE_ZOOM.verseDots) {
       // Close enough to see the verses: numbers when there's room, dots when not.
-      const numbers = share / ratio >= 13;
+      const numbers = share / ratio >= BUBBLE_ZOOM.verseNumbers;
       c.fillStyle = theme.neutral;
       c.globalAlpha = alpha * (glowing ? 0.3 : 0.5);
       c.textBaseline = 'middle';
-      if (numbers) c.font = `${Math.min(share * 0.7, 15 * ratio)}px ${font.css}`;
+      if (numbers) c.font = `${Math.min(share * 0.7, BUBBLE_ZOOM.verseNumberMax * ratio)}px ${font.css}`;
       const first = ix.chapters[ci]?.first ?? 0;
       for (let v = 0; v < ch.verses; v++) {
         const p = verseSpot(ch, v, ch.verses);
@@ -1149,9 +1139,9 @@ function drawGlowDots(
     const px = X + p.x * K, py = Y + p.y * K;
     if (px < -24 || px > W + 24 || py < -24 || py > H + 24) continue;
     const share = verseShare(ch, ch.verses) * K;
-    if (share / ratio >= 13) {
+    if (share / ratio >= BUBBLE_ZOOM.verseNumbers) {
       // Verse numbers are showing: ring the number rather than cover it.
-      const rr = Math.min(share * 0.62, 17 * ratio);
+      const rr = Math.min(share * 0.62, (BUBBLE_ZOOM.verseNumberMax + 3) * ratio);
       c.globalAlpha = 0.28;
       c.fillStyle = color;
       c.beginPath();
@@ -1273,8 +1263,8 @@ function smallestCloudF(): number {
 function kLimits(): [number, number] {
   const kf = fitK();
   if (V.view === 'bubbles') {
-    // Far enough in that the smallest chapter shows its verses.
-    return [kf * 0.5, Math.max(kf * 8, 160 / (bubbles?.minChapterR ?? 1))];
+    // Far enough in that every chapter shows its verse numbers.
+    return bubbles ? bubbleZoomLimits(bubbles, kf) : [kf * 0.5, kf * 8];
   }
   if (built?.cloud) return [kf * 0.5, Math.max(kf * 2, 24 / smallestCloudF())];
   return [kf * 0.5, Math.max(kf * 2, 56 / smallestF())];
@@ -1693,7 +1683,7 @@ function tapBubbles(cx: number, cy: number): void {
     const ci = b.chapters.findIndex((ch) => (wx - ch.x) ** 2 + (wy - ch.y) ** 2 <= ch.r * ch.r);
     if (ci >= 0) {
       const ch = b.chapters[ci];
-      if (verseShare(ch, ch.verses) * k >= 5) {
+      if (verseShare(ch, ch.verses) * k >= BUBBLE_ZOOM.verseDots) {
         let bv = 0, bd = Infinity;
         for (let v = 0; v < ch.verses; v++) {
           const p = verseSpot(ch, v, ch.verses);
