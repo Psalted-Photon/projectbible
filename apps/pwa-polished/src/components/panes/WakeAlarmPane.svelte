@@ -23,6 +23,16 @@
     DAY_SHORT,
   } from "../../lib/alarm/alarmSchedule";
   import { userProfileStore } from "../../stores/userProfileStore";
+  import { IS_ANDROID_APP } from "../../lib/platform";
+  import {
+    askPhoneNotifications,
+    openPhoneSettings,
+    phoneAlarmStatus,
+    previewPhoneAlarm,
+    syncPhoneSchedule,
+    testPhoneAlarm,
+    type PhoneAlarmStatus,
+  } from "../../lib/android/alarms";
 
   let enabled = false;
   let time = "06:00";
@@ -42,6 +52,23 @@
 
   const timezone = getEffectiveTimezone();
 
+  // The Android app sets the alarm on the phone, so what it needs is the
+  // phone's two permissions rather than a sign-in and a connection.
+  let phone: PhoneAlarmStatus | null = null;
+
+  async function refreshPhone() {
+    try {
+      phone = await phoneAlarmStatus();
+    } catch {
+      phone = null;
+    }
+  }
+
+  // Coming back from the phone's settings is the moment either may have changed.
+  function handlePhoneReturn() {
+    if (!document.hidden) void refreshPhone();
+  }
+
   // Recomputed every minute so the countdown does not go stale while the pane
   // sits open.
   let tick = Date.now();
@@ -58,15 +85,21 @@
     book = alarm.book ?? "Genesis";
     chapter = alarm.chapter ?? 1;
 
-    const support = pushSupport();
-    blockedReason = support.supported ? "" : support.message;
-    permissionState = notificationPermission();
+    if (IS_ANDROID_APP) {
+      void refreshPhone();
+      document.addEventListener("visibilitychange", handlePhoneReturn);
+    } else {
+      const support = pushSupport();
+      blockedReason = support.supported ? "" : support.message;
+      permissionState = notificationPermission();
+    }
 
     tickTimer = setInterval(() => (tick = Date.now()), 60_000);
   });
 
   onDestroy(() => {
     if (tickTimer) clearInterval(tickTimer);
+    if (IS_ANDROID_APP) document.removeEventListener("visibilitychange", handlePhoneReturn);
   });
 
   $: chapterCount = BIBLE_BOOKS.find((b) => b.name === book)?.chapters ?? 1;
@@ -96,6 +129,54 @@
 
   let testing = false;
   let testingReal = false;
+
+  /** In the app: shows the alarm's notification from the phone, sound and all. */
+  async function runPhonePreview() {
+    testing = true;
+    statusMessage = "";
+    statusKind = "";
+    try {
+      phone = await askPhoneNotifications();
+      if (phone.notifications !== "granted") {
+        statusKind = "warn";
+        statusMessage = "Notifications are off for irisBible, so nothing can show. Turn them on above.";
+      } else {
+        phone = await previewPhoneAlarm();
+        statusKind = "ok";
+        statusMessage = "Shown. Check your notification shade. That's the look and the sound.";
+      }
+    } catch (err: any) {
+      statusKind = "error";
+      statusMessage = err?.message ?? "Could not show the notification.";
+    }
+    testing = false;
+  }
+
+  /** In the app: rings once in a minute, set the same way as the real alarm. */
+  async function runPhoneTest() {
+    testingReal = true;
+    statusMessage = "";
+    statusKind = "";
+    try {
+      phone = await askPhoneNotifications();
+      if (phone.notifications !== "granted") {
+        statusKind = "warn";
+        statusMessage = "Notifications are off for irisBible, so the alarm can't show. Turn them on above.";
+      } else {
+        const result = await testPhoneAlarm(60);
+        phone = result;
+        const at = new Date(result.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+        statusKind = result.exact ? "ok" : "warn";
+        statusMessage = result.exact
+          ? `Set for ${at}. Lock your phone now. It rings in about a minute.`
+          : `Set for ${at}, but without "Alarms & reminders" Android may ring it a few minutes late.`;
+      }
+    } catch (err: any) {
+      statusKind = "error";
+      statusMessage = err?.message ?? "Could not set the test alarm.";
+    }
+    testingReal = false;
+  }
 
   async function runTestNotification() {
     testing = true;
@@ -150,6 +231,11 @@
     };
     updateWakeAlarmSettings(alarm);
 
+    if (IS_ANDROID_APP) {
+      await savePhoneAlarm(alarm);
+      return;
+    }
+
     // Let the Settings pane (which can be open beside this one) refresh its summary.
     window.dispatchEvent(new CustomEvent("settingsUpdated"));
 
@@ -177,6 +263,41 @@
       statusMessage = result.message;
     }
   }
+
+  /**
+   * In the app: set it on the phone, which needs no sign-in or connection.
+   * The account gets a copy when signed in, quietly, so the website and other
+   * devices show the same alarm.
+   */
+  async function savePhoneAlarm(alarm: WakeAlarmSettings) {
+    try {
+      if (alarm.enabled) phone = await askPhoneNotifications();
+    } catch {
+      // Asked again on the next save.
+    }
+    phone = (await syncPhoneSchedule(true)) ?? phone;
+    // After the phone has it, so the change this sends finds nothing new to set.
+    window.dispatchEvent(new CustomEvent("settingsUpdated"));
+    void pushAlarm(alarm);
+    saving = false;
+
+    if (!phone) {
+      statusKind = "error";
+      statusMessage = "Could not set the alarm on this phone.";
+    } else if (!alarm.enabled) {
+      statusKind = "ok";
+      statusMessage = "Alarm turned off.";
+    } else if (phone.notifications !== "granted") {
+      statusKind = "warn";
+      statusMessage = "Saved, but notifications are off for irisBible, so nothing will show. Turn them on above.";
+    } else if (!phone.exact) {
+      statusKind = "warn";
+      statusMessage = `Set for ${formatTime12h(alarm.time)}, but Android may ring it late until "Alarms & reminders" is allowed above.`;
+    } else {
+      statusKind = "ok";
+      statusMessage = `Alarm set for ${formatTime12h(alarm.time)} on this phone.`;
+    }
+  }
 </script>
 
 <div class="alarm-pane">
@@ -189,10 +310,45 @@
   </h2>
 
   <p class="section-description">
-    At the time you set, your phone gets a irisBible notification. Tap it and
-    the app opens with a start button — reading never begins on its own.
+    {#if IS_ANDROID_APP}
+      At the time you set, your phone rings with an irisBible alarm. Tap it and
+      the app opens with a start button — reading never begins on its own.
+    {:else}
+      At the time you set, your phone gets a irisBible notification. Tap it and
+      the app opens with a start button — reading never begins on its own.
+    {/if}
   </p>
 
+  {#if IS_ANDROID_APP}
+  <div class="requirement-box">
+    <p><strong>What this needs:</strong></p>
+    <ul>
+      <li>
+        Permission to show notifications. Saving an alarm asks for it.
+        {#if phone?.notifications === "granted"}
+          <span class="requirement-good">Allowed.</span>
+        {:else if phone}
+          <!-- After a "no", Android may stop asking without saying so, so the
+               settings button shows whenever they are not on. -->
+          <span class="requirement-bad">
+            {phone.notifications === "denied" ? "Notifications are off for irisBible." : "Not allowed yet."}
+          </span>
+          <button type="button" class="req-btn" on:click={() => openPhoneSettings("notifications")}>Open settings</button>
+        {/if}
+      </li>
+      <li>
+        “Alarms &amp; reminders,” so it rings on the minute.
+        {#if phone?.exact}
+          <span class="requirement-good">Allowed.</span>
+        {:else if phone}
+          <span class="requirement-bad">Not allowed yet. Without it, Android may ring the alarm late.</span>
+          <button type="button" class="req-btn" on:click={() => openPhoneSettings("exact")}>Allow</button>
+        {/if}
+      </li>
+      <li>No internet or sign-in needed. The alarm is set on this phone.</li>
+    </ul>
+  </div>
+  {:else}
   <div class="requirement-box">
     <p><strong>What this needs:</strong></p>
     <ul>
@@ -219,6 +375,7 @@
       <p class="requirement-bad blocked-note">{blockedReason}</p>
     {/if}
   </div>
+  {/if}
 
   <div class="setting-group">
     <label class="checkbox-label">
@@ -304,6 +461,26 @@
 
   <div class="test-section">
     <h3>Test it</h3>
+    {#if IS_ANDROID_APP}
+    <div class="test-row">
+      <button class="test-button" on:click={runPhonePreview} disabled={testing}>
+        {testing ? "Showing…" : "Preview the look"}
+      </button>
+      <span class="test-desc">
+        Shows the alarm's notification now, with its sound. Proves permission,
+        the icon and the name.
+      </span>
+    </div>
+    <div class="test-row">
+      <button class="test-button test-button-real" on:click={runPhoneTest} disabled={testingReal}>
+        {testingReal ? "Setting…" : "Ring in one minute"}
+      </button>
+      <span class="test-desc">
+        The real alarm, set on this phone. <strong>Lock your phone after
+        tapping</strong> — that's the behavior worth proving.
+      </span>
+    </div>
+    {:else}
     <div class="test-row">
       <button class="test-button" on:click={runTestNotification} disabled={testing}>
         {testing ? "Sending…" : "Preview the look"}
@@ -323,10 +500,21 @@
         seconds.
       </span>
     </div>
+    {/if}
   </div>
 
   <div class="loud-box">
     <h3>If it doesn't wake you</h3>
+    {#if IS_ANDROID_APP}
+    <p>
+      The alarm rings with your phone's alarm sound, at alarm volume. To pick
+      another sound, long-press the notification and open its settings.
+    </p>
+    <ul>
+      <li>If it doesn't ring at all, check both permissions at the top.</li>
+      <li><strong>Samsung:</strong> make sure irisBible isn't under Settings → Battery → Background usage limits → Deep sleeping apps.</li>
+    </ul>
+    {:else}
     <p>
       A notification uses your phone's normal notification sound, which we can't
       make louder from here. Fix it once, by hand:
@@ -335,6 +523,7 @@
       <li><strong>Android:</strong> long-press a irisBible notification → its settings → set the sound to an alarm tone and raise the importance.</li>
       <li><strong>iPhone:</strong> Settings → Focus → Sleep → allow notifications from irisBible.</li>
     </ul>
+    {/if}
   </div>
 </div>
 
@@ -406,6 +595,20 @@
     display: block;
     color: #7ddc9a;
     font-weight: 600;
+  }
+  .req-btn {
+    display: inline-block;
+    margin-top: 0.35rem;
+    padding: 5px 12px;
+    background: #222;
+    border: 1px solid #667eea;
+    border-radius: 999px;
+    color: #cdd4f7;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .req-btn:hover {
+    background: rgba(102, 126, 234, 0.15);
   }
   .blocked-note {
     margin: 0.75rem 0 0 !important;

@@ -27,6 +27,7 @@
   import MovingScreen from "./components/MovingScreen.svelte";
   import { checkMove, movingScreenOpen } from "./lib/move/moveCheck";
   import { IS_ANDROID_APP } from "./lib/platform";
+  import { onPhoneAlarmTap, takeLaunchTap, watchPhoneSchedule } from "./lib/android/alarms";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
@@ -157,10 +158,27 @@
       );
     };
 
+    /**
+     * The Android app's alarm and reminder taps (lib/android/alarms.ts). They
+     * come as the same links the web opens, /?alarm=1 and /?devo=today&s=…,
+     * but handed over by the app rather than in the address.
+     */
+    const openPhoneTap = (url: string) => {
+      const params = new URL(url, window.location.origin).searchParams;
+      if (params.has('devo')) {
+        const target = devotionalTargetFromParams(params);
+        if (target) setTimeout(() => openDevotional(target), 0);
+      } else {
+        wakeAlarmStartOpen.set(true);
+      }
+    };
+
     const init = async () => {
+      // In the app, the alarm or reminder notification that started it.
+      const phoneTap = IS_ANDROID_APP ? await takeLaunchTap() : null;
       // A launch from a link, a reminder or the alarm is going somewhere of
       // its own, so it does not bring back what was open before.
-      const launchedWithPurpose = window.location.search.length > 1;
+      const launchedWithPurpose = window.location.search.length > 1 || phoneTap !== null;
       await openSharedLink();
       appReady = true;
       if (!launchedWithPurpose) restoreSession();
@@ -169,6 +187,7 @@
         sharedDevotional = null;
         setTimeout(() => openDevotional(target), 0);
       }
+      if (phoneTap) openPhoneTap(phoneTap);
       console.log("✅ App ready (auto-update test build 2)");
 
       // Eruda always loads in production -- it is how this app gets debugged
@@ -331,6 +350,13 @@
       }
     } catch {
       // A malformed URL must not stop the app from starting.
+    }
+
+    // The app sets the alarm and reminders on the phone. Hand it the times
+    // now and whenever settings change, and hear taps while it is running.
+    if (IS_ANDROID_APP) {
+      watchPhoneSchedule();
+      onPhoneAlarmTap(openPhoneTap);
     }
 
     const handleSwMessage = (event: MessageEvent) => {

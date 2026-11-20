@@ -11,6 +11,8 @@
 
 import { supabase } from '../supabase/client';
 import { upsertWakeAlarm, fetchWakeAlarm } from '../supabase/wakeAlarm';
+import { IS_ANDROID_APP } from '../platform';
+import { syncPhoneSchedule } from '../android/alarms';
 import {
   getWakeAlarmSettings,
   updateWakeAlarmSettings,
@@ -86,6 +88,8 @@ export async function pullAlarmIfUnset(): Promise<void> {
       book: row.book ?? undefined,
       chapter: row.chapter ?? undefined,
     });
+    // The app sets its alarms on the phone, so hand it the adopted one.
+    if (IS_ANDROID_APP) void syncPhoneSchedule();
   } catch (err) {
     console.warn('[WakeAlarm] Pull failed:', err);
   }

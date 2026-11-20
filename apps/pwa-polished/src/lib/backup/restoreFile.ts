@@ -24,6 +24,7 @@ import { forgetRemotePlanStatuses, planUploadOp, queueProgressEntry } from '../.
 import { readingProgressStore, type ReadingProgressEntry } from '../../stores/ReadingProgressStore';
 import { repeatsStore } from '../../stores/repeatsStore';
 import { pushAlarm } from '../alarm/alarmSync';
+import { IS_ANDROID_APP } from '../platform';
 import { JournalLockedError, sealFields } from '../journalLock/entryCrypto';
 import { getContentKey, scramblesWrites } from '../journalLock/lockState';
 import { syncQueue, syncService } from '../sync';
@@ -585,7 +586,10 @@ async function restoreSettings(data: BackupData): Promise<{ applied: boolean; al
 
   if (!settings.wakeAlarm) return { applied: true, alarmProblem: null };
   const armed = await pushAlarm();
-  return { applied: true, alarmProblem: armed.ok ? null : armed.message };
+  // The app sets the alarm on the phone (settingsUpdated above hands it over),
+  // so only a real failure to copy it to the account is worth a line there.
+  const problem = armed.ok || (IS_ANDROID_APP && armed.reason !== 'error') ? null : armed.message;
+  return { applied: true, alarmProblem: problem };
 }
 
 /**

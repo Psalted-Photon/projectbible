@@ -38,5 +38,20 @@ export function slotFor(
   return now;
 }
 
+/**
+ * Which reminders are really on: Morning only / Evening only switches the
+ * other one off, whatever its own switch says. What the server is sent, and
+ * in the Android app what the phone sets (lib/android/alarms.ts).
+ */
+export function remindersInEffect(settings: DevotionalSettings) {
+  const r = settings.reminders;
+  return {
+    morning_enabled: r.morningEnabled && settings.slotMode !== 'evening',
+    morning_time: r.morningTime,
+    evening_enabled: r.eveningEnabled && settings.slotMode !== 'morning',
+    evening_time: r.eveningTime,
+  };
+}
+
 /** Works without slots, by id — so callers that have only an id (a deep link, a push) can pick the slot without a DB read. */
 export const ONE_A_DAY_WORKS = new Set(['faiths-checkbook']);

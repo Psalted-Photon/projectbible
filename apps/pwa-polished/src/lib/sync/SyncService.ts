@@ -22,6 +22,7 @@ import { pullAlarmIfUnset } from '../alarm/alarmSync';
 import { refreshPushSubscription } from '../alarm/pushSubscription';
 import { remindersOn, resyncReminderTimezone } from '../devotionals/reminderSync';
 import { getWakeAlarmSettings } from '../../adapters/settings';
+import { IS_ANDROID_APP } from '../platform';
 import type { SyncState, SyncTable } from './types';
 
 interface SyncStore {
@@ -403,8 +404,9 @@ class SyncService {
           // Keep devotional reminders on local time after travel or a timezone change.
           await resyncReminderTimezone();
           // Keep this device signed up for them at this address. Not awaited:
-          // without a service worker (dev) it waits out a 10 s timeout.
-          if (getWakeAlarmSettings().enabled || remindersOn()) void refreshPushSubscription();
+          // without a service worker (dev) it waits out a 10 s timeout. The
+          // app sets them on the phone instead (lib/android/alarms.ts).
+          if (!IS_ANDROID_APP && (getWakeAlarmSettings().enabled || remindersOn())) void refreshPushSubscription();
         } else {
           console.debug('[SyncService] Skipping pull — synced recently');
         }

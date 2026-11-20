@@ -15,7 +15,7 @@
 
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import sharp from 'sharp';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -69,6 +69,18 @@ for (const dir of readdirSync(RES).filter((d) => d.startsWith('drawable'))) {
   const d = Math.round(Math.min(width, height) * 0.3);
   writeFileSync(file, await irisOn(width, height, d, { ...CREAM, alpha: 1 }));
   splashes++;
+}
+
+// Notification icon for the Auto-Read Alarm and reminders: the one-color iris
+// the web's notifications use (public/notification-badge-96.png), 24dp in
+// each bucket. Android draws it in a single color, from its shape alone.
+const BADGE = join(HERE, '..', 'public', 'notification-badge-96.png');
+for (const [bucket, scale] of Object.entries(DENSITIES)) {
+  const dir = join(RES, `drawable-${bucket}`);
+  mkdirSync(dir, { recursive: true });
+  const px = Math.round(24 * scale);
+  writeFileSync(join(dir, 'ic_notification.png'),
+    await sharp(BADGE).resize(px, px).png({ compressionLevel: 9 }).toBuffer());
 }
 
 console.log(`Icons written for ${Object.keys(DENSITIES).length} densities, ${splashes} launch screens redrawn.`);

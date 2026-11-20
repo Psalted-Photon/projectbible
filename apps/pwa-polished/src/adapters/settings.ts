@@ -51,7 +51,8 @@ export interface TtsSettings {
 /**
  * Wake alarm — a push notification at a set time that offers to read a
  * passage aloud. The schedule is mirrored to Supabase because the server is
- * what actually fires it; see src/lib/alarm/.
+ * what actually fires it; see src/lib/alarm/. In the Android app the phone
+ * fires it instead (src/lib/android/alarms.ts).
  */
 export interface WakeAlarmSettings {
   enabled: boolean;

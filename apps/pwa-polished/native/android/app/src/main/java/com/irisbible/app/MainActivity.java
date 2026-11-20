@@ -18,6 +18,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(IrisFilesPlugin.class);
         registerPlugin(IrisScreenPlugin.class);
         registerPlugin(IrisMediaPlugin.class);
+        registerPlugin(IrisAlarmsPlugin.class);
         // Open the way the page last asked for, so a phone held sideways at
         // launch doesn't turn the app before the page has loaded.
         IrisScreenPlugin.applySavedOrientation(this);

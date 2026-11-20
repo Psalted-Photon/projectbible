@@ -9,6 +9,9 @@
  * Everything here needs a real user gesture (permission prompts do) and a
  * registered service worker, so it only works on a built/deployed app — there
  * is no service worker in `vite dev`.
+ *
+ * Web only. The Android app sets the alarm and reminders on the phone itself
+ * (lib/android/alarms.ts) and never signs up for pushes.
  */
 
 import { supabase } from '../supabase/client';
