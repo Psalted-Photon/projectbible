@@ -16,6 +16,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Every pack and voice, staged by native/gather-included.mjs outside
+    // src/main/assets/public, which Capacitor empties on every sync. They
+    // land in the APK at public/included/, served at https://localhost/included/.
+    sourceSets {
+        main {
+            assets.srcDirs += 'included-assets'
+        }
+    }
+    // Speech and Voice Control models barely shrink when zipped, and stored
+    // as they are they load without unzipping hundreds of megabytes each time.
+    androidResources {
+        noCompress 'onnx', 'cact'
+    }
     buildTypes {
         release {
             minifyEnabled false

@@ -17,6 +17,18 @@ export const IS_ANDROID_APP: boolean = import.meta.env.MODE === 'android';
 export const SITE_ORIGIN = 'https://irisbible.com';
 
 /**
+ * Where the Android app's own packs and voices are: every one of them comes
+ * inside the APK (native/gather-included.mjs puts them there), so the app
+ * installs them with no internet. The web app never reads these.
+ *
+ * INCLUDED_PACKS holds the pack files, Voice Control's models and a
+ * manifest.json listing them. INCLUDED_VOICES holds the Read Aloud voices, one
+ * folder per engine named like the phone's own voice folders, and index.json.
+ */
+export const INCLUDED_PACKS = '/included/packs';
+export const INCLUDED_VOICES = '/included/voices';
+
+/**
  * The start of a link someone else will open: a shared verse, a notebook's
  * join link, a devotional, a sign-in email.
  *

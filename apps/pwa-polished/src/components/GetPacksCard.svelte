@@ -12,6 +12,11 @@
    * Packs uses, so the lock, the space check and the notices are shared. A
    * pack whose install was cut short shows here too, and downloading it again
    * repairs it.
+   *
+   * The Android app comes with every pack and unpacks them by itself on its
+   * first launch (setUpIncluded), so there this says the feature is still
+   * being set up, with how far it has got. Each row's button unpacks that pack
+   * from inside the app, with no internet, for when setup stopped short.
    */
   import { onMount } from 'svelte';
   import { CheckCircle, DownloadSimple, ArrowClockwise } from 'phosphor-svelte';
@@ -31,12 +36,21 @@
   } from '../lib/packInstaller';
   import BrandSpinner from './BrandSpinner.svelte';
   import InstallBar from './InstallBar.svelte';
+  import { IS_ANDROID_APP } from '../lib/platform';
 
   /** Catalog ids of the packs this feature needs, in the order to list them. */
   export let packs: string[];
   export let title = 'Get packs';
   /** One line on what the packs bring here. */
   export let note = '';
+
+  // The Android app's own words: nothing here is downloaded there.
+  $: shownTitle = IS_ANDROID_APP && !repair ? 'Still setting up' : title;
+  $: shownNote = !IS_ANDROID_APP
+    ? note
+    : $installBusy
+      ? 'This comes with irisBible and is being unpacked on this phone, with no internet needed. It switches on with a restart once it’s done.'
+      : 'This comes with irisBible but isn’t unpacked on this phone yet. Unpack it here; no internet needed.';
   /**
    * Offer "Download again" even for a pack that looks installed: for a
    * feature that found part of its pack missing, which the install check
@@ -80,9 +94,9 @@
 </script>
 
 <div class="gp-card">
-  <h3 class="gp-title">{title}</h3>
-  {#if note}
-    <p class="gp-note">{note}</p>
+  <h3 class="gp-title">{shownTitle}</h3>
+  {#if shownNote}
+    <p class="gp-note">{shownNote}</p>
   {/if}
 
   <ul class="gp-list">
@@ -106,11 +120,17 @@
             type="button"
             class="gp-get"
             disabled={$installBusy}
-            title={$installBusy ? 'Another pack is installing' : `Download ${pack.name}`}
+            title={$installBusy
+              ? 'Another pack is installing'
+              : `${IS_ANDROID_APP ? 'Unpack' : 'Download'} ${pack.name}`}
             on:click={() => download(pack)}
           >
             <DownloadSimple size={16} weight="bold" />
-            <span>{done[pack.id] ? "Download again" : packSizeLabel(pack, sizes)}</span>
+            {#if IS_ANDROID_APP}
+              <span>{done[pack.id] ? "Unpack again" : "Unpack"}</span>
+            {:else}
+              <span>{done[pack.id] ? "Download again" : packSizeLabel(pack, sizes)}</span>
+            {/if}
           </button>
         {/if}
       </li>
@@ -118,12 +138,17 @@
   </ul>
 
   {#if $installBusy && !$installingPackId}
-    <p class="gp-note gp-wait">Another download is running. These can start when it finishes.</p>
+    {#if IS_ANDROID_APP}
+      <!-- Setup, one pack after another: where it has got to. -->
+      <p class="gp-note gp-wait gp-progress">{$installStatus || 'Starting…'}<InstallBar /></p>
+    {:else}
+      <p class="gp-note gp-wait">Another download is running. These can start when it finishes.</p>
+    {/if}
   {/if}
 
   {#if $restartNeeded && !$installBusy}
     <div class="gp-restart">
-      <span>New packs switch on after a restart.</span>
+      <span>{IS_ANDROID_APP ? 'Unpacked. It switches on after a restart.' : 'New packs switch on after a restart.'}</span>
       <button type="button" class="gp-restart-btn" on:click={() => window.location.reload()}>
         <ArrowClockwise size={16} weight="bold" /> Restart
       </button>

@@ -11,6 +11,7 @@
 
 import * as ort from 'onnxruntime-web';
 import type { TtsProgressCallback } from './voices.js';
+import { IS_ANDROID_APP, INCLUDED_VOICES } from '../platform';
 
 /** Where the runtime .wasm/.mjs files are served from (see copyTtsRuntime in vite.config.ts). */
 export const ASSET_BASE = '/tts';
@@ -21,17 +22,66 @@ export const ASSET_BASE = '/tts';
 // mixing them in a single folder would make "which voices are installed?"
 // ambiguous.
 
+/** What the engines read from a stored voice file. */
+export type StoredFile = Pick<Blob, 'size' | 'arrayBuffer' | 'text'>;
+
+// ─── voices that came with the app ──────────────────────────────────────────
+// The Android app carries every built-in voice inside it, in one folder per
+// engine named like the folders below (native/gather-included.mjs). They are
+// read from there, never copied: a voice's bytes are fetched only when the
+// engine loads it, and index.json says what is there without reading any.
+
+let includedIndex: Promise<Record<string, Record<string, number>>> | null = null;
+
+/** Engine folder → file name → size, for the voices inside the app. Empty on the web. */
+function readIncludedIndex(): Promise<Record<string, Record<string, number>>> {
+  includedIndex ??= fetch(`${INCLUDED_VOICES}/index.json`)
+    .then((response) => (response.ok ? response.json() : {}))
+    .catch((error) => {
+      console.warn('[TTS] Could not read the list of voices inside the app:', error);
+      return {};
+    });
+  return includedIndex;
+}
+
+/** A voice file inside the app, read when the engine asks for its bytes. */
+function includedFile(url: string, size: number): StoredFile {
+  const fetchIt = async () => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Could not read ${url} (${response.status})`);
+    return response;
+  };
+  return {
+    size,
+    arrayBuffer: async () => (await fetchIt()).arrayBuffer(),
+    text: async () => (await fetchIt()).text(),
+  };
+}
+
 export function opfsFolder(dirName: string) {
   async function dir(): Promise<FileSystemDirectoryHandle> {
     const root = await navigator.storage.getDirectory();
     return root.getDirectoryHandle(dirName, { create: true });
   }
 
+  /** The file inside the app by this name, for this engine, if there is one. */
+  async function included(name: string): Promise<StoredFile | undefined> {
+    if (!IS_ANDROID_APP) return undefined; // and the web build drops the rest
+    const size = (await readIncludedIndex())[dirName]?.[name];
+    return size ? includedFile(`${INCLUDED_VOICES}/${dirName}/${encodeURIComponent(name)}`, size) : undefined;
+  }
+
   // No voice file is ever empty, so an empty one is treated as missing. That
   // is what a failed write used to leave behind (see write), and treating it
   // as present made a half-installed voice look finished.
+  //
+  // In the Android app a built-in voice is read from inside the app first;
+  // this device's own folder holds only voices added by hand. Those can be
+  // written and removed; the ones inside the app can't.
   return {
-    async read(name: string): Promise<File | undefined> {
+    async read(name: string): Promise<StoredFile | undefined> {
+      const inside = await included(name);
+      if (inside) return inside;
       try {
         const handle = await (await dir()).getFileHandle(name);
         const file = await handle.getFile();
@@ -67,9 +117,12 @@ export function opfsFolder(dirName: string) {
       }
     },
 
-    /** Every non-empty filename in the folder. Empty when storage is unavailable. */
+    /**
+     * Every non-empty filename in the folder, and in the Android app every
+     * file inside it for this engine. Empty when storage is unavailable.
+     */
     async list(): Promise<string[]> {
-      const found: string[] = [];
+      const found: string[] = IS_ANDROID_APP ? Object.keys((await readIncludedIndex())[dirName] ?? {}) : [];
       try {
         const handle = await dir();
         for await (const [name, entry] of (handle as any).entries()) {

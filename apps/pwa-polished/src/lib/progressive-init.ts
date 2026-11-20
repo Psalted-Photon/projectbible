@@ -19,6 +19,7 @@ import { PackLoader } from '../../../../packages/core/src/services/PackLoader';
 import type { DownloadProgress } from '../../../../packages/core/src/services/PackLoader';
 import { startInstallLog, logInstall, logInstallError, endInstallLog } from './install-log';
 import { backgroundResponse, BACKGROUND_PROGRESS_ID } from './backgroundFetch';
+import { IS_ANDROID_APP } from './platform';
 
 let packLoader: PackLoader | null = null;
 let progressHandler: ((progress: DownloadProgress) => void) | null = null;
@@ -29,6 +30,8 @@ function getPackLoaderInstance(): PackLoader {
     packLoader = new PackLoader({
       manifestUrl: PACK_MANIFEST_URL,
       appVersion: APP_VERSION,
+      // The Android app carries every pack file inside it already.
+      keepDownloads: !IS_ANDROID_APP,
       onProgress: (progress) => {
         progressHandler?.(progress);
       },

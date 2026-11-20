@@ -85,6 +85,14 @@ export interface PackLoaderOptions {
    * like any download; if that fails, the pack is fetched as usual.
    */
   fetchFile?: (pack: PackEntry, url: string) => Promise<Response | null>;
+
+  /**
+   * Keep each downloaded file in IndexedDB, small ones for good, so a cut-short
+   * install or a repair needn't download it again. False where the files
+   * already live on the device (the Android app carries them inside it), as
+   * keeping them would only store them twice. Default true.
+   */
+  keepDownloads?: boolean;
 }
 
 export class PackLoader {
@@ -99,7 +107,8 @@ export class PackLoader {
       retryDelay: options.retryDelay ?? 1000,
       onProgress: options.onProgress ?? (() => {}),
       onStage: options.onStage ?? (() => {}),
-      fetchFile: options.fetchFile ?? (async () => null)
+      fetchFile: options.fetchFile ?? (async () => null),
+      keepDownloads: options.keepDownloads ?? true
     };
   }
   
@@ -412,6 +421,17 @@ export class PackLoader {
 
     await this.validateSHA256(data, pack.sha256);
     this.options.onStage('sha256-ok');
+
+    if (!this.options.keepDownloads) {
+      this.options.onProgress({
+        packId,
+        loaded: pack.size,
+        total: pack.size,
+        percentage: 100,
+        stage: 'complete'
+      });
+      return data;
+    }
 
     // Keep the file until its install succeeds. A big one goes again then
     // (releaseDownload); a small one stays for good.

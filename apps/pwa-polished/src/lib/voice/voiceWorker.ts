@@ -26,6 +26,7 @@ import {
   type ToolSpec,
 } from './rules';
 import { closestSound, soundKey } from '../fuzzy';
+import { readVoiceFile as readFile } from './voiceFiles';
 
 /** One action, as the app carries it out. */
 export interface VoiceCall {
@@ -74,16 +75,8 @@ export interface VoiceChoice {
   answer: string | null;
 }
 
-// The files voicePack.ts downloads, in the same folder of the browser's file storage.
-const FOLDER = 'voice-control';
+// The files voicePack.ts downloads (inside the Android app, the ones it came with).
 const FILES = { js: 'voice-needle.js', wasm: 'voice-needle.wasm', whistle: 'voice-whistle.cact', needle: 'voice-needle3.cact' };
-
-async function readFile(name: string): Promise<Uint8Array> {
-  const root = await navigator.storage.getDirectory();
-  const dir = await root.getDirectoryHandle(FOLDER);
-  const file = await (await dir.getFileHandle(name)).getFile();
-  return new Uint8Array(await file.arrayBuffer());
-}
 
 // ── Engines ─────────────────────────────────────────────────────────────────
 

@@ -38,6 +38,10 @@
     notNowUpdate,
     ignoreUpdate,
   } from '../lib/packUpdates';
+  import { IS_ANDROID_APP } from '../lib/platform';
+
+  // The Android app comes with every pack and unpacks them by itself
+  // (setUpIncluded), so it draws nothing here: no downloads, no updates.
 
   export let heading: string;
   /**
@@ -93,7 +97,7 @@
   }
 </script>
 
-{#if visible.length > 0}
+{#if !IS_ANDROID_APP && visible.length > 0}
   <div class="mt-section">
     <div class="mt-head">{heading}</div>
     {#each visible as row (row.packId)}
@@ -131,7 +135,7 @@
   </div>
 {/if}
 
-{#if updateRows.length > 0}
+{#if !IS_ANDROID_APP && updateRows.length > 0}
   <div class="mt-section">
     <div class="mt-head">New version available</div>
     {#each updateRows as row (row.packId)}

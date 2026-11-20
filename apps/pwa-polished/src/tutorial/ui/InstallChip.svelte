@@ -22,6 +22,7 @@
     voiceDownloadsStillToGet,
   } from "../../lib/packInstaller";
   import { appQuiet } from "../engine/watch";
+  import { IS_ANDROID_APP } from "../../lib/platform";
   import { paneStore } from "../../stores/paneStore";
 
   const dispatch = createEventDispatcher<{ done: void }>();
@@ -60,13 +61,13 @@
   <div class="chip no-edge-gesture" role="status" transition:fly={{ y: 24, duration: 220 }}>
     {#if running}
       <span class="text">
-        Installing packs · {$installAllState.step} of {$installAllState.total}{$installPercent !== null
+        {IS_ANDROID_APP ? "Unpacking" : "Installing packs"} · {$installAllState.step} of {$installAllState.total}{$installPercent !== null
           ? ` · ${$installPercent}%`
           : ""}
       </span>
       <span class="bar"><span class="fill" style="width:{Math.round(progress * 100)}%"></span></span>
     {:else if $restartNeeded}
-      <span class="text">Packs installed</span>
+      <span class="text">{IS_ANDROID_APP ? "Everything is unpacked" : "Packs installed"}</span>
       <button class="tut-btn chip-btn" on:click={() => window.location.reload()}>Restart</button>
     {:else if remaining !== null && remaining > 0}
       <span class="text">

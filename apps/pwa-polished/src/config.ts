@@ -2,9 +2,11 @@
 
 /**
  * App Configuration
- * 
+ *
  * Central configuration for the irisBible app.
  */
+
+import { IS_ANDROID_APP, INCLUDED_PACKS } from './lib/platform';
 
 export const APP_NAME = 'irisBible';
 
@@ -12,8 +14,9 @@ export const APP_VERSION = '1.0.0';
 
 // Pack manifest URL (GitHub Releases)
 // Update this URL when you publish a new pack release
-export const PACK_MANIFEST_URL = 
-  import.meta.env.PROD
+export const PACK_MANIFEST_URL = IS_ANDROID_APP
+  ? `${INCLUDED_PACKS}/manifest.json`     // Android → the packs inside the app
+  : import.meta.env.PROD
     ? "/api/packs/manifest.json"          // Production → Proxy → GitHub Releases
     : "/packs/consolidated/manifest.json"; // Dev fallback → public/
 

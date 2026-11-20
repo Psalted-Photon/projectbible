@@ -24,6 +24,7 @@ import {
 } from '../../lib/packInstaller';
 import { isInstalledApp, isIOS, isPhoneOrTablet } from '../../lib/device';
 import { canInstall, promptInstall } from '../../lib/installPrompt';
+import { IS_ANDROID_APP } from '../../lib/platform';
 
 /** The on-screen element of a docked window, found from its id. */
 function windowElement(id: string | undefined): HTMLElement | null {
@@ -125,16 +126,28 @@ export const PART_ONE: TourStep[] = [
     id: 'packs-ready',
     checkpoint: true,
     // Decides for every pack step below: nothing to walk through when it is
-    // all installed already, or already on its way.
+    // all installed already, or already on its way. The Android app comes
+    // with everything and unpacks it by itself, so there is never a download.
     skipIf: async (ctx) => {
-      ctx.tour.skipPacks = get(installAllState).running || (await remainingInstalls(ctx)) === 0;
+      if (IS_ANDROID_APP) {
+        await remainingInstalls(ctx); // for the body: unpacking yet, or done?
+        ctx.tour.skipPacks = true;
+      } else {
+        ctx.tour.skipPacks = get(installAllState).running || (await remainingInstalls(ctx)) === 0;
+      }
       return !ctx.tour.skipPacks;
     },
     title: 'Your library is ready',
-    body: () =>
-      get(installAllState).running
+    body: (ctx) => {
+      if (IS_ANDROID_APP) {
+        return get(installAllState).running || (ctx.tour.remaining ?? 0) > 0
+          ? 'Every pack and voice came with the app: more translations, dictionaries, commentaries, the encyclopedia, maps, art and the reading voices. They’re being unpacked in the background now, with no internet needed. Let’s look around while that happens.'
+          : 'Every pack and voice came with the app, and all of it is unpacked on this phone.';
+      }
+      return get(installAllState).running
         ? 'Your packs are already installing in the background.'
-        : 'Every pack and voice is already installed on this device.',
+        : 'Every pack and voice is already installed on this device.';
+    },
   },
   {
     id: 'packs-intro',
@@ -169,8 +182,9 @@ export const PART_ONE: TourStep[] = [
   {
     id: 'install-running',
     // Install All works out what is left before it reports running, so this
-    // goes by the tap, not by the store.
-    skipIf: (ctx) => !ctx.tour.installRequested && !get(installAllState).running,
+    // goes by the tap, not by the store. The app's packs-ready step has
+    // already said its setup is running.
+    skipIf: (ctx) => IS_ANDROID_APP || (!ctx.tour.installRequested && !get(installAllState).running),
     title: 'Installing',
     body:
       'It keeps going in the background, one pack at a time. Let’s look around while it works.',

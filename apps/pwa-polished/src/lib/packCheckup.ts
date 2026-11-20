@@ -27,6 +27,7 @@ import {
 } from './packInstaller';
 import { unignoredUpdates, packCheckReached, watchPackUpdates } from './packUpdates';
 import { VOICE_DOWNLOADS_EVENT, type VoiceWaiting } from './voice/voicePack';
+import { IS_ANDROID_APP } from './platform';
 
 export interface Checkup {
   /** Catalog packs never installed, in Install all order. */
@@ -137,9 +138,12 @@ export function refreshCheckup(): Promise<void> {
 const LAUNCH_DELAY_MS = 4000;
 let started = false;
 
-/** Start the check-up. Safe to call more than once. */
+/**
+ * Start the check-up. Safe to call more than once. Never in the Android app,
+ * which comes with everything and keeps it current itself, so it has no dot.
+ */
 export function startCheckup(): void {
-  if (started || typeof window === 'undefined') return;
+  if (started || IS_ANDROID_APP || typeof window === 'undefined') return;
   started = true;
   window.addEventListener('packsUpdated', () => void refreshCheckup());
   window.addEventListener('voicesUpdated', () => void refreshCheckup());

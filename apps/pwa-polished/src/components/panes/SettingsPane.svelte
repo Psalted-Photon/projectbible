@@ -1736,8 +1736,11 @@
           <span class="toggle-label">Auto-check on open</span>
         </label>
       {/if}
-      <!-- Every missing pack, pack update and voice, in one tap. -->
-      <PacksCheckup />
+      <!-- Every missing pack, pack update and voice, in one tap. The Android
+           app comes with all of them and keeps them current itself. -->
+      {#if !IS_ANDROID_APP}
+        <PacksCheckup />
+      {/if}
     </div>
   </SettingsSection>
 

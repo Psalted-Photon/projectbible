@@ -9,20 +9,20 @@
 //
 // Steps: the app is built in its Android mode (core, then `npm run
 // build:android`, NODE_ENV=production; see src/lib/platform.ts for what that
-// changes), Capacitor copies dist/ into the Android project, the
-// packs are copied in beside it, and Gradle builds a debug APK. dist/ is
-// removed afterwards; the Android project keeps its own copy.
+// changes), Capacitor copies dist/ into the Android project, every pack and
+// voice is gathered beside it (gather-included.mjs), and Gradle builds a debug
+// APK. dist/ is removed afterwards; the Android project keeps its own copy.
 //
-// Packs (Phase 0): the web app asks for /api/packs/<file>. Inside the app the
-// page runs at https://localhost, and Capacitor answers https://localhost/...
-// from the APK's assets/public folder, so packs placed at
-// assets/public/api/packs/ are found with no change to the app's code and no
-// internet. A file that is not there gets a 404, as a missing pack should.
+// Inside the app the page runs at https://localhost, and Capacitor answers
+// https://localhost/... from the APK's assets/public folder. The packs and
+// voices are served from https://localhost/included/, so the app installs
+// them with no internet.
 
 import { execFileSync, execSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { existsSync, rmSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gatherIncluded } from './gather-included.mjs';
 
 const args = new Set(process.argv.slice(2));
 const INSTALL = args.has('--install') || args.has('--fresh');
@@ -34,8 +34,6 @@ const APP = join(NATIVE, '..');
 const REPO = join(APP, '..', '..');
 const ANDROID = join(NATIVE, 'android');
 const PUBLIC_ASSETS = join(ANDROID, 'app', 'src', 'main', 'assets', 'public');
-const PACKS_SRC = join(REPO, 'packs', 'consolidated');
-const PACKS_DEST = join(PUBLIC_ASSETS, 'api', 'packs');
 const APK = join(ANDROID, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
 const APP_ID = 'com.irisbible.app';
 
@@ -86,30 +84,12 @@ if (!SKIP_WEB) {
 }
 
 {
-  const t = step('Copying the packs into the Android project');
-  const manifestFile = join(PACKS_SRC, 'manifest.json');
-  if (!existsSync(manifestFile)) fail(`No pack manifest at ${manifestFile}.`);
-  const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
-  mkdirSync(PACKS_DEST, { recursive: true });
-  copyFileSync(manifestFile, join(PACKS_DEST, 'manifest.json'));
-  let total = 0;
-  const missing = [];
-  for (const pack of manifest.packs ?? []) {
-    const file = basename(String(pack.downloadUrl ?? ''));
-    const src = join(PACKS_SRC, file);
-    if (!file || !existsSync(src)) {
-      missing.push(pack.id);
-      continue;
-    }
-    const dest = join(PACKS_DEST, file);
-    const size = statSync(src).size;
-    if (!existsSync(dest) || statSync(dest).size !== size || statSync(dest).mtimeMs < statSync(src).mtimeMs) {
-      copyFileSync(src, dest);
-    }
-    total += size;
+  const t = step('Gathering the packs and voices that come inside the app');
+  try {
+    await gatherIncluded();
+  } catch (error) {
+    fail(error?.message ?? String(error));
   }
-  console.log(`  ${(manifest.packs ?? []).length - missing.length} files, ${mb(total)}`);
-  if (missing.length) console.warn(`  ⚠ not found in packs/consolidated: ${missing.join(', ')}`);
   done(t);
 }
 

@@ -10,16 +10,9 @@
  */
 
 import { NeedleEngine } from '../voice/engine';
+import { readVoiceFile as readFile } from '../voice/voiceFiles';
 
-const FOLDER = 'voice-control';
 const FILES = { js: 'voice-needle.js', wasm: 'voice-needle.wasm', whistle: 'voice-whistle.cact' };
-
-async function readFile(name: string): Promise<Uint8Array> {
-  const root = await navigator.storage.getDirectory();
-  const dir = await root.getDirectoryHandle(FOLDER);
-  const file = await (await dir.getFileHandle(name)).getFile();
-  return new Uint8Array(await file.arrayBuffer());
-}
 
 let eng: NeedleEngine | null = null;
 

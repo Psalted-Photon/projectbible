@@ -25,6 +25,7 @@ import { isBibleReadingActive } from '../../lib/tts/readingEngine';
 import { bibleFloating } from '../../lib/tts/playerDock';
 import { packInstallFinished } from '../../adapters/db-manager';
 import { installAll, packsStillToInstall, voicesStillToInstall, voiceDownloadsStillToGet } from '../../lib/packInstaller';
+import { IS_ANDROID_APP } from '../../lib/platform';
 
 /** Is this pack installed? Asked once per tour run. */
 async function hasPack(ctx: StepContext, id: string): Promise<boolean> {
@@ -137,12 +138,14 @@ export const PART_TWO: TourStep[] = [
     },
     title: (ctx) => (ctx.tour.missing ? 'A few packs aren’t in' : 'Your packs are in'),
     body: (ctx) =>
-      ctx.tour.missing
-        ? 'Anything below that needs a missing pack gets skipped. Install the rest now (Wi-Fi is best), or as you go: the translation list and each feature offer their own downloads.'
-        : 'Here’s what they switched on: more translations, the word ring, commentary, cross-references and Read Aloud.',
+      !ctx.tour.missing
+        ? 'Here’s what they switched on: more translations, the word ring, commentary, cross-references and Read Aloud.'
+        : IS_ANDROID_APP
+          ? 'Anything below that needs one gets skipped. They came with the app, so they can be unpacked now with no internet.'
+          : 'Anything below that needs a missing pack gets skipped. Install the rest now (Wi-Fi is best), or as you go: the translation list and each feature offer their own downloads.',
     nextLabel: 'Let’s go',
     alt: {
-      label: 'Install now',
+      label: IS_ANDROID_APP ? 'Unpack now' : 'Install now',
       when: (ctx) => ctx.tour.missing > 0,
       run: () => {
         void installAll();

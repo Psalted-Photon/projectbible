@@ -7113,8 +7113,17 @@
           // commentary in sync as the user scrolls through multiple chapters.
           // Window panes must NOT write back to global nav — they are isolated.
           // Skipped entirely just after a deliberate navigation, which this
-          // would otherwise undo.
-          if (!windowId && Date.now() >= suppressScrollSyncUntil) {
+          // would otherwise undo. Also skipped while a chapter is loading, and
+          // for a chapter no longer on the page: on a busy phone a load can
+          // outlast that beat, and writing back the chapter being left made the
+          // load correct to the store, the store follow the screen, and the two
+          // swap chapters back and forth by themselves.
+          if (
+            !windowId &&
+            Date.now() >= suppressScrollSyncUntil &&
+            !loading &&
+            isLoaded(chapters, captured.book, captured.chapter)
+          ) {
             navigationStore.setScrollPosition(captured.book, captured.chapter);
           }
 

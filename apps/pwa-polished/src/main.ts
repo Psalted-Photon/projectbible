@@ -188,11 +188,14 @@ async function initApp() {
   void import('./adapters/db-manager').then((m) => m.removeRetiredPacks());
 
   // A background pack download the app was closed during: finish installing
-  // what it brought, once the first screen has settled.
+  // what it brought, once the first screen has settled. The Android app
+  // instead unpacks whatever of its own packs isn't in yet, or has changed.
   setTimeout(() => {
-    void import('./lib/packInstaller').then((m) => m.resumePackRun()).catch((error) => {
-      console.warn('Could not resume the pack run:', error);
-    });
+    void import('./lib/packInstaller')
+      .then((m) => (IS_ANDROID_APP ? m.setUpIncluded() : m.resumePackRun()))
+      .catch((error) => {
+        console.warn(IS_ANDROID_APP ? 'Could not set up the packs:' : 'Could not resume the pack run:', error);
+      });
   }, 2000);
 
   // A new user's first voice comes with the starter: Heart (or Standard where
@@ -204,7 +207,9 @@ async function initApp() {
   return app;
 }
 
-// Start initialization
-const app = await initApp();
-
-export default app;
+// Start initialization. Not awaited at the top level on purpose: launch code
+// imports modules that the bundler can place back in this file's chunk, and
+// importing a chunk that is still waiting on its own top-level await never
+// finishes, so the launch would hang on a blank screen. A launch error still
+// reaches startup.js through unhandledrejection.
+void initApp();

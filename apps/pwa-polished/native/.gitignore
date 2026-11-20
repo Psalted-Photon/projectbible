@@ -1,0 +1,4 @@
+# Made by gather-included.mjs and never committed, like the packs themselves:
+# the voices fetched once to this PC, and the packs and voices staged for the APK.
+cache/
+android/app/included-assets/

@@ -25,6 +25,7 @@ import { HEBREW_VOICE_ID, HEBREW_WORD_PACE } from '../lib/tts/hebrewSounds.js';
 import { respellNames } from '../lib/tts/pronunciations.js';
 import { get, writable } from 'svelte/store';
 import { getTtsSettings, updateTtsSettings } from './settings.js';
+import { IS_ANDROID_APP } from '../lib/platform';
 
 export { TTS_VOICES, KOKORO_VOICES, GREEK_VOICE_ID, HEBREW_VOICE_ID };
 export type { TtsVoiceInfo, TtsProgress, SpeechRoute };
@@ -333,7 +334,15 @@ export function adoptVoice(voiceId: string): void {
 export async function getFirstVoice(): Promise<void> {
   if (!isTtsSupported()) return;
   try {
-    if ((await storedVoices()).length > 0) return;
+    const stored = await storedVoices();
+    // The Android app comes with every voice, so there is nothing to fetch,
+    // only the first voice to choose.
+    if (IS_ANDROID_APP) {
+      const voiceId = await firstVoiceId();
+      if (stored.includes(voiceId)) adoptVoice(voiceId);
+      return;
+    }
+    if (stored.length > 0) return;
     const voiceId = await firstVoiceId();
     const label = getVoiceInfo(voiceId)?.label ?? voiceId;
     firstVoiceDownload.set({ voiceId, label, pct: 0 });

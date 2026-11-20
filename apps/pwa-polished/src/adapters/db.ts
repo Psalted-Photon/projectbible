@@ -1,5 +1,7 @@
 import { logInstallIfActive } from '../lib/install-log';
 import { importCounting, countImportRows } from '../lib/importProgress';
+import { restAfterBatch } from '../lib/installPace';
+import { IS_ANDROID_APP } from '../lib/platform';
 import { getDeviceOwner } from '../lib/sync/deviceOwner';
 /**
  * IndexedDB schema and utilities for PWA storage
@@ -1772,7 +1774,10 @@ export async function batchWriteTransaction(
 
     transaction.oncomplete = () => {
       if (counting) countImportRows(rows);
-      resolve();
+      // The Android app's installs rest between batches (lib/installPace).
+      const rest = IS_ANDROID_APP && !personal ? restAfterBatch() : null;
+      if (rest) void rest.then(resolve);
+      else resolve();
     };
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () =>

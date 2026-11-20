@@ -15,12 +15,19 @@
  *
  * A file the Voice Control lab already downloaded on this device is taken from
  * the lab's cache, after the same checksum, instead of downloading it again.
+ *
+ * The Android app carries both downloads inside it, listed in its own
+ * manifest, and its workers read them from there (voiceFiles.ts). So in the
+ * app each counts as installed when the app has every file, nothing is ever
+ * downloaded or removed, and there is never an update to offer.
  */
 
 import { get, writable } from 'svelte/store';
 import { PACK_MANIFEST_URL } from '../../config';
 import { PACK_BASE_URL, installBusy, installMessage, installPercent, formatBytes } from '../packInstaller';
 import { showNotice, errorText } from '../../stores/noticeStore';
+import { IS_ANDROID_APP } from '../platform';
+import { VOICE_FOLDER } from './voiceFiles';
 
 export type VoiceDownloadId = 'voice-control' | 'voice-transcribe';
 
@@ -107,13 +114,19 @@ async function filesFor(id: VoiceDownloadId): Promise<VoiceFile[]> {
   return (await releaseFiles()).filter((f) => f.id.startsWith(id + '-'));
 }
 
+/** The Android app: every file of it came inside the app. */
+async function insideTheApp(id: VoiceDownloadId): Promise<boolean> {
+  const names = new Set((await releaseFiles().catch(() => [])).map((f) => f.file));
+  return FILES_OF[id].every((name) => names.has(name));
+}
+
 // ── This device's copies ────────────────────────────────────────────────────
 
 const RECORD = 'installed.json';
 
 async function folder(): Promise<FileSystemDirectoryHandle> {
   const root = await navigator.storage.getDirectory();
-  return root.getDirectoryHandle('voice-control', { create: true });
+  return root.getDirectoryHandle(VOICE_FOLDER, { create: true });
 }
 
 /** Which version of each file is here: file name → SHA-256. */
@@ -161,6 +174,7 @@ async function sha256(bytes: ArrayBuffer): Promise<string> {
 
 /** Every file of it is on this device, whatever version. Needs no manifest, so it answers offline. */
 export async function voiceInstalledHere(id: VoiceDownloadId): Promise<boolean> {
+  if (IS_ANDROID_APP) return insideTheApp(id);
   const record = await readRecord();
   const here = await Promise.all(FILES_OF[id].map(async (name) => !!record[name] && !!(await voiceFile(name))));
   return here.every(Boolean);
@@ -168,6 +182,10 @@ export async function voiceInstalledHere(id: VoiceDownloadId): Promise<boolean> 
 
 /** Is each file here, and is it the version the release has? */
 export async function voiceDownloadState(id: VoiceDownloadId): Promise<VoiceDownloadState> {
+  if (IS_ANDROID_APP) {
+    const installed = await insideTheApp(id);
+    return { available: installed, installed, update: false, bytes: 0 };
+  }
   let files: VoiceFile[] = [];
   try {
     files = await filesFor(id);
@@ -235,6 +253,7 @@ export class VoiceOutOfSpace extends Error {}
  * Install everything). Throws when it can't finish.
  */
 export async function fetchVoiceDownload(id: VoiceDownloadId, report: VoiceReport): Promise<void> {
+  if (IS_ANDROID_APP) return; // inside the app already
   const what = VOICE_DOWNLOADS.find((d) => d.id === id)!;
   voiceInstallingId.set(id);
   try {
@@ -313,6 +332,7 @@ export interface VoiceWaiting {
  * can't be read.
  */
 export async function voiceDownloadsWaiting(): Promise<VoiceWaiting[]> {
+  if (IS_ANDROID_APP) return [];
   const out: VoiceWaiting[] = [];
   for (const d of VOICE_DOWNLOADS) {
     const s = await voiceDownloadState(d.id).catch(() => null);
@@ -326,6 +346,7 @@ export async function voiceDownloadsWaiting(): Promise<VoiceWaiting[]> {
 
 /** Delete one of the two from this device. */
 export async function removeVoiceDownload(id: VoiceDownloadId): Promise<void> {
+  if (IS_ANDROID_APP) return; // part of the app, so it stays
   const record = await readRecord();
   // Offline, the list this app knows stands in for the release's.
   const names = await filesFor(id).then((files) => files.map((f) => f.file), () => FILES_OF[id]);

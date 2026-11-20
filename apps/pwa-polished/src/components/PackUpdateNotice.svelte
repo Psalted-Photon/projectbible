@@ -39,6 +39,10 @@
   import BrandSpinner from './BrandSpinner.svelte';
   import InstallBar from './InstallBar.svelte';
   import PackIcon from './icons/PackIcon.svelte';
+  import { IS_ANDROID_APP } from '../lib/platform';
+
+  // The Android app updates its packs by itself as a new version of the app
+  // brings them (setUpIncluded), so it never shows this.
 
   /** Catalog ids of the packs this feature reads. */
   export let packs: string[];
@@ -74,7 +78,7 @@
   }
 </script>
 
-{#if waiting.length || updating || updated.length}
+{#if !IS_ANDROID_APP && (waiting.length || updating || updated.length)}
   <div class="pu" role="status">
     {#each waiting as pack (pack.id)}
       <div class="pu-row">

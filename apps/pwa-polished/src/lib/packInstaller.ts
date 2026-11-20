@@ -55,8 +55,10 @@ import {
   BACKGROUND_PROGRESS_ID,
 } from './backgroundFetch';
 import { watchImportProgress } from './importProgress';
+import { paceInstalls } from './installPace';
 import { stayAwake, allowSleep } from './installAwake';
 import { USE_BUNDLED_PACKS, PACK_MANIFEST_URL } from '../config';
+import { IS_ANDROID_APP, INCLUDED_PACKS } from './platform';
 import {
   isTtsSupported,
   getSelectableVoices,
@@ -75,8 +77,15 @@ import { markInstalled, markUpdated, checkPackUpdates, unignoredUpdates } from '
  */
 const RESTART = { label: 'Restart', run: () => window.location.reload() };
 
-/** Dev builds read packs straight out of public/; production goes through the proxy. */
-export const PACK_BASE_URL = USE_BUNDLED_PACKS ? '/packs/consolidated' : '/api/packs';
+/**
+ * Dev builds read packs straight out of public/; production goes through the
+ * proxy; the Android app reads the copies inside it.
+ */
+export const PACK_BASE_URL = IS_ANDROID_APP
+  ? INCLUDED_PACKS
+  : USE_BUNDLED_PACKS
+    ? '/packs/consolidated'
+    : '/api/packs';
 
 /** A Phosphor icon component, drawn by PackIcon.svelte. */
 export type PackGlyph = typeof BookOpen;
@@ -270,6 +279,9 @@ export const installBusy = writable(false);
 // Every install takes this lock, whoever started it, so the phone is kept
 // awake for exactly as long as it is held.
 installBusy.subscribe((busy) => (busy ? stayAwake() : allowSleep()));
+// The Android app also rests its installs while the lock is held, so the
+// phone stays usable through the first-launch unpacking (lib/installPace).
+if (IS_ANDROID_APP) installBusy.subscribe(paceInstalls);
 
 /** The line shown in the Packs pane while that is happening. */
 export const installMessage = writable('');
@@ -986,6 +998,37 @@ export async function resumePackRun(): Promise<void> {
     else await installPack(pack, { background: false });
   } finally {
     resumingRun.set(false);
+  }
+}
+
+// ── The Android app: unpacking what came inside it ─────────────────────────
+
+/** True while the Android app is unpacking what came inside it; PackRunCard shows it. */
+export const settingUp = writable(false);
+
+/**
+ * The Android app's setup: every pack is inside the APK, so this is Install
+ * All with no internet and no one asking. Runs on every launch. When
+ * everything is in and current it only checks and stops; otherwise it unpacks
+ * what is missing, picking up where a run the app was closed during stopped.
+ *
+ * A newer APK carrying a changed pack shows as an update: each install records
+ * the hash it was made from, and packUpdates compares that with the manifest
+ * inside the app. installAll swaps the new copy in, the old one staying in use
+ * until it has.
+ *
+ * Voices and Voice Control are read straight out of the APK, so they never
+ * need this. Does nothing on the web, or while another install is running.
+ */
+export async function setUpIncluded(): Promise<void> {
+  if (!IS_ANDROID_APP || get(installBusy)) return;
+  const [updates, packs] = await Promise.all([updatesStillToApply(), packsStillToInstall()]);
+  if (updates.length + packs.length === 0 || get(installBusy)) return;
+  settingUp.set(true);
+  try {
+    await installAll({ background: false });
+  } finally {
+    settingUp.set(false);
   }
 }
 

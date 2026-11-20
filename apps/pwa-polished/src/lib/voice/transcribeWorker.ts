@@ -28,6 +28,7 @@ import { streamPcm, slicePcm, NeedsPageDecode, type PcmPart } from './audioStrea
 import { BOOK_KEYWORDS } from './rules';
 import type { TranscriptBlock } from './transcriptSink';
 import { formatPiece, freshFormat } from './transcriptFormat';
+import { readVoiceFile as readFile } from './voiceFiles';
 
 /** One piece of the recording, done. */
 export interface TranscriptPiece {
@@ -45,7 +46,6 @@ export interface TranscriptPiece {
 const PARA_SEC = 3;
 const RATE = 16000;
 
-const FOLDER = 'voice-control';
 const FILES = {
   js: 'voice-needle.js',
   wasm: 'voice-needle.wasm',
@@ -54,13 +54,6 @@ const FILES = {
   vocab: 'voice-punct.vocab',
   vad: 'voice-vad.onnx',
 };
-
-async function readFile(name: string): Promise<Uint8Array> {
-  const root = await navigator.storage.getDirectory();
-  const dir = await root.getDirectoryHandle(FOLDER);
-  const file = await (await dir.getFileHandle(name)).getFile();
-  return new Uint8Array(await file.arrayBuffer());
-}
 
 // ── Models ──────────────────────────────────────────────────────────────────
 
