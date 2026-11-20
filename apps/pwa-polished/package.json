@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "svelte-check --tsconfig ./tsconfig.json --threshold error && vite build",
+    "build:android": "svelte-check --tsconfig ./tsconfig.json --threshold error && vite build --mode android",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --threshold error",
     "preview": "vite preview"
   },

@@ -1,7 +1,7 @@
 import { defineConfig, defaultClientConditions } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'fs';
 import { resolve } from 'path';
 import { atlasSearch } from './vite-atlas-search';
 
@@ -229,14 +229,98 @@ function copyPolishedPacks() {
   };
 }
 
-export default defineConfig({
+// ── The Android build ────────────────────────────────────────────────────────
+//
+// `npm run build:android` builds this same app with mode "android"
+// (src/lib/platform.ts reads it as IS_ANDROID_APP). The web build is untouched;
+// the Android one leaves out what only a website needs.
+
+/**
+ * A last service worker, for phones that ran an earlier build of the app.
+ *
+ * The Android app has no service worker: its files are inside the APK, and a
+ * worker would only keep a second, older copy of them. But a phone that ran a
+ * build from before this one still has the web build's worker, which answers
+ * every launch from its own cache, so a new APK would keep opening the old
+ * app. That worker checks /sw.js for a new version as the app opens. This one
+ * empties the cache, removes itself and reloads the page onto the APK's own
+ * files. Nothing in this build registers it, so a fresh install never runs it.
+ */
+const RETIRING_SERVICE_WORKER = `// Retires the service worker an earlier build left behind. See vite.config.ts.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    for (const name of await caches.keys()) await caches.delete(name);
+    await self.registration.unregister();
+    for (const client of await self.clients.matchAll({ type: 'window' })) client.navigate(client.url);
+  })());
+});
+`;
+
+function retireServiceWorker() {
+  return {
+    name: 'retire-service-worker',
+    generateBundle(this: { emitFile: (file: { type: 'asset'; fileName: string; source: string }) => void }) {
+      this.emitFile({ type: 'asset', fileName: 'sw.js', source: RETIRING_SERVICE_WORKER });
+    },
+  };
+}
+
+/**
+ * Files in public/ that only the website uses, removed from the Android
+ * build's output. The app never links to any of them.
+ */
+const WEB_ONLY_FILES = [
+  // The labs: tuning pages opened on the desktop by address.
+  'clock-lab.html',
+  'gem-lab.html',
+  'hebrew-voice-lab.html',
+  'motion-lab.html',
+  'outline-lab.html',
+  'voice-lab.html',
+  'voice-control-lab.html',
+  'voice-control-lab',
+  'name-lab.html',
+  'name-lab-names.json',
+  'name-lab-sounds.js',
+  'name-lab-worker.js',
+  'familytree.html',
+  'family-tree-data.json',
+  // The atlas lab's map layers, 81 MB. Not in git, so never on the site either.
+  'atlas',
+  // Packs the dev server copied in. The app's packs travel another way.
+  'packs',
+  // The service worker's add-ons, and the page that repairs a broken worker.
+  'push-handler.js',
+  'pack-fetch-handler.js',
+  'reset.html',
+  // Artwork the sign-in emails load from irisbible.com.
+  'email',
+];
+
+function leaveOutWebOnly() {
+  return {
+    name: 'leave-out-web-only',
+    closeBundle() {
+      for (const name of WEB_ONLY_FILES) {
+        rmSync(resolve(__dirname, 'dist', name), { recursive: true, force: true });
+      }
+      console.log(`📱 Android build: left out ${WEB_ONLY_FILES.length} web-only files and folders`);
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+const android = mode === 'android';
+return {
   // When this build was made, for "Last updated" in Settings → Storage & Updates.
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   plugins: [
     svelte(),
-    VitePWA({
+    // The Android app has no service worker; see retireServiceWorker.
+    android ? retireServiceWorker() : VitePWA({
       registerType: 'autoUpdate',
       // Neither of these is a manifest icon, and the glob only picks those up.
       // The badge is drawn by the service worker for a wake alarm; the gem
@@ -442,7 +526,8 @@ export default defineConfig({
     }),
     copyPolishedPacks(), // Only in dev or when VITE_USE_BUNDLED_PACKS=true
     copyTtsRuntime(),    // Read Aloud engine WASM → /tts/ (lazy-cached)
-    atlasSearch()        // dev-only place search over packs/gazetteer.sqlite
+    atlasSearch(),       // dev-only place search over packs/gazetteer.sqlite
+    android && leaveOutWebOnly()
   ],
   server: {
     port: 5174,
@@ -477,17 +562,21 @@ export default defineConfig({
     copyPublicDir: true,
     rollupOptions: {
       // The labs that run the app's real code are pages of their own, so they
-      // are built alongside the app rather than living in public/.
+      // are built alongside the app rather than living in public/. Not in the
+      // Android build.
       input: {
         main: resolve(__dirname, 'index.html'),
-        'tree-motion-lab': resolve(__dirname, 'tree-motion-lab.html'),
-        'connections-lab': resolve(__dirname, 'connections-lab.html'),
-        'connections-grid-lab': resolve(__dirname, 'connections-grid-lab.html'),
-        'connections-chord-lab': resolve(__dirname, 'connections-chord-lab.html'),
-        'book-picture-lab': resolve(__dirname, 'book-picture-lab.html')
+        ...(android ? {} : {
+          'tree-motion-lab': resolve(__dirname, 'tree-motion-lab.html'),
+          'connections-lab': resolve(__dirname, 'connections-lab.html'),
+          'connections-grid-lab': resolve(__dirname, 'connections-grid-lab.html'),
+          'connections-chord-lab': resolve(__dirname, 'connections-chord-lab.html'),
+          'book-picture-lab': resolve(__dirname, 'book-picture-lab.html')
+        })
       }
     }
   }
+};
 });
 
 

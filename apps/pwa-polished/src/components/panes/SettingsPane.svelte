@@ -72,6 +72,7 @@
   import { tutorial } from "../../tutorial/state";
   import { isInstalledApp, isIOS, isPhoneOrTablet } from "../../lib/device";
   import { canInstall, promptInstall } from "../../lib/installPrompt";
+  import { IS_ANDROID_APP } from "../../lib/platform";
   import { journalLock, getRelockAfterMs, setRelockAfterMs, RELOCK_OPTIONS } from "../../lib/journalLock/lockState";
   import { userProfileStore } from "../../stores/userProfileStore";
   import JournalLockManage from "../JournalLockManage.svelte";
@@ -482,7 +483,7 @@
     ` · Rotation ${allowRotation ? "on" : "off"}`;
   $: voiceSummary = `Mic button ${$micButtonOn ? "on" : "off"}`;
   let recordQuality: "speech" | "music" = getSettings().recordQuality === "music" ? "music" : "speech";
-  $: storageSummary = `Space · Updates${autoCheckUpdates ? "" : " (manual)"}`;
+  $: storageSummary = `Space · Updates${autoCheckUpdates || IS_ANDROID_APP ? "" : " (manual)"}`;
   $: devSummary = `Packs · Cache · eruda ${$showEruda ? "shown" : "hidden"}`;
 
   // ── Storage & Updates ───────────────────────────────────────────────────
@@ -695,6 +696,13 @@
   }
 
   async function checkForUpdates() {
+    // The web app updates through its service worker; the Android app updates
+    // as a whole new app, from the Play Store or a download. Until that check
+    // exists (Phase 4), the button says so rather than pretending.
+    if (IS_ANDROID_APP) {
+      showNotice("Update checks for the Android app are coming soon.");
+      return;
+    }
     if (!('serviceWorker' in navigator)) {
       showNotice("This browser can't check for app updates.", 'error');
       return;
@@ -1593,7 +1601,9 @@
     <span slot="icon"><Globe size={16} weight="bold" /></span>
 
     <!-- On the home screen. Grayed out once it is installed, since there is
-         nothing left to do, and the hint below says which state this is. -->
+         nothing left to do, and the hint below says which state this is.
+         Not in the Android app, which is installed already. -->
+    {#if !IS_ANDROID_APP}
     <div class="setting-group">
       <button
         class="packs-button install-button"
@@ -1605,6 +1615,7 @@
       </button>
       <p class="install-hint">{installHint}</p>
     </div>
+    {/if}
 
     <!-- Tutorial Mode keeps its own on/off (tutorial/state.ts), outside the
          settings payload, so it never syncs between devices. -->
@@ -1718,10 +1729,13 @@
         <span class="icon"><CloudArrowDown size={22} weight="bold" /></span>
         <span class="text">{checkingUpdate ? 'Checking...' : 'Check for updates'}</span>
       </button>
-      <label class="auto-check-toggle">
-        <input type="checkbox" bind:checked={autoCheckUpdates} />
-        <span class="toggle-label">Auto-check on open</span>
-      </label>
+      <!-- Reloads onto a new service worker, which the Android app has none of. -->
+      {#if !IS_ANDROID_APP}
+        <label class="auto-check-toggle">
+          <input type="checkbox" bind:checked={autoCheckUpdates} />
+          <span class="toggle-label">Auto-check on open</span>
+        </label>
+      {/if}
       <!-- Every missing pack, pack update and voice, in one tap. -->
       <PacksCheckup />
     </div>

@@ -12,6 +12,7 @@
  */
 
 import { normalizeBookName, translationLabel } from './bibleData';
+import { linkBase } from './platform';
 
 /**
  * A shared passage's address. `endVerse` equals `startVerse` for the common
@@ -79,6 +80,7 @@ export function formatShareRef(ref: ShareRef): string {
  * Built from the page's own origin *and* path rather than a baked-in domain,
  * because the same build is served from more than one host — and on a host that
  * serves the app from a subpath, dropping the path would point at the root.
+ * Inside the Android app it is irisbible.com instead (see linkBase).
  * The ref rides as a readable "Genesis 1:1" so the URL still says where it goes,
  * and parseRefString reads it back on the other end.
  *
@@ -88,7 +90,7 @@ export function formatShareRef(ref: ShareRef): string {
  */
 export function buildShareUrl(ref: ShareRef, translation?: string): string {
   if (typeof window === 'undefined') return '';
-  const url = new URL(window.location.pathname, window.location.origin);
+  const url = linkBase();
   // "John 3:3, 5" is not a reference the other end can open, so a passage
   // with a gap links to its first verse.
   const linked = verseList(ref.verses)
@@ -106,7 +108,7 @@ export function buildShareUrl(ref: ShareRef, translation?: string): string {
  */
 export function buildDevotionalUrl(workId: string, month: number, day: number, slot: string): string {
   if (typeof window === 'undefined') return '';
-  const url = new URL(window.location.pathname, window.location.origin);
+  const url = linkBase();
   url.searchParams.set('devo', workId);
   url.searchParams.set('d', `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
   url.searchParams.set('s', slot);

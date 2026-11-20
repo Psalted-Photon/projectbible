@@ -14,6 +14,8 @@
  * this side rejects would never reach the function that made it.
  */
 
+import { linkBase } from '../platform';
+
 export const JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
 export const JOIN_CODE_LENGTH = 8;
 
@@ -65,14 +67,14 @@ export function formatJoinCode(code: string): string {
  * Built from the page's own origin and path, exactly as buildShareUrl is and
  * for the same reason: the same build is served from more than one host, and a
  * host that serves the app from a subpath would be sent to the root by a
- * baked-in domain.
+ * baked-in domain. Inside the Android app it is irisbible.com (see linkBase).
  *
  * This is also the string a QR code carries and, later, the one an NFC tag
  * holds — both of which are just a URL, so neither needs any app work of its own.
  */
 export function buildJoinUrl(code: string): string {
   if (typeof window === 'undefined') return '';
-  const url = new URL(window.location.pathname, window.location.origin);
+  const url = linkBase();
   url.searchParams.set(JOIN_PARAM, normalizeJoinCode(code));
   return url.toString();
 }

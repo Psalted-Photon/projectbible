@@ -1,0 +1,17 @@
+{
+  "name": "irisbible-android",
+  "private": true,
+  "description": "The Android app shell around the irisBible web app. Its own npm project on purpose: not one of the workspaces, so nothing here reaches the web build on Vercel or the root package-lock.",
+  "scripts": {
+    "android": "node build-android.mjs",
+    "android:install": "node build-android.mjs --install",
+    "icons": "node build-icons.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2"
+  }
+}

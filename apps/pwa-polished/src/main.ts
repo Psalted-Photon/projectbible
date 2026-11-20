@@ -14,12 +14,13 @@ import { dumpPreviousInstallLog } from './lib/install-log';
 import { watchForInstallPrompt } from './lib/installPrompt';
 import { showLaunchSplash } from './lib/launchSplash';
 import { startCheckup } from './lib/packCheckup';
+import { IS_ANDROID_APP } from './lib/platform';
 
 // Before anything that awaits: the browser fires beforeinstallprompt early and
 // only once, and initApp() below can sit waiting on the starter text download
 // for a while on a first launch. Miss the event and the tutorial's install step
-// has nothing to offer.
-watchForInstallPrompt();
+// has nothing to offer. The Android app is installed already.
+if (!IS_ANDROID_APP) watchForInstallPrompt();
 
 // A new version replaces the old one's files the moment it installs. A page
 // still running the old version then can't load any screen it hadn't opened

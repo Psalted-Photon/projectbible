@@ -3,8 +3,13 @@
  * that have to behave differently on a phone or in the installed app.
  */
 
+import { IS_ANDROID_APP } from './platform';
+
 /** True when running as an installed app rather than a browser tab. */
 export function isInstalledApp(): boolean {
+  // The Android app is always installed, though its web view reports itself
+  // as a browser tab to the checks below.
+  if (IS_ANDROID_APP) return true;
   if (typeof window === 'undefined') return false;
   // iOS Safari's own flag; the manifest uses display:fullscreen, so check that too.
   if ((window.navigator as any).standalone === true) return true;

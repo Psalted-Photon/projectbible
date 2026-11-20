@@ -18,6 +18,7 @@
  */
 
 import { USE_BUNDLED_PACKS } from '../config';
+import { IS_ANDROID_APP } from './platform';
 import { PackLoader, MAX_CACHED_PACK_BYTES } from '../../../../packages/core/src/services/PackLoader';
 import type { PackEntry } from '../../../../packages/core/src/schemas/PackManifest';
 
@@ -95,6 +96,9 @@ let active: { reg: BgFetchRegistration; files: Map<string, RunFile>; startedAt: 
 
 export function backgroundFetchSupported(): boolean {
   return (
+    // The Android app has no service worker to receive the download, and
+    // waiting for one would wait forever.
+    !IS_ANDROID_APP &&
     !USE_BUNDLED_PACKS &&
     typeof window !== 'undefined' &&
     'serviceWorker' in navigator &&

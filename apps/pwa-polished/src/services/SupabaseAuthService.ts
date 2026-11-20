@@ -1,5 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase/client";
+import { linkOrigin } from "../lib/platform";
 
 /**
  * Sign-up finished, but Supabase may have quietly done nothing.
@@ -18,8 +19,9 @@ export class SupabaseAuthService {
       password,
       options: {
         // Without this the link goes wherever the dashboard Site URL points,
-        // which is not necessarily the app the person signed up in.
-        emailRedirectTo: window.location.origin,
+        // which is not necessarily the app the person signed up in. From
+        // the Android app it is irisbible.com (see linkOrigin).
+        emailRedirectTo: linkOrigin(),
         data: {
           name,
         },
@@ -39,7 +41,7 @@ export class SupabaseAuthService {
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: linkOrigin() },
     });
     if (error) throw error;
   }
@@ -50,7 +52,7 @@ export class SupabaseAuthService {
 
   async resetPassword(email: string): Promise<void> {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: linkOrigin(),
     });
     if (error) throw error;
   }

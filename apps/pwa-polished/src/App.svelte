@@ -26,6 +26,7 @@
   import SharedJoinLayer from "./components/SharedJoinLayer.svelte";
   import MovingScreen from "./components/MovingScreen.svelte";
   import { checkMove, movingScreenOpen } from "./lib/move/moveCheck";
+  import { IS_ANDROID_APP } from "./lib/platform";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
@@ -79,8 +80,9 @@
     console.log("🚀 App mounted, initializing...");
 
     // On hexapla.app: forward an empty device to irisbible.com, or open the
-    // moving screen. Does nothing on any other address.
-    void checkMove();
+    // moving screen. Does nothing on any other address, and is left out of
+    // the Android app, which was never on hexapla.app.
+    if (!IS_ANDROID_APP) void checkMove();
 
     /**
      * Links that arrive with something to open.
@@ -496,7 +498,7 @@
 
     <!-- On hexapla.app only: "irisBible has a new home". Opens from
          lib/move/moveCheck.ts, never blocks the app for good. -->
-    {#if $movingScreenOpen}
+    {#if !IS_ANDROID_APP && $movingScreenOpen}
       <MovingScreen />
     {/if}
 
