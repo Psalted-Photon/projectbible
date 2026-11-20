@@ -13,6 +13,8 @@
  */
 
 import { writable } from 'svelte/store';
+import { IS_ANDROID_APP } from '../platform';
+import { appSaveFile } from '../android/files';
 
 export type RecordQuality = 'speech' | 'music';
 
@@ -316,10 +318,16 @@ function extensionFor(mime: string): string {
 export async function saveRecordingFile(rec: Recording, opened?: { blob: Blob; name: string }): Promise<void> {
   const blob = opened?.blob ?? (await recordingBlob(rec));
   const name = opened?.name ?? rec.name;
+  const fileName = `${name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Recording'}.${extensionFor(rec.mime)}`;
+  // The app's web view ignores downloads: Android's "Save to" screen instead.
+  if (IS_ANDROID_APP) {
+    await appSaveFile(new File([blob], fileName, { type: rec.mime }));
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Recording'}.${extensionFor(rec.mime)}`;
+  a.download = fileName;
   document.body.appendChild(a);
   a.click();
   a.remove();

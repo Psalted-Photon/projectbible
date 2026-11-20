@@ -133,7 +133,7 @@
     type ChordScene,
     type ChordView,
   } from '../lib/connections/chord';
-  import { download } from '../lib/backup/saveFile';
+  import { canShareImages, download, shareFile } from '../lib/backup/saveFile';
   import { isIOS, isNarrowPhone } from '../lib/device';
   import { holdOrientation } from '../lib/orientation';
   import { askConfirm } from '../stores/confirmStore';
@@ -1705,18 +1705,7 @@
   let imageSaved = false;
 
   /** Can the OS share sheet take an image file? Probed once, as the share card does. */
-  const canShareFiles = (() => {
-    try {
-      const probe = new File([new Uint8Array(1)], 'probe.png', { type: 'image/png' });
-      return (
-        typeof navigator.share === 'function' &&
-        typeof navigator.canShare === 'function' &&
-        navigator.canShare({ files: [probe] })
-      );
-    } catch {
-      return false;
-    }
-  })();
+  const canShareFiles = canShareImages();
   // iOS's share sheet has Save Image in it, and a blob download there opens a
   // bare preview page, so on iOS Share is the one way out.
   const showSave = !(isIOS() && canShareFiles);
@@ -1840,7 +1829,7 @@
   async function shareImage() {
     if (!imageFile) return;
     try {
-      await navigator.share({ files: [imageFile] });
+      await shareFile(imageFile);
       closeImage();
     } catch (err) {
       // Dismissing the sheet leaves the image up so the choice can be made again.

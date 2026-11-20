@@ -9,6 +9,9 @@
  * does nothing is worse than no Copy button.
  */
 
+import { IS_ANDROID_APP } from './platform';
+import { appShareText } from './android/files';
+
 /** Pre-clipboard-API fallback, so the button is never simply dead. */
 function legacyCopy(text: string): boolean {
   const el = document.createElement('textarea');
@@ -42,10 +45,10 @@ export async function copyText(text: string): Promise<boolean> {
  *
  * Firefox on the desktop has none, so the button would open nothing — better
  * to drop it and leave Copy as the single obvious way out. Read once: nothing
- * about it changes while a sheet is open.
+ * about it changes while a sheet is open. The Android app always has one.
  */
 export const canShare =
-  typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  IS_ANDROID_APP || (typeof navigator !== 'undefined' && typeof navigator.share === 'function');
 
 /**
  * Hand text to the OS share sheet.
@@ -55,6 +58,14 @@ export const canShare =
  * choice can be made again.
  */
 export async function shareText(text: string): Promise<boolean> {
+  if (IS_ANDROID_APP) {
+    try {
+      return await appShareText(text);
+    } catch (err) {
+      console.error('Share failed:', err);
+      return false;
+    }
+  }
   try {
     await navigator.share({ text });
     return true;

@@ -72,7 +72,7 @@
   import { IndexedDBArtStore } from '../adapters/ArtStore';
   import { getCustomThemeSettings, updateCustomThemeSettings, MAX_COLOR_PRESETS } from '../adapters/settings';
   import { contrastRatio, isValidHex } from '../lib/themeColors';
-  import { download } from '../lib/backup/saveFile';
+  import { canShareImages, download, shareFile } from '../lib/backup/saveFile';
   import { isIOS, isPhoneOrTablet } from '../lib/device';
   import { showNotice } from '../stores/noticeStore';
 
@@ -444,17 +444,8 @@
 
   // ── What this device can do ───────────────────────────────────────────────
 
-  /** Can the OS share sheet take an image file? Probed once with a real image type. */
-  const canShareFiles = (() => {
-    try {
-      const probe = new File([new Uint8Array(1)], 'probe.png', { type: 'image/png' });
-      return typeof navigator.share === 'function' &&
-        typeof navigator.canShare === 'function' &&
-        navigator.canShare({ files: [probe] });
-    } catch {
-      return false;
-    }
-  })();
+  /** Can the OS share sheet take an image file? Probed once. */
+  const canShareFiles = canShareImages();
 
   // iOS's share sheet has Save Image in it, and a blob download there opens a
   // bare preview page, so on iOS Share is the one way out.
@@ -469,7 +460,7 @@
   async function handleShare() {
     if (!file) return;
     try {
-      await navigator.share({ files: [file] });
+      await shareFile(file);
       dispatch('close');
     } catch (err) {
       // Dismissing the sheet leaves this one open so the choice can be made again.

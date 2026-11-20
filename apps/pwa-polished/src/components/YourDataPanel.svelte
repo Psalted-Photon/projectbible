@@ -78,7 +78,7 @@
       showNotice(
         leftOut > 0
           ? `Backup saved. ${plural(leftOut, 'journal entry', 'journal entries')} couldn't be opened and ${leftOut === 1 ? 'was' : 'were'} left out.`
-          : result === 'shared' ? 'Backup saved' : 'Backup downloaded',
+          : result === 'downloaded' ? 'Backup downloaded' : 'Backup saved',
         leftOut > 0 ? 'error' : 'success',
       );
       reset();
