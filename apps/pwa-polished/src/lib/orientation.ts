@@ -10,15 +10,25 @@
  * sideways. While any hold is on, those re-locks leave the screen alone.
  * Letting go of the last one puts the setting back, which with rotation off
  * snaps the phone upright.
+ *
+ * The Android app's web view can't lock the screen, so there the IrisScreen
+ * plugin does it with Android's own control, and saves the setting's choice
+ * so the next launch opens the same way.
  */
 
 import { getSettings } from '../adapters/settings';
+import { IS_ANDROID_APP } from './platform';
+import { appSetOrientation } from './android/screen';
 
 let holds = 0;
 
 /** Lock or free the screen as the setting says, unless a hold has it. */
 export async function applyOrientationLock(): Promise<void> {
   if (holds > 0) return;
+  if (IS_ANDROID_APP) {
+    await appSetOrientation(getSettings().allowRotation ? 'free' : 'portrait', true).catch(() => {});
+    return;
+  }
   if (typeof screen === 'undefined' || !screen.orientation) return;
   const { allowRotation } = getSettings();
   try {
@@ -42,10 +52,14 @@ export async function applyOrientationLock(): Promise<void> {
  */
 export function holdOrientation(): () => void {
   holds++;
-  try {
-    screen.orientation?.unlock();
-  } catch {
-    // No orientation lock here, so nothing to lift.
+  if (IS_ANDROID_APP) {
+    void appSetOrientation('free', false).catch(() => {});
+  } else {
+    try {
+      screen.orientation?.unlock();
+    } catch {
+      // No orientation lock here, so nothing to lift.
+    }
   }
   let held = true;
   return () => {

@@ -17,7 +17,14 @@
  *
  * Each one holds on by name, and both holds stay until the last one lets go,
  * so a pack finishing can't let the screen sleep under a recording.
+ *
+ * The Android app's web view has no Screen Wake Lock, so there the IrisScreen
+ * plugin keeps the screen on instead. Android drops that while the app is
+ * hidden and takes it back when it returns, so it needs no re-taking.
  */
+
+import { IS_ANDROID_APP } from './platform';
+import { appKeepScreenOn } from './android/screen';
 
 type WakeLockSentinelLike = { release(): Promise<void> };
 
@@ -70,6 +77,10 @@ export function stayAwake(who = 'install'): void {
   if (active) return;
   active = true;
   takeWebLock();
+  if (IS_ANDROID_APP) {
+    void appKeepScreenOn(true).catch(() => {});
+    return;
+  }
   document.addEventListener('visibilitychange', onVisibility);
   void takeWakeLock();
 }
@@ -79,6 +90,7 @@ export function allowSleep(who = 'install'): void {
   holders.delete(who);
   if (!active || holders.size) return;
   active = false;
+  if (IS_ANDROID_APP) void appKeepScreenOn(false).catch(() => {});
   document.removeEventListener('visibilitychange', onVisibility);
   const sentinel = wakeLock;
   wakeLock = null;
