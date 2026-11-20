@@ -12,6 +12,7 @@
 interface CapacitorBridge {
   nativePromise<T>(plugin: string, method: string, options?: Record<string, unknown>): Promise<T>;
   isPluginAvailable(name: string): boolean;
+  addListener?(plugin: string, event: string, callback: (data: unknown) => void): unknown;
 }
 
 function bridge(): CapacitorBridge | null {
@@ -24,4 +25,13 @@ export function callNative<T>(plugin: string, method: string, options: Record<st
   const cap = bridge();
   if (!cap) return Promise.reject(new Error('This only works in the irisBible app.'));
   return cap.nativePromise<T>(plugin, method, options);
+}
+
+/** Hears an event an app plugin sends to the page (notifyListeners in its Java). */
+export function onNative<T>(plugin: string, event: string, handler: (data: T) => void): void {
+  const cap = bridge();
+  if (!cap?.addListener) return;
+  cap.addListener(plugin, event, (data) => {
+    if (data) handler(data as T);
+  });
 }

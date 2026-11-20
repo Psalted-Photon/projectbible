@@ -10,6 +10,11 @@
  *    viable at all.
  *
  * Absent on browsers without the API; every call is a no-op there.
+ *
+ * The Android app's web view has no working Media Session and would be put to
+ * sleep with the screen off, so there the same facts go to Android's own media
+ * controls instead (lib/android/media.ts, ReadAloudService.java), which also
+ * keep the app awake while a chapter is read.
  */
 
 import { get } from 'svelte/store';
@@ -20,12 +25,18 @@ import {
   verseCounter,
   chapterProgress,
   togglePlayPause,
+  pauseReading,
+  resumeReading,
   stopReading,
   skipChapter,
   skipParagraph,
 } from './readingEngine';
+import { getSharedTtsAudio } from '../../adapters/tts';
+import { IS_ANDROID_APP } from '../platform';
+import { appNowPlaying, onAppMediaAction, type AppMediaAction } from '../android/media';
 
 function available(): boolean {
+  if (IS_ANDROID_APP) return true;
   return typeof navigator !== 'undefined' && 'mediaSession' in navigator;
 }
 
@@ -34,6 +45,11 @@ let handlersBound = false;
 function bindHandlers(): void {
   if (handlersBound || !available()) return;
   handlersBound = true;
+
+  if (IS_ANDROID_APP) {
+    onAppMediaAction(onAppAction);
+    return;
+  }
 
   const session = navigator.mediaSession;
   const set = (action: MediaSessionAction, handler: (() => void) | null) => {
@@ -61,6 +77,21 @@ function isText(): boolean {
   return get(readingSource).kind === 'text';
 }
 
+/**
+ * The app's controls. Play and pause each say which one they mean, unlike a
+ * toggle, so a headphone unplug can never start a paused chapter.
+ */
+function onAppAction(action: AppMediaAction): void {
+  if (action === 'play') resumeReading();
+  else if (action === 'pause') pauseReading();
+  else if (action === 'stop') stopReading();
+  else {
+    const step = action === 'next' ? 1 : -1;
+    if (isText()) skipParagraph(step);
+    else skipChapter(step);
+  }
+}
+
 /** Title stays at chapter level so it never churns; the verse line carries detail. */
 function currentTitle(): string {
   const source = get(readingSource);
@@ -84,6 +115,11 @@ let lastSubtitle = '';
 export function updateMediaSession(): void {
   if (!available()) return;
   bindHandlers();
+
+  if (IS_ANDROID_APP) {
+    updateAppPlayer();
+    return;
+  }
 
   const session = navigator.mediaSession;
   const state = get(readingState);
@@ -138,6 +174,31 @@ export function updateMediaSession(): void {
       // Thrown if the numbers are ever inconsistent; not worth failing over.
     }
   }
+}
+
+/**
+ * The app's half of the above: the same title, line and progress, for
+ * Android's player. Starting counts as busy (speech is being made), so the
+ * app is kept awake from the moment play is pressed.
+ */
+function updateAppPlayer(): void {
+  const state = get(readingState);
+  const position = get(readingPosition);
+  if (state === 'idle' || (!position && !isText())) {
+    appNowPlaying({ state: 'none' });
+    return;
+  }
+  const progress = get(chapterProgress);
+  appNowPlaying({
+    state: state === 'playing' ? 'playing' : state === 'starting' ? 'buffering' : 'paused',
+    title: currentTitle(),
+    subtitle: currentSubtitle(),
+    album: position ? position.translation.toUpperCase() : '',
+    duration: progress?.duration ?? 0,
+    position: progress ? Math.min(progress.position, progress.duration) : 0,
+    // The chapter clock runs in audio time, so it moves at the Read Aloud speed.
+    speed: getSharedTtsAudio().playbackRate || 1,
+  });
 }
 
 /** Start mirroring engine state to the lock screen. Safe to call once at boot. */
