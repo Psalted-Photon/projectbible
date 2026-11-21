@@ -20,6 +20,9 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(IrisMediaPlugin.class);
         registerPlugin(IrisAlarmsPlugin.class);
         registerPlugin(IrisFingerprintPlugin.class);
+        registerPlugin(IrisAppPlugin.class);
+        // Plus those only one build has: the downloaded APK's updater.
+        FlavorPlugins.register(this);
         // Open the way the page last asked for, so a phone held sideways at
         // launch doesn't turn the app before the page has loaded.
         IrisScreenPlugin.applySavedOrientation(this);

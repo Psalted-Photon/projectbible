@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Added to the main manifest in the APK downloaded from irisbible.com only
+     (the "sideload" build). The Play Store build has none of this: Play
+     updates it, and Play does not allow apps to install their own updates. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- The update download finishing, or its progress notification
+             tapped (IrisUpdatePlugin). Only Android sends these. -->
+        <receiver
+            android:name=".UpdateReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+                <action android:name="android.intent.action.DOWNLOAD_NOTIFICATION_CLICKED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+    <!-- Handing a downloaded update to Android's installer. Android still asks
+         the person once ("Install unknown apps") and confirms each install. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Whether the phone is on mobile data before a big download. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+</manifest>

@@ -1,5 +1,30 @@
 apply plugin: 'com.android.application'
 
+// The app's version. build-android.mjs works it out and passes it in (see
+// appVersion there); a build without it, Android Studio's included, works out
+// the same numbers here. The code is minutes since the start of 2026, so every
+// build is newer than the last and installs over it as an update; the name is
+// the day, which is what people see in Settings → Apps.
+def minutesSince2026() {
+    long start = java.time.Instant.parse('2026-01-01T00:00:00Z').toEpochMilli()
+    return (int) ((System.currentTimeMillis() - start).intdiv(60000L))
+}
+def today = java.time.LocalDate.now()
+def irisVersionCode = (project.findProperty('irisVersionCode') ?: minutesSince2026()).toString().toInteger()
+def irisVersionName = (project.findProperty('irisVersionName')
+    ?: "${today.year}.${today.monthValue}.${today.dayOfMonth}-test").toString()
+
+// The permanent signing key, kept outside the project and never in git (its
+// folder has a README on backing it up). Without it, debug builds work as
+// always and release builds would come out unsigned, so build-android.mjs
+// stops before starting one.
+def signingDir = System.getenv('IRIS_SIGNING_DIR') ?: "${System.getProperty('user.home')}/irisbible-signing"
+def signingFile = file("${signingDir}/keystore.properties")
+def signing = new Properties()
+if (signingFile.exists()) {
+    signingFile.withInputStream { signing.load(it) }
+}
+
 android {
     namespace = "com.irisbible.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +32,8 @@ android {
         applicationId "com.irisbible.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode irisVersionCode
+        versionName irisVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -29,10 +54,37 @@ android {
     androidResources {
         noCompress 'onnx', 'cact'
     }
+    signingConfigs {
+        release {
+            if (signingFile.exists()) {
+                storeFile file(signing.getProperty('storeFile'))
+                storePassword signing.getProperty('storePassword')
+                keyAlias signing.getProperty('keyAlias')
+                keyPassword signing.getProperty('keyPassword')
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingFile.exists() ? signingConfigs.release : null
+        }
+    }
+    // Two builds of one app, with the same id and the same key, so either can
+    // update the other. "sideload" is the APK downloaded from irisbible.com:
+    // it checks irisbible.com for new versions and installs them itself (that
+    // code and its permission live in src/sideload). "play" is the bundle for
+    // the Play Store, which does its updating, so it has neither.
+    flavorDimensions = ['store']
+    productFlavors {
+        sideload {
+            dimension 'store'
+            resValue 'string', 'iris_channel', 'sideload'
+        }
+        play {
+            dimension 'store'
+            resValue 'string', 'iris_channel', 'play'
         }
     }
 }

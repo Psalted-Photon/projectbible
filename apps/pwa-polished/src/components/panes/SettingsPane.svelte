@@ -73,6 +73,7 @@
   import { isInstalledApp, isIOS, isPhoneOrTablet } from "../../lib/device";
   import { canInstall, promptInstall } from "../../lib/installPrompt";
   import { IS_ANDROID_APP } from "../../lib/platform";
+  import { appInfo, checkForAppUpdate } from "../../lib/android/appUpdate";
   import { journalLock, getRelockAfterMs, setRelockAfterMs, RELOCK_OPTIONS } from "../../lib/journalLock/lockState";
   import { userProfileStore } from "../../stores/userProfileStore";
   import JournalLockManage from "../JournalLockManage.svelte";
@@ -695,12 +696,24 @@
     });
   }
 
+  /** The app's version, shown under Check for updates. */
+  let appVersionName = '';
+  if (IS_ANDROID_APP) void appInfo().then((info) => (appVersionName = info?.versionName ?? ''));
+
   async function checkForUpdates() {
     // The web app updates through its service worker; the Android app updates
-    // as a whole new app, from the Play Store or a download. Until that check
-    // exists (Phase 4), the button says so rather than pretending.
+    // as a whole new app. The APK from irisbible.com looks there and offers
+    // the new one in its own card (lib/android/appUpdate.ts); the Play Store
+    // updates its build itself.
     if (IS_ANDROID_APP) {
-      showNotice("Update checks for the Android app are coming soon.");
+      checkingUpdate = true;
+      const result = await checkForAppUpdate(true);
+      checkingUpdate = false;
+      const version = appVersionName ? ` (version ${appVersionName})` : '';
+      if (result === 'test') showNotice(`This is a test build from the PC${version}. It doesn't update itself.`, 'info');
+      else if (result === 'play') showNotice('The Play Store keeps irisBible up to date.', 'info');
+      else if (result === 'up-to-date') showNotice(`You're up to date${version}.`);
+      else if (result === 'offline') showNotice("Couldn't reach irisbible.com. Check your connection and try again.", 'error');
       return;
     }
     if (!('serviceWorker' in navigator)) {
@@ -1729,6 +1742,9 @@
         <span class="icon"><CloudArrowDown size={22} weight="bold" /></span>
         <span class="text">{checkingUpdate ? 'Checking...' : 'Check for updates'}</span>
       </button>
+      {#if IS_ANDROID_APP}
+        <p class="section-description" style="margin: 8px 0 0; opacity: 0.75">irisBible {appVersionName}</p>
+      {/if}
       <!-- Reloads onto a new service worker, which the Android app has none of. -->
       {#if !IS_ANDROID_APP}
         <label class="auto-check-toggle">

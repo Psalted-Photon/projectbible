@@ -28,6 +28,8 @@
   import { checkMove, movingScreenOpen } from "./lib/move/moveCheck";
   import { IS_ANDROID_APP } from "./lib/platform";
   import { onPhoneAlarmTap, takeLaunchTap, watchPhoneSchedule } from "./lib/android/alarms";
+  import { startAppUpdates } from "./lib/android/appUpdate";
+  import AppUpdateCard from "./components/AppUpdateCard.svelte";
   import JournalLockDialog from "./components/JournalLockDialog.svelte";
   import { quickLockSetup } from "./lib/journalLock/fingerprintOffer";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
@@ -359,6 +361,8 @@
     if (IS_ANDROID_APP) {
       watchPhoneSchedule();
       onPhoneAlarmTap(openPhoneTap);
+      // The APK from irisbible.com looks for a newer version of itself.
+      startAppUpdates();
     }
 
     const handleSwMessage = (event: MessageEvent) => {
@@ -498,6 +502,12 @@
 
     <!-- Finishing a background pack download the app was closed during -->
     <PackRunCard />
+
+    <!-- In the app only: a new version of the app, its download and Install
+         (lib/android/appUpdate.ts). -->
+    {#if IS_ANDROID_APP}
+      <AppUpdateCard />
+    {/if}
 
     <!-- In-app yes/no questions in place of confirm() -->
     <AppConfirm />

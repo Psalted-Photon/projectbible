@@ -5,6 +5,8 @@
   "scripts": {
     "android": "node build-android.mjs",
     "android:install": "node build-android.mjs --install",
+    "android:release": "node build-android.mjs --release",
+    "android:publish": "node publish-android.mjs",
     "icons": "node build-icons.mjs"
   },
   "dependencies": {

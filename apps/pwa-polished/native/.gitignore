@@ -2,3 +2,6 @@
 # the voices fetched once to this PC, and the packs and voices staged for the APK.
 cache/
 android/app/included-assets/
+# Release builds (build-android.mjs --release): the APK and the Play bundle,
+# over a gigabyte each. The APK goes to GitHub Releases, never into git.
+release/

@@ -296,6 +296,9 @@ const WEB_ONLY_FILES = [
   'reset.html',
   // Artwork the sign-in emails load from irisbible.com.
   'email',
+  // The Android download page and the version file the app reads from
+  // irisbible.com (native/publish-android.mjs writes it).
+  'android',
 ];
 
 function leaveOutWebOnly() {
@@ -413,11 +416,15 @@ return {
         //                     mail clients from the live origin and never by
         //                     the app, so precaching it would cost every user
         //                     a download nothing here ever reads.
+        //   android/          the Android app's download page and the version
+        //                     file it reads. Both change with every release,
+        //                     so they must always come fresh from the site.
         globIgnores: [
           '**/tts/**',
           '**/voice-lab.html',
           '**/reset.html',
           '**/email/**',
+          '**/android/**',
           '**/familytree.html',
           '**/family-tree-data.json',
           '**/gem-lab.html',
@@ -441,6 +448,7 @@ return {
         navigateFallbackDenylist: [
           /^\/voice-lab\.html$/,
           /^\/reset\.html$/,
+          /^\/android(\/|$)/,
           /^\/familytree\.html$/,
           /^\/gem-lab\.html$/,
           /^\/tree-motion-lab\.html$/,
