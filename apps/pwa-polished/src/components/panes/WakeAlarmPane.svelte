@@ -143,7 +143,7 @@
       } else {
         phone = await previewPhoneAlarm();
         statusKind = "ok";
-        statusMessage = "Shown. Check your notification shade. That's the look and the sound.";
+        statusMessage = "Ringing now, the way the real alarm will. Tap it or press Stop to end it.";
       }
     } catch (err: any) {
       statusKind = "error";
@@ -311,8 +311,9 @@
 
   <p class="section-description">
     {#if IS_ANDROID_APP}
-      At the time you set, your phone rings with an irisBible alarm. Tap it and
-      the app opens with a start button — reading never begins on its own.
+      At the time you set, your phone rings with an irisBible alarm, and keeps
+      ringing until you tap it or press Stop. Tap it and the app opens with a
+      start button — reading never begins on its own.
     {:else}
       At the time you set, your phone gets a irisBible notification. Tap it and
       the app opens with a start button — reading never begins on its own.
@@ -507,8 +508,9 @@
     <h3>If it doesn't wake you</h3>
     {#if IS_ANDROID_APP}
     <p>
-      The alarm rings with your phone's alarm sound, at alarm volume. To pick
-      another sound, long-press the notification and open its settings.
+      The alarm rings with your phone's alarm sound, at alarm volume, over and
+      over until you answer it, and goes quiet by itself after 10 minutes. To
+      pick another sound, long-press the notification and open its settings.
     </p>
     <ul>
       <li>If it doesn't ring at all, check both permissions at the top.</li>

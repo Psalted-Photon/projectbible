@@ -1670,7 +1670,7 @@
         <span class="label-text">Journal lock</span>
       </label>
       <p class="section-description il-hint">
-        Asks for your fingerprint or face before the Journal opens, and scrambles
+        Asks for your {IS_ANDROID_APP ? 'fingerprint' : 'fingerprint or face'} before the Journal opens, and scrambles
         your journal on this device and in the cloud.
         {#if !journalLockOn && !$userProfileStore.isSignedIn}
           Sign in to turn it on; the lock is kept with your account.

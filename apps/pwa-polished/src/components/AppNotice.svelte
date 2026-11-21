@@ -1,19 +1,24 @@
 <script lang="ts">
   import { fly } from '../lib/motion';
-  import { CheckCircle, Info, WarningCircle, ArrowClockwise } from 'phosphor-svelte';
+  import { CheckCircle, Info, WarningCircle, ArrowClockwise, Fingerprint } from 'phosphor-svelte';
   import { notices, dismissNotice } from '../stores/noticeStore';
 </script>
 
 <!-- Same card as UpdateNotice, so every message the app shows looks alike.
      Tap one to dismiss it early. One with an action (the Restart after an
-     install) carries its own button beside the text. -->
+     install) carries its own button beside the text; one with a second
+     button too (a question, like the journal's fingerprint offer) puts both
+     under the text, where there's room for them on a phone. -->
 <div class="an-wrap" role="status" aria-live="polite">
   {#each $notices as notice (notice.id)}
     {@const action = notice.action}
-    <div class="an-card" class:error={notice.kind === 'error'} transition:fly={{ y: -16, duration: 250 }}>
+    {@const secondary = notice.secondary}
+    <div class="an-card" class:error={notice.kind === 'error'} class:two={!!secondary} transition:fly={{ y: -16, duration: 250 }}>
       <button type="button" class="an-body" on:click={() => dismissNotice(notice.id)}>
         <span class="an-icon">
-          {#if notice.kind === 'error'}
+          {#if notice.icon === 'fingerprint'}
+            <Fingerprint size={20} weight="bold" />
+          {:else if notice.kind === 'error'}
             <WarningCircle size={20} weight="bold" />
           {:else if notice.kind === 'info'}
             <Info size={20} weight="bold" />
@@ -23,7 +28,31 @@
         </span>
         <span class="an-text">{notice.text}</span>
       </button>
-      {#if action}
+      {#if action && secondary}
+        <div class="an-buttons">
+          <button
+            type="button"
+            class="an-secondary"
+            on:click={() => {
+              dismissNotice(notice.id);
+              secondary.run();
+            }}
+          >
+            {secondary.label}
+          </button>
+          <button
+            type="button"
+            class="an-action"
+            on:click={() => {
+              dismissNotice(notice.id);
+              action.run();
+            }}
+          >
+            {#if action.icon === 'fingerprint'}<Fingerprint size={16} weight="bold" />{:else}<ArrowClockwise size={16} weight="bold" />{/if}
+            {action.label}
+          </button>
+        </div>
+      {:else if action}
         <button
           type="button"
           class="an-action"
@@ -32,7 +61,7 @@
             action.run();
           }}
         >
-          <ArrowClockwise size={16} weight="bold" />
+          {#if action.icon === 'fingerprint'}<Fingerprint size={16} weight="bold" />{:else}<ArrowClockwise size={16} weight="bold" />{/if}
           {action.label}
         </button>
       {/if}
@@ -100,6 +129,37 @@
 
   .an-action:hover {
     background: rgba(230, 184, 74, 0.12);
+  }
+
+  /* Two buttons: the text on top, the buttons in a row beneath it. */
+  .an-card.two {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+  }
+
+  .an-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0 10px 10px;
+  }
+
+  .an-secondary {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .an-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .an-icon {

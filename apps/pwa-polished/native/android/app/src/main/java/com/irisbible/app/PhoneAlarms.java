@@ -47,6 +47,8 @@ final class PhoneAlarms {
     static final String TEST = "test";
 
     static final String ACTION_FIRE = "com.irisbible.app.ALARM_FIRE";
+    /** The ringing alarm's Stop button (AlarmReceiver). */
+    static final String ACTION_STOP = "com.irisbible.app.ALARM_STOP";
     static final String EXTRA_KIND = "kind";
     static final String EXTRA_AT = "at";
     /** The page link a notification tap opens, read by IrisAlarmsPlugin. */
@@ -70,6 +72,12 @@ final class PhoneAlarms {
 
     private static final long[] ALARM_BUZZ = { 0, 400, 200, 400, 200, 400 };
     private static final long[] REMINDER_BUZZ = { 0, 200 };
+
+    /**
+     * An alarm nobody answers goes quiet after this, as a phone's own clock
+     * does, so a phone left at home doesn't ring all day.
+     */
+    private static final long RING_FOR_MS = 10 * 60 * 1000L;
 
     private PhoneAlarms() {}
 
@@ -303,18 +311,39 @@ final class PhoneAlarms {
             .setPriority(isAlarm ? NotificationCompat.PRIORITY_HIGH : NotificationCompat.PRIORITY_DEFAULT)
             .setVibrate(isAlarm ? ALARM_BUZZ : REMINDER_BUZZ);
         if (isAlarm) {
-            builder.setSound(Settings.System.DEFAULT_ALARM_ALERT_URI, AudioManager.STREAM_ALARM);
+            builder.setSound(Settings.System.DEFAULT_ALARM_ALERT_URI, AudioManager.STREAM_ALARM)
+                .addAction(0, "Stop", stopIntent(context))
+                .setTimeoutAfter(RING_FOR_MS);
         } else {
             builder.setDefaults(Notification.DEFAULT_SOUND);
+        }
+
+        Notification notification = builder.build();
+        if (isAlarm) {
+            // Rings and buzzes over and over, like a real alarm clock, until
+            // it is tapped (which opens the reading), stopped, swiped away or
+            // the notification shade is pulled down, or RING_FOR_MS passes.
+            notification.flags |= Notification.FLAG_INSISTENT;
         }
 
         try {
             // The same id each time, so a missed alarm is replaced rather than
             // piling up, as the web's notification tag does.
-            NotificationManagerCompat.from(context).notify(isAlarm ? NOTIFY_ALARM : NOTIFY_DEVOTIONAL, builder.build());
+            NotificationManagerCompat.from(context).notify(isAlarm ? NOTIFY_ALARM : NOTIFY_DEVOTIONAL, notification);
         } catch (SecurityException e) {
             // Notifications were switched off a moment ago.
         }
+    }
+
+    /** The alarm's Stop button: silences it without opening the app. */
+    private static PendingIntent stopIntent(Context context) {
+        Intent intent = new Intent(context, AlarmReceiver.class).setAction(ACTION_STOP);
+        return PendingIntent.getBroadcast(context, 20, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    /** Stop was tapped: the ringing alarm goes away, and with it the sound. */
+    static void stopRinging(Context context) {
+        NotificationManagerCompat.from(context).cancel(NOTIFY_ALARM);
     }
 
     /**

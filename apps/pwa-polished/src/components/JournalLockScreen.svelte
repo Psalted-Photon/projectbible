@@ -6,8 +6,15 @@
    * Journal tab in place of the calendar, and in Settings while locked. It
    * sits inside the window rather than over the app, so the window frame
    * stays usable (closing, docking, the tutorial's dots).
+   *
+   * In the Android app there is no button to press first: the moment this
+   * opens, from whichever way into the journal, Android's fingerprint prompt
+   * comes up by itself. The button only shows after that prompt is closed.
+   * (The website can't do that: browsers only show a passkey prompt after a tap.)
    */
   import { onDestroy, onMount } from 'svelte';
+  import { IS_ANDROID_APP } from '../lib/platform';
+  import { phoneFingerprintStatus } from '../lib/journalLock/phoneFingerprint';
   import { LockSimple, Fingerprint } from 'phosphor-svelte';
   import { journalLock } from '../lib/journalLock/lockState';
   import { unlockWithFingerprint, unlockWithRecoveryCode } from '../lib/journalLock/actions';
@@ -17,6 +24,11 @@
 
   /** Smaller, for the Profile tab and Settings. */
   export let compact = false;
+  /**
+   * The app only: ask for the fingerprint as soon as this opens. Off in
+   * Settings, which isn't a way into the journal.
+   */
+  export let autoPrompt = true;
 
   let support: 'yes' | 'no' | 'maybe' = 'maybe';
   let usingCode = false;
@@ -25,22 +37,61 @@
   let checking = false;
   let error = '';
   let codeInput: HTMLInputElement;
+  /** The app only: the fingerprint keys this phone holds, once asked. */
+  let phoneKeys: string[] = [];
+  let phoneChecked = false;
+  let asked = false;
+  let destroyed = false;
+  let waitForShown: (() => void) | null = null;
 
   onMount(() => {
     fingerprintSupport().then((s) => (support = s));
+    if (IS_ANDROID_APP) {
+      phoneFingerprintStatus().then((s) => {
+        phoneKeys = s.keys;
+        phoneChecked = true;
+      });
+    }
   });
 
   // Closing the journal closes a fingerprint request that never showed, so
   // it can't block the next try.
   onDestroy(() => {
+    destroyed = true;
+    if (waitForShown) document.removeEventListener('visibilitychange', waitForShown);
     if (busy && !usingCode) cancelPasskeyPrompt();
   });
 
-  $: usable = usablePasskeySlots($journalLock.slots, $journalLock.keyId);
+  $: usable = usablePasskeySlots($journalLock.slots, $journalLock.keyId, phoneKeys);
+
+  // The app: ask once, as soon as there's a fingerprint here to ask for. The
+  // slots can arrive a moment after this opens, on a fresh launch.
+  $: if (IS_ANDROID_APP && autoPrompt && !asked && phoneChecked && usable.length > 0 && !usingCode && !busy) {
+    asked = true;
+    askWhenShown();
+  }
+
+  /** Android shows the prompt only over an app on screen; a lock that dropped while away waits for the return. */
+  function askWhenShown() {
+    if (!document.hidden) {
+      void useFingerprint();
+      return;
+    }
+    const onShown = () => {
+      if (document.hidden) return;
+      document.removeEventListener('visibilitychange', onShown);
+      waitForShown = null;
+      if (!destroyed && $journalLock.needsUnlock && !usingCode) void useFingerprint();
+    };
+    waitForShown = onShown;
+    document.addEventListener('visibilitychange', onShown);
+  }
   $: hasPasskeys = $journalLock.slots.some((s) => s.kind === 'passkey');
   $: hasRecovery = $journalLock.slots.some((s) => s.kind === 'recovery');
   $: noSlots = $journalLock.slots.length === 0;
-  $: showFingerprint = usable.length > 0 && support !== 'no';
+  // In the app the phone's PIN opens the key too, so a phone whose
+  // fingerprints were all removed still gets the button.
+  $: showFingerprint = usable.length > 0 && (IS_ANDROID_APP || support !== 'no');
 
   async function useFingerprint() {
     error = '';
@@ -50,15 +101,29 @@
     } catch (err) {
       const problem = err instanceof PasskeyError ? err.problem : 'failed';
       const detail = err instanceof PasskeyError ? err.detail : String((err as Error)?.message ?? err);
-      error = {
-        cancelled: 'Fingerprint canceled. Tap the button to try again.',
-        unsupported: 'This browser can’t use a fingerprint for the journal. Use your recovery code instead.',
-        'already-added': 'Something went wrong. Try again, or use your recovery code.',
-        'no-match': 'That passkey doesn’t open this journal. Try another, or use your recovery code.',
-        failed: 'Something went wrong. Try again, or use your recovery code.',
-      }[problem];
+      if (IS_ANDROID_APP) {
+        error = {
+          cancelled: 'Fingerprint canceled. Tap the button to try again.',
+          unsupported: 'This phone has no fingerprint set up. Add one in your phone’s settings, or use your recovery code.',
+          'already-added': 'Something went wrong. Try again, or use your recovery code.',
+          'no-match': 'This phone’s fingerprint doesn’t open this journal. Use your recovery code.',
+          reset: 'Your phone reset its fingerprint lock, which happens when the screen lock is changed or removed. Use your recovery code, then add your fingerprint again.',
+          failed: 'Something went wrong. Try again, or use your recovery code.',
+        }[problem];
+        // A reset key is gone for good: stop offering the button for it.
+        if (problem === 'reset') phoneFingerprintStatus().then((s) => (phoneKeys = s.keys));
+      } else {
+        error = {
+          cancelled: 'Fingerprint canceled. Tap the button to try again.',
+          unsupported: 'This browser can’t use a fingerprint for the journal. Use your recovery code instead.',
+          'already-added': 'Something went wrong. Try again, or use your recovery code.',
+          'no-match': 'That passkey doesn’t open this journal. Try another, or use your recovery code.',
+          reset: 'Something went wrong. Try again, or use your recovery code.',
+          failed: 'Something went wrong. Try again, or use your recovery code.',
+        }[problem];
+      }
       // What the browser said, on screen, so a phone failure can be reported.
-      if (detail && problem !== 'cancelled') error += ` (${detail})`;
+      if (detail && problem !== 'cancelled' && problem !== 'reset') error += ` (${detail})`;
       console.warn(`[JournalLock] Fingerprint unlock failed: ${problem}${detail ? ` — ${detail}` : ''}`);
     } finally {
       busy = false;
@@ -151,7 +216,16 @@
             {busy ? 'Waiting for your fingerprint…' : 'Unlock with fingerprint'}
           </button>
         {:else if hasPasskeys && usable.length === 0}
-          <p class="jl-note">Fingerprint unlock only works on the address it was set up on. Here, use your recovery code.</p>
+          <!-- App text sits under a plain IS_ANDROID_APP check, the only kind
+               the website's build drops. -->
+          {#if IS_ANDROID_APP}
+            <!-- Nothing while asking the phone which fingerprint it holds: a blink at most. -->
+            {#if phoneChecked}
+              <p class="jl-note">This phone’s fingerprint isn’t set up for the journal yet. Use your recovery code once, and then you can add it.</p>
+            {/if}
+          {:else}
+            <p class="jl-note">Fingerprint unlock only works on the address it was set up on. Here, use your recovery code.</p>
+          {/if}
         {:else if hasPasskeys && support === 'no'}
           <p class="jl-note">This browser can’t use a fingerprint for the journal. Use your recovery code.</p>
         {/if}

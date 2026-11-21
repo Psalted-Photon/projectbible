@@ -16,11 +16,19 @@ export interface Notice {
   text: string;
   /** A button on the card, such as the Restart that follows an install. */
   action?: NoticeAction;
+  /** A second, quieter button, such as a Not now beside the action. */
+  secondary?: NoticeAction;
+  /** Shown in place of the kind's own icon. */
+  icon?: NoticeIcon;
 }
+
+export type NoticeIcon = 'restart' | 'fingerprint';
 
 export interface NoticeAction {
   label: string;
   run: () => void;
+  /** The action button's icon; a Restart arrow unless said. */
+  icon?: NoticeIcon;
 }
 
 export const notices = writable<Notice[]>([]);
@@ -31,10 +39,21 @@ const timers = new Map<number, ReturnType<typeof setTimeout>>();
 /** More than this and the oldest goes, so a run of failures can't fill the screen. */
 const MAX_VISIBLE = 3;
 
-export function showNotice(text: string, kind: NoticeKind = 'success', opts: { action?: NoticeAction } = {}) {
+export function showNotice(
+  text: string,
+  kind: NoticeKind = 'success',
+  opts: { action?: NoticeAction; secondary?: NoticeAction; icon?: NoticeIcon } = {},
+) {
   const id = nextId++;
   notices.update((list) => {
-    const next = [...list, { id, kind, text, ...(opts.action ? { action: opts.action } : {}) }];
+    const next = [...list, {
+      id,
+      kind,
+      text,
+      ...(opts.action ? { action: opts.action } : {}),
+      ...(opts.secondary ? { secondary: opts.secondary } : {}),
+      ...(opts.icon ? { icon: opts.icon } : {}),
+    }];
     while (next.length > MAX_VISIBLE) dismissTimer(next.shift()!.id);
     return next;
   });

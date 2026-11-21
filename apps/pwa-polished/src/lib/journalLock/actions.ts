@@ -17,8 +17,9 @@ import type { SyncOperation } from '../sync/types';
 import { fromBase64Url, generateJournalKey, keyIdFor } from './crypto';
 import type { DBJournalLock } from '../../adapters/db';
 import {
-  adoptLock, currentLockView, forgetJournalKey, getJournalKey, unlockWith, withLocalLockChange,
+  adoptLock, currentLockView, forgetJournalKey, getJournalKey, isUnlocked, unlockWith, withLocalLockChange,
 } from './lockState';
+import { IS_ANDROID_APP } from '../platform';
 import { createPasskeySlot, currentRpId, forgetPasskey, openWithPasskey } from './passkey';
 import { createRecoverySlot, generateRecoveryCode, openRecoverySlot } from './recoveryCode';
 import {
@@ -38,8 +39,25 @@ export class JournalLockError extends Error {
 
 // ── Unlock ────────────────────────────────────────────────────────────────
 
-/** Fingerprint or face. Must be called straight from a tap. */
+/** The app's fingerprint unlock under way, which every lock screen on show shares. */
+let phoneUnlock: Promise<void> | null = null;
+
+/**
+ * Fingerprint or face. On the web it must be called straight from a tap. In
+ * the app the lock screen asks by itself as it opens, and the journal can be
+ * on screen in more than one place, so they all wait on the one prompt.
+ */
 export async function unlockWithFingerprint(): Promise<void> {
+  if (IS_ANDROID_APP) {
+    phoneUnlock ??= (async () => {
+      const view = currentLockView();
+      const { journalKey } = await openWithPasskey(view.slots, view.keyId);
+      if (!isUnlocked()) await unlockWith(journalKey);
+    })().finally(() => {
+      phoneUnlock = null;
+    });
+    return phoneUnlock;
+  }
   const view = currentLockView();
   const { journalKey } = await openWithPasskey(view.slots, view.keyId);
   await unlockWith(journalKey);

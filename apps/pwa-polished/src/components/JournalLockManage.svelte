@@ -14,6 +14,8 @@
   import { cancelPasskeyPrompt, currentRpId, fingerprintSupport, PasskeyError } from '../lib/journalLock/passkey';
   import type { DBJournalKeySlot } from '../adapters/db';
   import JournalLockScreen from './JournalLockScreen.svelte';
+  import { IS_ANDROID_APP } from '../lib/platform';
+  import { PHONE_RP, phoneFingerprintStatus } from '../lib/journalLock/phoneFingerprint';
 
   const dispatch = createEventDispatcher<{ dialog: 'new-code' | 'turn-off' }>();
 
@@ -23,9 +25,16 @@
   let error = '';
   let confirmingRemove: DBJournalKeySlot | null = null;
   const rpId = currentRpId();
+  /** The app only: the fingerprint keys this phone holds. */
+  let phoneKeys: string[] = [];
+
+  function checkPhone() {
+    if (IS_ANDROID_APP) phoneFingerprintStatus().then((s) => (phoneKeys = s.keys));
+  }
 
   onMount(() => {
     fingerprintSupport().then((s) => (support = s));
+    checkPhone();
   });
 
   onDestroy(() => {
@@ -40,20 +49,37 @@
     return new Date(slot.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  /** Where a fingerprint works, when that isn't here. A phone's says so in its name. */
+  function whereItWorks(slot: DBJournalKeySlot, keys: string[]): string {
+    if (slot.rpId === PHONE_RP) {
+      return IS_ANDROID_APP && slot.credentialId && keys.includes(slot.credentialId) ? ' · this phone' : '';
+    }
+    return slot.rpId && slot.rpId !== rpId ? ` · works at ${slot.rpId}` : '';
+  }
+
+  // The app: once this phone has its fingerprint, there's nothing to add.
+  $: phoneHasOne = IS_ANDROID_APP && passkeys.some((s) => s.rpId === PHONE_RP && !!s.credentialId && phoneKeys.includes(s.credentialId));
+
   async function addDevice() {
     busy = true;
     message = '';
     error = '';
     try {
       await addThisDeviceFingerprint();
-      message = 'This device’s fingerprint now opens the journal.';
+      message = IS_ANDROID_APP ? 'This phone’s fingerprint now opens the journal.' : 'This device’s fingerprint now opens the journal.';
+      checkPhone();
     } catch (err) {
       if (err instanceof PasskeyError) {
         error = {
           cancelled: 'Canceled.',
-          unsupported: 'This browser can’t use a fingerprint for the journal.',
-          'already-added': 'This device already has a fingerprint for the journal.',
+          unsupported: IS_ANDROID_APP
+            ? 'This phone has no fingerprint set up. Add one in your phone’s settings first.'
+            : 'This browser can’t use a fingerprint for the journal.',
+          'already-added': IS_ANDROID_APP
+            ? 'This phone already has a fingerprint for the journal.'
+            : 'This device already has a fingerprint for the journal.',
           'no-match': 'Something went wrong. Try again.',
+          reset: 'Something went wrong. Try again.',
           failed: 'Something went wrong. Try again.',
         }[err.problem];
         if (err.detail && err.problem !== 'cancelled' && err.problem !== 'already-added') error += ` (${err.detail})`;
@@ -76,6 +102,7 @@
     try {
       await removeFingerprint(slot.id);
       confirmingRemove = null;
+      checkPhone();
       message = `${slot.label || 'That device'} was removed.`;
     } catch (err) {
       error = err instanceof JournalLockError ? err.message : 'Something went wrong. Try again.';
@@ -99,7 +126,7 @@
 
   {#if $journalLock.needsUnlock}
     <p class="jm-note">Unlock the journal to manage fingerprints and the recovery code, or to turn the lock off.</p>
-    <JournalLockScreen compact />
+    <JournalLockScreen compact autoPrompt={false} />
   {:else if $journalLock.unlocked && $journalLock.mode !== 'off'}
     {#if $journalLock.mode === 'turning_off'}
       <div class="jm-warn">Turning the lock off didn’t finish. Your journal stays locked until it does.</div>
@@ -119,7 +146,7 @@
             <span class="jm-row-text">
               <span class="jm-row-name">{slot.label || 'A device'}</span>
               <span class="jm-row-sub">
-                Added {added(slot)}{slot.rpId && slot.rpId !== rpId ? ` · works at ${slot.rpId}` : ''}
+                Added {added(slot)}{whereItWorks(slot, phoneKeys)}
               </span>
             </span>
             {#if confirmingRemove?.id === slot.id}
@@ -138,9 +165,9 @@
       </ul>
     {/if}
 
-    {#if support !== 'no'}
+    {#if support !== 'no' && !phoneHasOne}
       <button class="jm-btn" on:click={addDevice} disabled={busy}>
-        <Plus size={16} weight="bold" /> Add this device’s fingerprint
+        <Plus size={16} weight="bold" /> {IS_ANDROID_APP ? 'Add this phone’s fingerprint' : 'Add this device’s fingerprint'}
       </button>
     {/if}
     <button class="jm-btn" on:click={() => dispatch('dialog', 'new-code')} disabled={busy}>

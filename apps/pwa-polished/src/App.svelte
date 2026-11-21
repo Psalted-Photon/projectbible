@@ -28,6 +28,8 @@
   import { checkMove, movingScreenOpen } from "./lib/move/moveCheck";
   import { IS_ANDROID_APP } from "./lib/platform";
   import { onPhoneAlarmTap, takeLaunchTap, watchPhoneSchedule } from "./lib/android/alarms";
+  import JournalLockDialog from "./components/JournalLockDialog.svelte";
+  import { quickLockSetup } from "./lib/journalLock/fingerprintOffer";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
@@ -526,6 +528,12 @@
          lib/move/moveCheck.ts, never blocks the app for good. -->
     {#if !IS_ANDROID_APP && $movingScreenOpen}
       <MovingScreen />
+    {/if}
+
+    <!-- In the app only: locking the journal from the fingerprint offer
+         (lib/journalLock/fingerprintOffer.ts), straight to the fingerprint. -->
+    {#if IS_ANDROID_APP && $quickLockSetup}
+      <JournalLockDialog kind="turn-on" quick on:close={() => quickLockSetup.set(false)} />
     {/if}
 
     <!-- Parallel accounts. Not a docked window: it covers the reader whole, and

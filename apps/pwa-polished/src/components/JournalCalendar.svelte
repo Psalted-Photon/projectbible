@@ -6,6 +6,8 @@
   import { windowStore } from '../lib/stores/windowStore';
   import { journalLock } from '../lib/journalLock/lockState';
   import JournalLockScreen from './JournalLockScreen.svelte';
+  import { IS_ANDROID_APP } from '../lib/platform';
+  import { offerFingerprintLock } from '../lib/journalLock/fingerprintOffer';
   import type { JournalEntry } from '@projectbible/core';
   import CloseX from './CloseX.svelte';
 
@@ -52,6 +54,8 @@
   let wasLocked = false;
   $: {
     if (wasLocked && !$journalLock.needsUnlock) loadEntries();
+    // The app: offer to lock it with the phone's fingerprint, once it shows.
+    if (IS_ANDROID_APP && $journalLock.ready && !$journalLock.needsUnlock) void offerFingerprintLock();
     if ($journalLock.needsUnlock) {
       // Locking drops the previews too, not just the view of them, and any
       // load still on its way.

@@ -12,6 +12,8 @@
   import { recorder, recordingLive, startRecording } from '../lib/recorder/recorder';
   import { registerJournalWriter, placeRecordingChip, stopAndAsk } from '../lib/voice/transcribe';
   import { OPEN_JOURNAL_DAY } from '../lib/openJournalDay';
+  import { IS_ANDROID_APP } from '../lib/platform';
+  import { offerFingerprintLock } from '../lib/journalLock/fingerprintOffer';
   
   export let initialDate: string | undefined = undefined;
   
@@ -44,6 +46,8 @@
   onMount(() => {
     loadEntry(currentDate);
     window.addEventListener(OPEN_JOURNAL_DAY, onOpenDay);
+    // The app: offer to lock it with the phone's fingerprint.
+    if (IS_ANDROID_APP) void offerFingerprintLock();
 
     // The journal is about to lock: save unsaved typing while the key is
     // still in memory, so the 2-second autosave can't lose words.

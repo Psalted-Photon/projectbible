@@ -8,6 +8,12 @@
    * both the passkey and the recovery code loses the journal, and asks twice —
    * once up front, and again on the button that turns it on. Turning off also
    * asks twice.
+   *
+   * In the Android app the fingerprint step asks by itself, with no button
+   * to press first. `quick` is the app's offer (fingerprintOffer.ts): it skips
+   * the opening page and goes straight to the fingerprint, and the warning
+   * moves onto the recovery code page, so it still asks twice before
+   * anything is locked: "I've saved it", then the last-group check.
    */
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { LockSimple, LockSimpleOpen, Key, Fingerprint, Copy, Check, Warning } from 'phosphor-svelte';
@@ -18,8 +24,11 @@
   } from '../lib/journalLock/actions';
   import { cancelPasskeyPrompt, fingerprintSupport, PasskeyError } from '../lib/journalLock/passkey';
   import { generateRecoveryCode, lastGroupOf } from '../lib/journalLock/recoveryCode';
+  import { IS_ANDROID_APP } from '../lib/platform';
 
   export let kind: 'turn-on' | 'new-code' | 'turn-off' = 'turn-on';
+  /** Turning on from the app's offer: straight to the fingerprint. */
+  export let quick = false;
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -51,6 +60,7 @@
 
   onMount(() => {
     fingerprintSupport().then((s) => (fingerprintUnavailable = s === 'no'));
+    if (IS_ANDROID_APP && quick && kind === 'turn-on') void prepare();
   });
 
   onDestroy(() => {
@@ -105,7 +115,9 @@
       if (err.problem === 'cancelled') return 'Canceled. Tap the button to try again.';
       if (err.problem === 'unsupported') {
         fingerprintUnavailable = true;
-        return 'This browser can’t use a fingerprint for the journal.';
+        return IS_ANDROID_APP
+          ? 'This phone has no fingerprint set up.'
+          : 'This browser can’t use a fingerprint for the journal.';
       }
       console.error(`[JournalLock] Step failed: ${err.problem}${err.detail ? ` — ${err.detail}` : ''}`);
       return `Something went wrong. Try again.${err.detail ? ` (${err.detail})` : ''}`;
@@ -122,6 +134,12 @@
     try {
       draft = await startTurnOn();
       step = 'fingerprint';
+      // The app asks for the fingerprint straight away; the button is only
+      // for trying again.
+      if (IS_ANDROID_APP) {
+        fingerprintUnavailable = (await fingerprintSupport()) === 'no';
+        if (!fingerprintUnavailable) void addFingerprint();
+      }
     } catch (err) {
       error = problemText(err);
       step = 'intro';
@@ -229,19 +247,47 @@
           <span>{unreadableCount} journal {unreadableCount === 1 ? 'entry' : 'entries'} couldn’t be opened. If you turn the lock off anyway, {unreadableCount === 1 ? 'it stays' : 'they stay'} scrambled for good.</span>
         </div>
       {:else if step === 'intro' || step === 'preparing'}
-        <p>Your fingerprint or face will be needed before the Journal opens.</p>
-        <p>Every title and entry gets scrambled, on this device and in the cloud. Only your own devices can unscramble them.</p>
-        <p>You’ll also get a recovery code as a backup, for a new device or if the fingerprint ever stops working.</p>
-        <div class="ld-warn">
-          <Warning size={18} weight="bold" />
-          <span>If you lose both your fingerprint passkey and your recovery code, your journal is gone for good. Nobody can get it back.</span>
-        </div>
-        <label class="ld-check">
-          <input type="checkbox" bind:checked={understood} disabled={step === 'preparing'} />
-          <span>I understand</span>
-        </label>
+        <!-- The app's pages sit under a plain IS_ANDROID_APP check, the only
+             kind the website's build drops. -->
+        {#if IS_ANDROID_APP}
+          {#if quick && step === 'preparing'}
+            <p>Getting your journal ready to lock…</p>
+            <div class="ld-bar indeterminate"><div></div></div>
+          {:else}
+            <p>Your fingerprint will be needed before the Journal opens.</p>
+            <p>Every title and entry gets scrambled, on this device and in the cloud. Only your own devices can unscramble them.</p>
+            <p>You’ll also get a recovery code as a backup, for a new device or if the fingerprint ever stops working.</p>
+            <div class="ld-warn">
+              <Warning size={18} weight="bold" />
+              <span>If you lose both this phone and your recovery code, your journal is gone for good. Nobody can get it back.</span>
+            </div>
+            <label class="ld-check">
+              <input type="checkbox" bind:checked={understood} disabled={step === 'preparing'} />
+              <span>I understand</span>
+            </label>
+          {/if}
+        {:else}
+          <p>Your fingerprint or face will be needed before the Journal opens.</p>
+          <p>Every title and entry gets scrambled, on this device and in the cloud. Only your own devices can unscramble them.</p>
+          <p>You’ll also get a recovery code as a backup, for a new device or if the fingerprint ever stops working.</p>
+          <div class="ld-warn">
+            <Warning size={18} weight="bold" />
+            <span>If you lose both your fingerprint passkey and your recovery code, your journal is gone for good. Nobody can get it back.</span>
+          </div>
+          <label class="ld-check">
+            <input type="checkbox" bind:checked={understood} disabled={step === 'preparing'} />
+            <span>I understand</span>
+          </label>
+        {/if}
       {:else if step === 'fingerprint'}
-        {#if fingerprintUnavailable}
+        {#if IS_ANDROID_APP}
+          {#if fingerprintUnavailable}
+            <p>This phone has no fingerprint set up. Add one in your phone’s settings and try again.</p>
+            <p>Or lock it with just the recovery code, which you’d type each time the Journal opens.</p>
+          {:else}
+            <p>Your phone will ask for your fingerprint.</p>
+          {/if}
+        {:else if fingerprintUnavailable}
           <p>This browser can’t use a fingerprint for the journal.</p>
           <p>You can still lock it with just the recovery code, but you’ll need to type the code each time the Journal opens. Or cancel, and turn the lock on from Safari or Chrome on your phone.</p>
         {:else}
@@ -259,6 +305,14 @@
           {#if copied}<Check size={16} weight="bold" /> Copied{:else}<Copy size={16} weight="bold" /> Copy{/if}
         </button>
         <p class="ld-quiet">Write it down, or save it in your password manager. You’ll need it on a new device.</p>
+        {#if IS_ANDROID_APP}
+          {#if quick}
+            <div class="ld-warn">
+              <Warning size={18} weight="bold" />
+              <span>If you lose both this phone and this code, your journal is gone for good. Nobody can get it back.</span>
+            </div>
+          {/if}
+        {/if}
       {:else if step === 'confirm'}
         <label class="ld-label" for="ld-group">Type the last group of your recovery code</label>
         <input

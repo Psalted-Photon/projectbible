@@ -10,12 +10,21 @@
  *
  * The passkey is saved in iCloud Keychain or Google Password Manager, so it
  * follows the account to the user's other devices on the same platform.
+ *
+ * The Android app has no passkeys: there, every function below hands the
+ * work to the phone's own fingerprint key instead (phoneFingerprint.ts), so
+ * the lock's other code and screens are the same in both.
  */
 
 import type { DBJournalKeySlot } from '../../adapters/db';
+import { IS_ANDROID_APP } from '../platform';
 import {
   deriveSlotKey, fromBase64Url, randomBytes, toBase64Url, unwrapJournalKey, wrapJournalKey,
 } from './crypto';
+import {
+  cancelPhonePrompt, createPhoneSlot, forgetPhoneKey, openWithPhone, PHONE_RP, phoneFingerprintStatus,
+  phoneSlots, PhoneFingerprintError,
+} from './phoneFingerprint';
 
 export type PasskeyProblem =
   /** The person closed the prompt, or it timed out. */
@@ -26,6 +35,11 @@ export type PasskeyProblem =
   | 'already-added'
   /** None of the saved passkeys opened a current slot. */
   | 'no-match'
+  /**
+   * The app only: Android threw this phone's fingerprint key away (the
+   * screen lock was removed or changed), so the recovery code is needed.
+   */
+  | 'reset'
   /** Anything else. */
   | 'failed';
 
@@ -49,6 +63,7 @@ const PROMPT_TIMEOUT_MS = 120_000;
  * vercel.app one, a local dev server) gets passkeys of its own.
  */
 export function currentRpId(): string {
+  if (IS_ANDROID_APP) return PHONE_RP;
   const host = location.hostname;
   if (host === 'hexapla.app' || host.endsWith('.hexapla.app')) return 'hexapla.app';
   if (host === 'irisbible.com' || host.endsWith('.irisbible.com')) return 'irisbible.com';
@@ -60,6 +75,7 @@ export function currentRpId(): string {
  * ruled it out — some browsers only tell you by trying.
  */
 export async function fingerprintSupport(): Promise<'yes' | 'no' | 'maybe'> {
+  if (IS_ANDROID_APP) return (await phoneFingerprintStatus()).state === 'ready' ? 'yes' : 'no';
   if (typeof window === 'undefined' || !window.isSecureContext) return 'no';
   if (!('PublicKeyCredential' in window) || !navigator.credentials?.create) return 'no';
   try {
@@ -100,6 +116,20 @@ export function describeThisDevice(): string {
   return browser ? `${device} · ${browser}` : device;
 }
 
+/** The app's phone fingerprint failing, said the way a passkey failing is. */
+function phoneProblem(err: unknown): PasskeyError {
+  if (err instanceof PasskeyError) return err;
+  if (!(err instanceof PhoneFingerprintError)) return new PasskeyError('failed', String((err as Error)?.message ?? err));
+  switch (err.code) {
+    case 'cancelled': return new PasskeyError('cancelled', err.message);
+    case 'reset':
+    case 'missing': return new PasskeyError('reset', err.message);
+    case 'no-match': return new PasskeyError('no-match', err.message);
+    case 'not-enrolled': return new PasskeyError('unsupported', err.message);
+    default: return new PasskeyError('failed', err.message);
+  }
+}
+
 function asProblem(err: unknown, fallback: PasskeyProblem = 'failed'): PasskeyError {
   if (err instanceof PasskeyError) return err;
   const name = (err as { name?: string })?.name;
@@ -117,6 +147,11 @@ function asProblem(err: unknown, fallback: PasskeyProblem = 'failed'): PasskeyEr
  * on this device.
  */
 export function forgetPasskey(rpId: string, credentialId: string): void {
+  if (IS_ANDROID_APP) {
+    // The app deletes the phone's key, which no website can do for a passkey.
+    if (rpId === PHONE_RP) forgetPhoneKey(credentialId);
+    return;
+  }
   try {
     const signal = (PublicKeyCredential as any)?.signalUnknownCredential;
     if (typeof signal === 'function') {
@@ -136,6 +171,10 @@ let openPrompt: AbortController | null = null;
 
 /** Close a fingerprint request that's still open. */
 export function cancelPasskeyPrompt(): void {
+  if (IS_ANDROID_APP) {
+    cancelPhonePrompt();
+    return;
+  }
   openPrompt?.abort();
   openPrompt = null;
 }
@@ -195,6 +234,16 @@ export async function createPasskeySlot(
   existingCredentialIds: string[],
   sharedSalt?: Uint8Array<ArrayBuffer>,
 ): Promise<DBJournalKeySlot> {
+  if (IS_ANDROID_APP) {
+    // One fingerprint per phone. Other phones' slots are in the list too.
+    const { keys } = await phoneFingerprintStatus();
+    if (existingCredentialIds.some((id) => keys.includes(id))) throw new PasskeyError('already-added');
+    try {
+      return await createPhoneSlot(journalKey, keyId, userId, sharedSalt ?? randomBytes(32));
+    } catch (err) {
+      throw phoneProblem(err);
+    }
+  }
   const rpId = currentRpId();
   const salt = sharedSalt ?? randomBytes(32);
 
@@ -281,8 +330,16 @@ export async function createPasskeySlot(
   };
 }
 
-/** Passkey slots a fingerprint on this site could open. */
-export function usablePasskeySlots(slots: DBJournalKeySlot[], keyId: string | null): DBJournalKeySlot[] {
+/**
+ * Passkey slots a fingerprint on this site could open. In the app, the ones
+ * this phone holds a key for: `phoneKeys` from phoneFingerprintStatus().
+ */
+export function usablePasskeySlots(
+  slots: DBJournalKeySlot[],
+  keyId: string | null,
+  phoneKeys: string[] = [],
+): DBJournalKeySlot[] {
+  if (IS_ANDROID_APP) return phoneSlots(slots, keyId, phoneKeys);
   const rpId = currentRpId();
   return slots.filter((s) =>
     s.kind === 'passkey' && !!s.credentialId && s.rpId === rpId && (!keyId || s.keyId === keyId));
@@ -296,6 +353,13 @@ export async function openWithPasskey(
   slots: DBJournalKeySlot[],
   keyId: string | null,
 ): Promise<{ journalKey: Uint8Array<ArrayBuffer>; slot: DBJournalKeySlot }> {
+  if (IS_ANDROID_APP) {
+    try {
+      return await openWithPhone(slots, keyId);
+    } catch (err) {
+      throw phoneProblem(err);
+    }
+  }
   const usable = usablePasskeySlots(slots, keyId);
   if (usable.length === 0) throw new PasskeyError('no-match');
 

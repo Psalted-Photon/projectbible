@@ -9,6 +9,7 @@ import android.content.Intent;
  * open or not.
  *
  *  An alarm going off           shows its notification and sets the next one.
+ *  Stop on a ringing alarm      silences it.
  *  The phone starting up,       sets every alarm again: Android forgets them
  *  the clock or time zone       on a restart, and a time zone change moves
  *  changing, the app updating,  the moment an alarm should ring. A newly
@@ -24,6 +25,8 @@ public class AlarmReceiver extends BroadcastReceiver {
                 intent.getStringExtra(PhoneAlarms.EXTRA_KIND),
                 intent.getLongExtra(PhoneAlarms.EXTRA_AT, 0)
             );
+        } else if (PhoneAlarms.ACTION_STOP.equals(intent.getAction())) {
+            PhoneAlarms.stopRinging(context);
         } else {
             PhoneAlarms.scheduleAll(context);
         }
