@@ -49,7 +49,7 @@ const PACK_CONFIGS = {
     id: 'lexical',
     type: 'lexicon',
     name: 'Lexical Resources Pack',
-    description: "Strong's dictionaries + English wordlist/thesaurus/grammar",
+    description: "Strong's dictionaries + English wordlist/grammar",
     dependencies: []
   },
   'tsk-references.sqlite': {

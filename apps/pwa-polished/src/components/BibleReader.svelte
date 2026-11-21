@@ -6698,7 +6698,7 @@
                 return;
               } else {
                 console.log(`ℹ️ No lexical data found for "${text}"`);
-                console.log('💡 Make sure you have installed the "Lexical Resources Pack" (365 MB) from the Packs menu.');
+                console.log('💡 Make sure you have installed the "Lexical Resources Pack" from the Packs menu.');
                 lexicalModalStore.open({
                   characterData,
                   selectedText: text,

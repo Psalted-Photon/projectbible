@@ -47,7 +47,7 @@ insertMeta.run('type', 'lexicon');
 insertMeta.run('schemaVersion', '1');
 insertMeta.run('minAppVersion', '1.0.0');
 insertMeta.run('name', 'Lexical Resources Pack');
-insertMeta.run('description', "Strong's Greek/Hebrew + English wordlist/thesaurus/grammar");
+insertMeta.run('description', "Strong's Greek/Hebrew + English wordlist/grammar");
 insertMeta.run('createdAt', new Date().toISOString());
 
 // Helper to copy all tables from source
@@ -119,10 +119,9 @@ console.log('\n   Merging English wordlist...');
 copyAllTables('packs/polished/english-wordlist-v1.sqlite', 'english');
 console.log(`      ✅ Complete`);
 
-// 4. English Thesaurus  
-console.log('\n   Merging English thesaurus...');
-copyAllTables('packs/polished/english-thesaurus-v1.sqlite', 'thesaurus');
-console.log(`      ✅ Complete`);
+// 4. No English thesaurus. Its 3.5 million synonym rows and their indexes were
+// about 340 MB of the old 390 MB pack, nothing in the app reads them, and
+// holding them during an install ran phones out of memory (2026-11-21).
 
 // 5. English Grammar
 console.log('\n   Merging English grammar...');
