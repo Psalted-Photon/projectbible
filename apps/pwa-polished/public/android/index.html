@@ -192,7 +192,6 @@
     <p><strong>On an iPhone?</strong> Open <a href="/">irisbible.com</a> in Safari and choose <strong>Add to Home Screen</strong>.</p>
   </section>
 
-  <p class="small" id="hash" hidden></p>
   <p class="small"><a href="/">Back to irisBible</a></p>
 </main>
 
@@ -219,10 +218,6 @@
         if (v.notes) {
           $('notes').textContent = v.notes;
           $('notes-box').hidden = false;
-        }
-        if (v.apk.sha256) {
-          $('hash').textContent = 'SHA-256 of ' + v.apk.url.split('/').pop() + ': ' + v.apk.sha256;
-          $('hash').hidden = false;
         }
         if (!/Android/i.test(navigator.userAgent)) $('desktop').hidden = false;
         $('soon').hidden = true;
