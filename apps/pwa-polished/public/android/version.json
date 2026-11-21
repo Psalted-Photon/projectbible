@@ -1,0 +1,11 @@
+{
+  "versionCode": 467728,
+  "versionName": "2026.11.21",
+  "published": "2026-11-21",
+  "apk": {
+    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.21/irisBible-2026.11.21.apk",
+    "bytes": 987360952,
+    "sha256": "de8f31ae536e99ccbb52a31ef6f832c6b028fcb896d11f9c415180ea215a319a"
+  },
+  "minAndroid": "7.0"
+}
