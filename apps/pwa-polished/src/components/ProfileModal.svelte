@@ -19,6 +19,7 @@
   import YourDataPanel from './YourDataPanel.svelte';
   import BrandSpinner from './BrandSpinner.svelte';
   import PlayTodayButton from './PlayTodayButton.svelte';
+  import PasswordInput from './PasswordInput.svelte';
   import { User, CloudArrowUp } from 'phosphor-svelte';
   import CloseX from './CloseX.svelte';
   import { countOf, scheduleText } from '../lib/countText';
@@ -853,16 +854,14 @@
               <button class="primary-btn" on:click={() => (recoveryDone = false)}>Continue</button>
             {:else}
               <h3>Choose a new password</h3>
-              <input aria-label="New password"
-                class={`auth-input ${recoveryPassword.length > 0 ? (recoveryMatch ? 'match-ok' : 'match-error') : ''}`}
-                type="password"
+              <PasswordInput label="New password"
+                state={recoveryPassword.length > 0 ? (recoveryMatch ? 'ok' : 'error') : ''}
                 placeholder="New password"
                 autocomplete="new-password"
                 bind:value={recoveryPassword}
               />
-              <input aria-label="Confirm new password"
-                class={`auth-input ${recoveryPasswordConfirm.length > 0 ? (recoveryMatch ? 'match-ok' : 'match-error') : ''}`}
-                type="password"
+              <PasswordInput label="Confirm new password"
+                state={recoveryPasswordConfirm.length > 0 ? (recoveryMatch ? 'ok' : 'error') : ''}
                 placeholder="Confirm new password"
                 autocomplete="new-password"
                 bind:value={recoveryPasswordConfirm}
@@ -897,13 +896,11 @@
                 bind:value={authEmail}
                 on:keydown={(e) => e.key === 'Enter' && handleSignIn()}
               />
-              <input aria-label="Password"
-                class="auth-input"
-                type="password"
+              <PasswordInput label="Password"
                 placeholder="Password"
                 autocomplete="current-password"
                 bind:value={authPassword}
-                on:keydown={(e) => e.key === 'Enter' && handleSignIn()}
+                onEnter={handleSignIn}
               />
               <button class="primary-btn" on:click={handleSignIn} disabled={authBusy}>
                 {authBusy ? 'Signing in…' : 'Sign in'}
@@ -916,17 +913,15 @@
               <h3>Create account</h3>
               <input aria-label="Name" class="auth-input" type="text" placeholder="Name" autocomplete="name" bind:value={authName} />
               <input aria-label="Email" class="auth-input" type="email" placeholder="Email" autocomplete="email" bind:value={authEmail} />
-              <input aria-label="Password"
-                class={`auth-input ${authPassword.length > 0 ? (authPassword.length < 6 ? 'match-error' : 'match-ok') : ''}`}
-                type="password"
+              <PasswordInput label="Password"
+                state={authPassword.length > 0 ? (authPassword.length < 6 ? 'error' : 'ok') : ''}
                 placeholder="Password"
                 autocomplete="new-password"
                 bind:value={authPassword}
               />
               <div class={`password-match ${signUpStrengthClass}`}>{signUpStrength}</div>
-              <input aria-label="Confirm password"
-                class={`auth-input ${authPasswordConfirm.length > 0 ? (signUpMatch ? 'match-ok' : 'match-error') : ''}`}
-                type="password"
+              <PasswordInput label="Confirm password"
+                state={authPasswordConfirm.length > 0 ? (signUpMatch ? 'ok' : 'error') : ''}
                 placeholder="Confirm password"
                 autocomplete="new-password"
                 bind:value={authPasswordConfirm}
@@ -1089,22 +1084,21 @@
               </div>
               <div class="setting-group">
                 <p class="setting-label">Change password</p>
-                <input aria-label="Current password"
-                  class="auth-input"
-                  type="password"
+                <PasswordInput label="Current password"
                   placeholder="Current password"
+                  autocomplete="current-password"
                   bind:value={currentPassword}
                 />
-                <input aria-label="New password"
-                  class={`auth-input ${newPassword.length > 0 ? (passwordsMatch ? 'match-ok' : 'match-error') : ''}`}
-                  type="password"
+                <PasswordInput label="New password"
+                  state={newPassword.length > 0 ? (passwordsMatch ? 'ok' : 'error') : ''}
                   placeholder="New password"
+                  autocomplete="new-password"
                   bind:value={newPassword}
                 />
-                <input aria-label="Confirm new password"
-                  class={`auth-input ${newPasswordConfirm.length > 0 ? (passwordsMatch ? 'match-ok' : 'match-error') : ''}`}
-                  type="password"
+                <PasswordInput label="Confirm new password"
+                  state={newPasswordConfirm.length > 0 ? (passwordsMatch ? 'ok' : 'error') : ''}
                   placeholder="Confirm new password"
+                  autocomplete="new-password"
                   bind:value={newPasswordConfirm}
                 />
                 <div class={`password-match ${newPassword.length > 0 || newPasswordConfirm.length > 0 ? (passwordsMatch ? 'ok' : 'error') : ''}`}>
@@ -1357,17 +1351,11 @@
     transition: border-color 0.15s;
   }
 
+  /* Password boxes are PasswordInput.svelte, which keeps its own copy of
+     these looks plus the gold/red match borders. */
   .auth-input:focus {
     outline: none;
     border-color: rgba(230, 184, 74, 0.6);
-  }
-
-  .auth-input.match-ok {
-    border-color: rgba(230, 184, 74, 0.55);
-  }
-
-  .auth-input.match-error {
-    border-color: #e57373;
   }
 
   /* "Check your email" — the tinted block borrowed from the daily card. */
