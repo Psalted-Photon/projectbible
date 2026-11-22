@@ -1,11 +1,12 @@
 {
-  "versionCode": 467728,
-  "versionName": "2026.11.21",
-  "published": "2026-11-21",
+  "versionCode": 468084,
+  "versionName": "2026.11.21.2",
+  "published": "2026-11-22",
+  "notes": "Password boxes have an eye button: tap it to see what you typed, tap again to hide it.",
   "apk": {
-    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.21/irisBible-2026.11.21.apk",
-    "bytes": 987360952,
-    "sha256": "de8f31ae536e99ccbb52a31ef6f832c6b028fcb896d11f9c415180ea215a319a"
+    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.21.2/irisBible-2026.11.21.2.apk",
+    "bytes": 987364076,
+    "sha256": "abca50b5073ab3c3b2c3d824049f4e7d3d402db10765237b6d53dc8a31e97bf2"
   },
   "minAndroid": "7.0"
 }
