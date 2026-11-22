@@ -21,6 +21,7 @@ import { callNative } from './bridge';
 import { SITE_ORIGIN } from '../platform';
 import { showNotice } from '../../stores/noticeStore';
 
+/** www on purpose; see SITE_ORIGIN. */
 export const VERSION_URL = `${SITE_ORIGIN}/android/version.json`;
 
 export interface AppInfo {

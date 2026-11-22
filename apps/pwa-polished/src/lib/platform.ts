@@ -13,8 +13,14 @@
  */
 export const IS_ANDROID_APP: boolean = import.meta.env.MODE === 'android';
 
-/** The live site, where links made inside the app point. */
-export const SITE_ORIGIN = 'https://irisbible.com';
+/**
+ * The live site, where links made inside the app point and where the app
+ * checks for updates. Must be www: the bare irisbible.com answers with a
+ * redirect to www, and that redirect carries no CORS header, so the web view
+ * refuses it and the update check reads it as "couldn't reach irisbible.com"
+ * (installs of 2026.11.21 and 2026.11.21.2 never see an update because of it).
+ */
+export const SITE_ORIGIN = 'https://www.irisbible.com';
 
 /**
  * Where the Android app's own packs and voices are: every one of them comes
