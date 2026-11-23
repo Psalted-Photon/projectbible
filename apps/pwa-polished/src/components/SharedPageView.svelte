@@ -43,6 +43,7 @@
   import { splitPageBlocks } from '../lib/shared/paragraphStamp';
   import AuthorPill from './AuthorPill.svelte';
   import type { SharedNotebookMember } from '../adapters/SharedNotebookStore';
+  import { mountStep } from '../lib/back/backList';
 
   export let html: string = '';
   /** Shown in place of the page when there is nothing in it yet. */
@@ -142,6 +143,10 @@
     hit = null;
     unavailable = false;
   }
+
+  // The phone's Back closes the reference popover, as a tap elsewhere does.
+  const backRef = mountStep(close);
+  $: backRef.set(!!hit);
 
   function goTo() {
     if (!hit) return;

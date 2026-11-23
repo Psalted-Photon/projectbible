@@ -10,6 +10,7 @@
   import { offerFingerprintLock } from '../lib/journalLock/fingerprintOffer';
   import type { JournalEntry } from '@projectbible/core';
   import CloseX from './CloseX.svelte';
+  import { mountStep } from '../lib/back/backList';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -167,6 +168,10 @@
   }
 
   function dismissPopover() { selectedCell = null; }
+
+  // The phone's Back closes the day's card, as a tap outside it does.
+  const backPopover = mountStep(dismissPopover);
+  $: backPopover.set(!!selectedCell);
 
   function handleWindowPointerdown(event: PointerEvent) {
     if (selectedCell && popoverEl && !popoverEl.contains(event.target as Node)) {

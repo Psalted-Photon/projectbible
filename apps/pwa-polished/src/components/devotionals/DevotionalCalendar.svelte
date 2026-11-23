@@ -14,6 +14,7 @@
   import { CaretLeft, CaretRight, CaretDown } from 'phosphor-svelte';
   import { monthName } from '../../lib/devotionals/devotionalsData';
   import { todayMonthDay } from '../../lib/devotionals/slot';
+  import { whileMounted } from '../../lib/back/backList';
 
   /** The date being shown, which the calendar opens on and marks. */
   export let month: number;
@@ -21,6 +22,9 @@
   export let reader = false;
 
   const dispatch = createEventDispatcher<{ pick: { month: number; day: number }; close: void }>();
+
+  // The phone's Back closes the calendar, as a tap on its backdrop does.
+  whileMounted(() => dispatch('close'));
 
   const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];

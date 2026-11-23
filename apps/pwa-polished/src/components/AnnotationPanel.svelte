@@ -15,6 +15,7 @@
   import { navigationStore } from "../stores/navigationStore";
   import { fixedOrigin } from "../lib/fixedOrigin";
   import AuthorPill from "./AuthorPill.svelte";
+  import { mountStep } from "../lib/back/backList";
   import CloseX from "./CloseX.svelte";
   import ReadAloudTextButton from "./ReadAloudTextButton.svelte";
   import { commentaryParagraphs } from "../lib/tts/speechText";
@@ -196,6 +197,13 @@
   function dismissPill() {
     pillPreview = null;
   }
+
+  // The phone's Back closes the verse preview first, then the sheet, as taps
+  // outside them do.
+  const backPanel = mountStep(close);
+  $: backPanel.set(open);
+  const backPill = mountStep(dismissPill);
+  $: backPill.set(open && !!pillPreview);
 
   // Event delegation for commentary-ref spans injected by linkifyCommentaryRefs.
   function handleCommentaryBodyClick(e: MouseEvent | KeyboardEvent) {

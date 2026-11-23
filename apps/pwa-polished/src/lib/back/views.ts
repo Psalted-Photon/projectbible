@@ -35,6 +35,8 @@ import { bubbleView, wordCloudView } from '../../stores/bubbleViewStore';
 import { byHeartGame } from '../byHeart/game';
 import { currentDownload, showProgressModal } from '../pack-triggers';
 import { recorder } from '../recorder/recorder';
+import { voiceCard } from '../voice/holdToTalk';
+import { stoppedRecording, afterStop } from '../voice/transcribe';
 
 let started = false;
 
@@ -94,6 +96,11 @@ export function startBackViews(): void {
     derived(confirms, ($c) => $c[0]?.id ?? null),
     (id) => answerConfirm(id, false),
   );
+
+  // Voice Control's cards: the mic/download card closes, and the card after a
+  // recording stops keeps the recording only, as a tap outside each does.
+  trackOpen(voiceCard, () => voiceCard.set(null));
+  trackOpen(stoppedRecording, () => afterStop('keep'));
 
   // ── × -only views ──
   trackWall(derived(familyTreeStore, ($t) => $t.isOpen));

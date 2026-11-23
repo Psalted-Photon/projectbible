@@ -61,6 +61,7 @@
     Warning,
   } from "phosphor-svelte";
   import type { PackGlyph } from "../../lib/packInstaller";
+  import { mountStep } from "../../lib/back/backList";
 
   console.log("DEV:", import.meta.env.DEV);
   console.log("PROD:", import.meta.env.PROD);
@@ -346,6 +347,10 @@
   function closeInfo() {
     infoCard = null;
   }
+
+  // The phone's Back closes the info card, as a tap on its backdrop does.
+  const backInfo = mountStep(closeInfo);
+  $: backInfo.set(!!infoCard);
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Escape" && infoCard) closeInfo();

@@ -17,6 +17,7 @@
    * the view does the rest, so backing out of here costs nothing.
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { whileMounted } from '../lib/back/backList';
   import {
     HARMONY_PARTS,
     PARALLEL_SETS,
@@ -51,6 +52,9 @@
       translations?: string[];
     };
   }>();
+
+  // The phone's Back closes the picker, as a tap on the backdrop does.
+  whileMounted(() => dispatch('close'));
 
   let tab: 'sets' | 'harmony' | 'translations' = 'sets';
 

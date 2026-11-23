@@ -15,6 +15,7 @@
   import type { SharedNotebook } from '../adapters/SharedNotebookStore';
   import { errorText } from '../stores/noticeStore';
   import CloseX from './CloseX.svelte';
+  import { whileMounted } from '../lib/back/backList';
 
   const dispatch = createEventDispatcher<{ close: void; created: SharedNotebook }>();
 
@@ -62,6 +63,12 @@
     if (busy) return;
     dispatch('close');
   }
+
+  // The phone's Back closes it as a tap outside does; while busy it waits.
+  whileMounted(() => {
+    if (busy) return false;
+    close();
+  });
 
   function handleBackdropClick(e: MouseEvent) {
     if ((e.target as HTMLElement).classList.contains('sn-backdrop')) close();

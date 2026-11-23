@@ -13,6 +13,7 @@
   import { fixedOrigin } from "../lib/fixedOrigin";
   import ReadAloudTextButton from "./ReadAloudTextButton.svelte";
   import { getBookListOneColumn } from "../adapters/settings";
+  import { mountStep } from "../lib/back/backList";
 
   export let windowId: string | undefined = undefined;
   export let style: string = "";
@@ -282,6 +283,13 @@
       referenceDropdownOpen = false;
     }
   }
+
+  // The phone's Back closes whichever menu is open, as a tap elsewhere does.
+  const backDropdowns = mountStep(() => {
+    authorDropdownOpen = false;
+    referenceDropdownOpen = false;
+  });
+  $: backDropdowns.set(authorDropdownOpen || referenceDropdownOpen);
 
   function updateDropdownPositions() {
     if (authorDropdownOpen && authorMenuEl && authorButtonRef) {

@@ -259,6 +259,7 @@
   import BubbleView from "./BubbleView.svelte";
   import MiniWordCloud from "./MiniWordCloud.svelte";
   import { bubbleView, openWordCloud, showOnBubbles } from "../stores/bubbleViewStore";
+  import { mountStep } from "../lib/back/backList";
 
   const STORAGE_ACTIVE_PLANS = 'projectbible_active_reading_plans';
 
@@ -1934,6 +1935,24 @@
     translationHit = null;
     dismissSelection();
   }
+
+  // The phone's Back closes each of these, newest first, with the same call a
+  // tap outside it makes. The selection menu goes as a press on the text does.
+  const backSelection = mountStep(() => {
+    dismissSelection();
+    clearHoverHighlight();
+  });
+  $: backSelection.set(showToast);
+  const backFootnote = mountStep(closeFootnote);
+  $: backFootnote.set(!!footnoteHit);
+  const backOtQuote = mountStep(closeOtQuote);
+  $: backOtQuote.set(!!otQuoteHit);
+  const backTranslation = mountStep(closeTranslationCard);
+  $: backTranslation.set(!!translationHit);
+  const backIntroMenu = mountStep(() => {
+    introMenuKey = null;
+  });
+  $: backIntroMenu.set(introMenuKey !== null);
 
   /** The box the card stays under: the first touched verse's left and width, the last one's bottom. */
   function translationBox(book: string, chapter: number, verses: number[]) {

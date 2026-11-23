@@ -13,6 +13,7 @@
   import LexicalEditor from './LexicalEditor.svelte';
   import BibleRefPopover from '../../components/BibleRefPopover.svelte';
   import RecordingChipMenu from '../../components/RecordingChipMenu.svelte';
+  import { mountStep } from '../back/backList';
   import { navigationStore } from '../../stores/navigationStore';
   import { IndexedDBTextStore } from '../../adapters/TextStore';
   import { cleanVersePreviewText } from '../verseRendering';
@@ -90,6 +91,15 @@
     hit = null;
     unavailable = false;
   }
+
+  // The phone's Back closes the reference popover and the pill's menu, as a
+  // tap elsewhere does.
+  const backRef = mountStep(close);
+  $: backRef.set(!!hit);
+  const backChip = mountStep(() => {
+    chip = null;
+  });
+  $: backChip.set(!!chip);
 
   function goTo() {
     if (!hit) return;

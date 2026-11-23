@@ -6,6 +6,7 @@
   import { translationLabel } from '../lib/bibleData';
   import ShareCardPanel from './ShareCardPanel.svelte';
   import CloseX from './CloseX.svelte';
+  import { whileMounted } from '../lib/back/backList';
 
   export let reference: ShareRef;
   /** The verse, or the phrase that was selected out of it. */
@@ -74,6 +75,9 @@
   function handleClose() {
     dispatch('close');
   }
+
+  // The phone's Back closes it, as a tap on the backdrop does.
+  whileMounted(handleClose);
 
   function handleBackdropClick(e: MouseEvent) {
     if ((e.target as HTMLElement).classList.contains('sh-modal-backdrop')) handleClose();

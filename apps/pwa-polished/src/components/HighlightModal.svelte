@@ -6,6 +6,7 @@
   import { HIGHLIGHT_PALETTE, categoryMeaning, lineStyleMeaning } from '../lib/highlightCategories';
   import { getHighlightNames, getSettings, updateSettings } from '../adapters/settings';
   import CloseX from './CloseX.svelte';
+  import { whileMounted } from '../lib/back/backList';
 
   export let reference: BCV;
   export let existingHighlight: UserHighlight | UserWordHighlight | null = null;
@@ -97,6 +98,9 @@
   function handleClose() {
     dispatch('close');
   }
+
+  // The phone's Back closes it, as a tap on the backdrop does.
+  whileMounted(handleClose);
 
   // ── Keyboard / backdrop ────────────────────────────────────────────────────
 

@@ -45,6 +45,7 @@
   import { openDevotional } from "../stores/devotionalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
   import { goToCrumb as goToCrumbIn } from "../lib/back/crumbs";
+  import { mountStep } from "../lib/back/backList";
   import { get } from "svelte/store";
   import { barScale } from "../lib/barSize";
   import {
@@ -448,6 +449,12 @@
     updateInterlinearSettings({ enabled });
     window.dispatchEvent(new CustomEvent("settingsUpdated"));
   }
+
+  // The phone's Back closes the layers menu, as a tap on its backdrop does.
+  const backInterlinear = mountStep(() => {
+    interlinearMenuOpen = false;
+  });
+  $: backInterlinear.set(interlinearMenuOpen && isOriginalLanguage(currentTranslation));
 
   async function toggleInterlinearMenu(event: MouseEvent) {
     event.stopPropagation();
@@ -930,19 +937,37 @@
       !target.closest(".repeat-dropdown") &&
       !target.closest(".repeat-verses-panel")
     ) {
-      translationDropdownOpen = false;
-      referenceDropdownOpen = false;
-      commDropdownOpen = false;
-      translationDropdownPositioned = false;
-      referenceDropdownPositioned = false;
-      commDropdownPositioned = false;
-      refsPackOpen = false;
-      refsPackPositioned = false;
-      closeRepeatDropdown();
-      repeatVerses = null;
-      showResults = false;
+      closeBarDropdowns();
     }
   }
+
+  /** Everything a tap elsewhere on the page closes, bar the crumb menu. */
+  function closeBarDropdowns() {
+    translationDropdownOpen = false;
+    referenceDropdownOpen = false;
+    commDropdownOpen = false;
+    translationDropdownPositioned = false;
+    referenceDropdownPositioned = false;
+    commDropdownPositioned = false;
+    refsPackOpen = false;
+    refsPackPositioned = false;
+    closeRepeatDropdown();
+    repeatVerses = null;
+    showResults = false;
+  }
+
+  // The phone's Back closes all of those at once, crumb menu included, as one
+  // tap elsewhere does.
+  const backDropdowns = mountStep(() => {
+    closeCrumbMenu();
+    closeBarDropdowns();
+  });
+  $: backDropdowns.set(
+    translationDropdownOpen || referenceDropdownOpen || commDropdownOpen || refsPackOpen ||
+    repeatDropdownWord !== null || repeatVerses !== null || crumbMenu !== null ||
+    // The results as they show: open, with something to list.
+    (showResults && !!(queryRef || closeRef || searchRan || suggestions.length)),
+  );
 
   // ── Repeat pills ───────────────────────────────────────────────────────────
 

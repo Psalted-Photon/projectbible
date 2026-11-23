@@ -259,6 +259,18 @@ export function whileMounted(close?: () => boolean | void): void {
 }
 
 /**
+ * For a component that shows a tap-away popup only some of the time: a step
+ * to `set` as it opens and closes, gone when the component unmounts. Back
+ * calls `close`, the same function the popup's outside tap calls.
+ * Call while the component starts up.
+ */
+export function mountStep(close: () => boolean | void): BackHandle {
+  const step = backStep(close);
+  onDestroy(() => step.dispose());
+  return step;
+}
+
+/**
  * For a component that shows a × -only view only some of the time: a wall to
  * `set` as it opens and closes, taken down when the component unmounts.
  * Call while the component starts up.

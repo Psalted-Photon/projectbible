@@ -35,6 +35,7 @@
   } from 'phosphor-svelte';
   import { reveal } from '../lib/motion';
   import CloseX from './CloseX.svelte';
+  import { mountStep } from '../lib/back/backList';
 
   export let show = false;
   /** Text typed in the bar's search box before this was opened. It goes into
@@ -107,6 +108,11 @@
   function closeModal() {
     show = false;
   }
+
+  // The phone's Back closes it, as a tap on the backdrop does. Its help card
+  // reports on its own, so Back closes that first.
+  const backStepModal = mountStep(closeModal);
+  $: backStepModal.set(show);
 
   function handleBackdropClick(event: MouseEvent) {
     if (event.target === event.currentTarget) {

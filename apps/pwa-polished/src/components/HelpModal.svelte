@@ -1,5 +1,6 @@
 <script lang="ts">
   import CloseX from "./CloseX.svelte";
+  import { mountStep } from "../lib/back/backList";
   import { Question } from "phosphor-svelte";
   export let show = false;
   export let helpTopic: string = "general";
@@ -70,6 +71,10 @@
   function closeModal() {
     show = false;
   }
+
+  // The phone's Back closes it, as a tap on the backdrop does.
+  const backStepHelp = mountStep(closeModal);
+  $: backStepHelp.set(show && !!content);
 
   function handleBackdropClick(event: MouseEvent) {
     if (event.target === event.currentTarget) {

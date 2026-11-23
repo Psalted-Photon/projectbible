@@ -16,6 +16,7 @@
   import PanelIcon from './icons/PanelIcon.svelte';
   import { WINDOW_TYPES_BY_GROUP, type WindowChoice } from '../lib/windowTypes';
   import { fadeAway, growFrom } from '../lib/motion';
+  import { whileMounted } from '../lib/back/backList';
 
   /** The button it hangs from. */
   export let anchor: HTMLElement;
@@ -24,6 +25,9 @@
   export let current: string | null = null;
 
   const dispatch = createEventDispatcher<{ pick: WindowChoice; close: void }>();
+
+  // The phone's Back closes the menu, as a tap on the backdrop does.
+  whileMounted(() => dispatch('close'));
 
   let menuEl: HTMLElement;
   let top = 0;

@@ -25,6 +25,7 @@
   import { cancelPasskeyPrompt, fingerprintSupport, PasskeyError } from '../lib/journalLock/passkey';
   import { generateRecoveryCode, lastGroupOf } from '../lib/journalLock/recoveryCode';
   import { IS_ANDROID_APP } from '../lib/platform';
+  import { whileMounted } from '../lib/back/backList';
 
   export let kind: 'turn-on' | 'new-code' | 'turn-off' = 'turn-on';
   /** Turning on from the app's offer: straight to the fingerprint. */
@@ -108,6 +109,13 @@
   function onBackdrop() {
     if (backdropCloses) close();
   }
+
+  // The phone's Back closes it when a tap outside would. Mid-setup it does
+  // nothing at all, rather than reaching whatever is behind the dialog.
+  whileMounted(() => {
+    if (!backdropCloses || !canClose) return false;
+    close();
+  });
 
   function problemText(err: unknown): string {
     if (err instanceof JournalLockError) return err.message;

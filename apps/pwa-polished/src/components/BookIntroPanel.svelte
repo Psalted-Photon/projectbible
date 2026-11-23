@@ -13,6 +13,7 @@
   import CloseX from "./CloseX.svelte";
   import MiniWordCloud from "./MiniWordCloud.svelte";
   import { Info } from "phosphor-svelte";
+  import { mountStep } from "../lib/back/backList";
 
   export let open = false;
   export let book = "";
@@ -82,6 +83,13 @@
   }
 
   function handleBackdropClick() { close(); }
+
+  // The phone's Back closes the verse preview first, then the panel, as taps
+  // outside them do.
+  const backPanel = mountStep(close);
+  $: backPanel.set(open);
+  const backPill = mountStep(dismissPill);
+  $: backPill.set(open && !!pillPreview);
 
   async function handleRefClick(ref: string) {
     const target = parseRefString(ref, book, 1);

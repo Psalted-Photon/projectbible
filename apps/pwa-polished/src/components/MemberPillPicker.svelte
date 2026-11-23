@@ -26,6 +26,7 @@
   import { MEMBER_COLORS, defaultInitials } from '../lib/shared/memberIdentity';
   import { errorText } from '../stores/noticeStore';
   import CloseX from './CloseX.svelte';
+  import { whileMounted } from '../lib/back/backList';
 
   export let notebook: SharedNotebook;
   /** Your own member row in it. */
@@ -78,6 +79,12 @@
     if (busy) return;
     dispatch('close');
   }
+
+  // The phone's Back closes it as a tap outside does; while busy it waits.
+  whileMounted(() => {
+    if (busy) return false;
+    close();
+  });
 
   function handleBackdropClick(e: MouseEvent) {
     if ((e.target as HTMLElement).classList.contains('mp-backdrop')) close();

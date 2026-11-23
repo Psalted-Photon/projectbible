@@ -25,7 +25,7 @@
    * cream, the reader's pick (canvasPalette).
    */
   import { onMount, onDestroy, tick } from 'svelte';
-  import { mountWall } from '../lib/back/backList';
+  import { mountStep, mountWall } from '../lib/back/backList';
   import { get } from 'svelte/store';
   import { windowStore } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
@@ -1928,6 +1928,16 @@
   // does nothing over them; in the window it's just a window.
   const backWall = mountWall();
   $: backWall.set(fullscreen || askingTurn);
+
+  // Tap-away things inside it, which the phone's Back closes the same way:
+  // the picture card (a tap on its scrim), and a link's card (a tap out among
+  // the arcs). A book or chapter's card stays until ×, so Back leaves it.
+  const backImage = mountStep(closeImage);
+  $: backImage.set(imageOpen);
+  const backLinkCard = mountStep(() => {
+    card = null;
+  });
+  $: backLinkCard.set(card?.kind === 'link' && !(selected !== null && panelOpen));
 
   /** Turned sideways, the card gives way to full screen; turned upright, full screen ends. */
   function onTurn() {

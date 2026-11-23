@@ -33,6 +33,7 @@
   import { formatJoinCode } from '../lib/shared/joinCode';
   import { errorText } from '../stores/noticeStore';
   import CloseX from './CloseX.svelte';
+  import { whileMounted } from '../lib/back/backList';
 
   export let notebook: SharedNotebook;
   /** The roster, in the order people joined. */
@@ -178,6 +179,12 @@
     if (busy) return;
     dispatch('close');
   }
+
+  // The phone's Back closes it as a tap outside does; while busy it waits.
+  whileMounted(() => {
+    if (busy) return false;
+    close();
+  });
 
   function handleBackdropClick(e: MouseEvent) {
     if ((e.target as HTMLElement).classList.contains('sa-backdrop')) close();
