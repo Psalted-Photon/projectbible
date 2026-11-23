@@ -182,6 +182,14 @@
    */
   export let onStoryJump: ((book: string, chapter: number, verse: number) => void) | null = null;
 
+  /**
+   * Where the bar's dark shape really ends under the pills, read back by the
+   * reader. The bar's own box runs about 15px further down than the shape, so
+   * anything hung from the box (Story Mode's title) sat below a strip of text.
+   * 0 until the shape is first measured.
+   */
+  export let floor = 0;
+
   /* The reference dropdown is two side-by-side columns, OT then NT. Splitting the
      list here (rather than flowing one list into CSS columns) keeps each column
      reading straight top-to-bottom, so a book is where you expect it. */
@@ -2434,6 +2442,7 @@
 
     const { spans, hFull, bumps } = measureGroups();
     if (!spans.length) return null;
+    floor = hFull;
 
     const n = CONTOUR.samples;
     const r = Math.min(CONTOUR.corner, W / 2);

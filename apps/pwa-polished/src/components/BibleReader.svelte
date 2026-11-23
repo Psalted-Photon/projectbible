@@ -1092,7 +1092,9 @@
   $: bubblesOpen = !windowId && $bubbleView.open;
   // Its tabs and their menus are how you work the Bubbles, so the bar stays down.
   $: if (bubblesOpen) navBarOffset = 0;
-  $: storyTitleTop = Math.max(0, navBarHeight + navBarOffset);
+  /** The bottom of the bar's visible shape; its box runs further down. */
+  let navBarFloor = 0;
+  $: storyTitleTop = Math.max(0, (navBarFloor || navBarHeight) + navBarOffset);
   /** Only while it is up: a book with no stories yet shows no title. */
   $: storyTitleShown = storyTitleOn && !!storyPlace;
 
@@ -7740,6 +7742,7 @@
     {navMode}
     {pickOnly}
     onStoryJump={goToStory}
+    bind:floor={navBarFloor}
     style="transform: translateY({navBarOffset}px); transition: transform 0.25s ease;"
   />
 

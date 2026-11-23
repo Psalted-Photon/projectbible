@@ -108,6 +108,10 @@
     min-width: 0;
     max-width: 100%;
     white-space: nowrap;
+    /* The bar's line-height: 1 is shorter than the letters of a tall reader
+       font, and .name clips at its own box (for the …), which sliced the tops
+       off capitals. Room enough for them; the bar's height is unchanged. */
+    line-height: 1.45;
   }
 
   .part {

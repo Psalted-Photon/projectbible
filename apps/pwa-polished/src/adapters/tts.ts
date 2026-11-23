@@ -169,13 +169,18 @@ type Pending = {
   reject: (err: Error) => void;
   onProgress?: (progress: TtsProgress) => void;
   timer?: ReturnType<typeof setTimeout>;
+  /** A download: never cut short by a stuck voice job's restart. */
+  download?: boolean;
 };
 
 let worker: Worker | null = null;
 let nextId = 1;
 const pending = new Map<number, Pending>();
 
-const SYNTH_TIMEOUT_MS = 120_000; // downloads get no timeout; synthesis does
+// Downloads get no timeout; synthesis does. A line takes a second or two and
+// the first one also loads the voice, well inside this; a stuck one restarts
+// the worker (see call).
+const SYNTH_TIMEOUT_MS = 60_000;
 
 export function isTtsSupported(): boolean {
   return (
@@ -212,15 +217,20 @@ function getWorker(): Worker {
   };
   worker.onerror = (event) => {
     console.error('[TTS] Worker crashed:', event.message);
-    for (const [id, entry] of pending) {
-      if (entry.timer) clearTimeout(entry.timer);
-      entry.reject(new Error(`TTS worker crashed: ${event.message}`));
-      pending.delete(id);
-    }
-    worker?.terminate();
-    worker = null; // next call spins up a fresh worker
+    restartWorker(`TTS worker crashed: ${event.message}`);
   };
   return worker;
+}
+
+/** Throw the worker away, failing everything it still owed; the next call starts a fresh one. */
+function restartWorker(reason: string): void {
+  for (const [id, entry] of pending) {
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.reject(new Error(reason));
+    pending.delete(id);
+  }
+  worker?.terminate();
+  worker = null;
 }
 
 function call<T>(
@@ -230,11 +240,19 @@ function call<T>(
 ): Promise<T> {
   const id = nextId++;
   return new Promise<T>((resolve, reject) => {
-    const entry: Pending = { resolve, reject, onProgress: opts?.onProgress };
+    const entry: Pending = { resolve, reject, onProgress: opts?.onProgress, download: action === 'download' };
     if (opts?.timeoutMs) {
       entry.timer = setTimeout(() => {
         pending.delete(id);
-        reject(new Error(`TTS ${action} timed out after ${opts.timeoutMs}ms`));
+        const why = `TTS ${action} timed out after ${opts.timeoutMs}ms`;
+        reject(new Error(why));
+        // The worker does one voice job at a time, so a job that never comes
+        // back (the graphics chip lost while the phone slept, say) would hold
+        // up every line after it. Start over with a fresh worker, unless a
+        // download is running in this one.
+        if ([...pending.values()].some((p) => p.download)) return;
+        console.warn(`[TTS] ${why}; restarting the voice worker`);
+        restartWorker(why);
       }, opts.timeoutMs);
     }
     pending.set(id, entry);

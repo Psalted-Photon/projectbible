@@ -2,21 +2,23 @@
  * Keeps the next alarm's opening saved, so Start reading speaks at once
  * (makeOpening in lib/tts/readingEngine.ts).
  *
- * Made when the alarm is saved, and again whenever you leave the app if what
- * the next ring would read has changed: a new chapter for "where you left
- * off", another translation, voice or reading setting. Nothing is made when
- * the saved one still fits, so leaving the app normally costs one quick check.
+ * Made when the alarm is saved, and again while the app is open and settled
+ * if what the next ring would read has changed: a new chapter for "where you
+ * left off" (once you stop on it), another translation, or Read Aloud ending.
+ * Nothing is made when the saved one still fits, so a check costs little.
  *
- * The voice can't run while the app is closed, so this happens only while
- * irisBible is open. If the phone stops it partway, the alarm screen makes one
- * live instead.
+ * Never on leaving the app: the phone freezes a page that has just gone to
+ * the background, and freezing the voice partway through a line left it stuck
+ * when the alarm opened the app, so Start reading never spoke. Leaving the app
+ * now stops one being made, after the line in hand.
  */
 
 import { get } from 'svelte/store';
 import { navigationStore } from '../../stores/navigationStore';
+import { wakeAlarmStartOpen } from '../../stores/wakeAlarmStore';
 import { getWakeAlarmSettings, getEffectiveTimezone } from '../../adapters/settings';
 import { isTtsSupported } from '../../adapters/tts';
-import { makeOpening } from '../tts/readingEngine';
+import { makeOpening, cancelOpening, isReadingActive } from '../tts/readingEngine';
 import { minutesUntilAlarm } from './alarmSchedule';
 import { resolveAlarmPassage } from './resolvePassage';
 
@@ -35,15 +37,50 @@ export async function refreshAlarmOpening(): Promise<void> {
   }
 }
 
-/** Refresh on leaving the app (screen off, switching away, closing). Returns the cleanup. */
+/** How long the app has to sit still (same chapter, no Read Aloud) before a check. */
+const SETTLE_MS = 20_000;
+
+/** Refresh while the app is open and settled; stop on leaving it. Returns the cleanup. */
 export function watchAlarmOpening(): () => void {
-  const onHidden = () => {
-    if (document.visibilityState === 'hidden') void refreshAlarmOpening();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const later = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      // The alarm screen makes its own when it needs one.
+      if (document.visibilityState !== 'visible' || get(isReadingActive) || get(wakeAlarmStartOpen)) return;
+      void refreshAlarmOpening();
+    }, SETTLE_MS);
   };
-  document.addEventListener('visibilitychange', onHidden);
-  window.addEventListener('pagehide', onHidden);
+
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      cancelOpening();
+    } else {
+      later();
+    }
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('pagehide', onVisibility);
+
+  let place = '';
+  const stopNav = navigationStore.subscribe((nav) => {
+    const next = `${nav.translation}|${nav.book}|${nav.chapter}`;
+    if (next === place) return;
+    place = next;
+    later();
+  });
+  const stopReading = isReadingActive.subscribe((active) => {
+    if (!active) later();
+  });
+
   return () => {
-    document.removeEventListener('visibilitychange', onHidden);
-    window.removeEventListener('pagehide', onHidden);
+    if (timer) clearTimeout(timer);
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('pagehide', onVisibility);
+    stopNav();
+    stopReading();
   };
 }

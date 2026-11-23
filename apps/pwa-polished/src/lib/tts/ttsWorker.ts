@@ -52,6 +52,20 @@ interface TtsRequest {
   };
 }
 
+/**
+ * One voice job at a time. Messages are handled as they arrive, so two
+ * requests (the alarm screen loading the voice while it makes the saved
+ * opening, a word tap during Read Aloud) used to run the model side by side.
+ * The graphics chip's runtime does not take two runs on one model at once:
+ * one of them never came back, and every line after it waited behind it.
+ */
+let voiceTurn: Promise<unknown> = Promise.resolve();
+function inTurn<T>(job: () => Promise<T>): Promise<T> {
+  const run = voiceTurn.then(job, job);
+  voiceTurn = run.catch(() => {});
+  return run;
+}
+
 self.onmessage = async (event: MessageEvent<TtsRequest>) => {
   const { id, action, payload } = event.data;
   const engine: TtsEngine = payload?.engine ?? 'piper';
@@ -117,7 +131,7 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
       }
 
       case 'probeGraphicsChip': {
-        self.postMessage({ id, ok: true, result: await kokoro.canRunOnGraphicsChip() });
+        self.postMessage({ id, ok: true, result: await inTurn(() => kokoro.canRunOnGraphicsChip()) });
         break;
       }
 
@@ -131,10 +145,12 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
         // Tapping a word is a Greek feature and stays on Piper. Kokoro has no
         // Greek voice, and the carrier-and-cut trick is tuned to Piper's output.
         if (isKokoro) throw new TtsError('UNKNOWN_VOICE', 'Single words are spoken by Piper only');
-        const clip = await piper.synthesizeWord(payload!.text!, payload!.voiceId!, {
-          espeakVoice: payload!.espeakVoice,
-          substitutions: payload!.substitutions,
-        });
+        const clip = await inTurn(() =>
+          piper.synthesizeWord(payload!.text!, payload!.voiceId!, {
+            espeakVoice: payload!.espeakVoice,
+            substitutions: payload!.substitutions,
+          })
+        );
         (self as unknown as Worker).postMessage({ id, ok: true, result: clip }, [clip]);
         break;
       }
@@ -142,18 +158,22 @@ self.onmessage = async (event: MessageEvent<TtsRequest>) => {
       case 'synthesizeSounds': {
         // Hebrew: espeak cannot read it, so the main thread sends the sounds.
         if (isKokoro) throw new TtsError('UNKNOWN_VOICE', 'Single words are spoken by Piper only');
-        const clip = await piper.synthesizeSoundsWord(payload!.sounds!, payload!.voiceId!, payload!.pace);
+        const clip = await inTurn(() =>
+          piper.synthesizeSoundsWord(payload!.sounds!, payload!.voiceId!, payload!.pace)
+        );
         (self as unknown as Worker).postMessage({ id, ok: true, result: clip }, [clip]);
         break;
       }
 
       case 'synthesize': {
-        const wav = isKokoro
-          ? await kokoro.synthesize(payload!.text!, payload!.voiceId!, payload!.phonemeVoice!)
-          : await piper.synthesize(payload!.text!, payload!.voiceId!, {
-              espeakVoice: payload!.espeakVoice,
-              substitutions: payload!.substitutions,
-            });
+        const wav = await inTurn(() =>
+          isKokoro
+            ? kokoro.synthesize(payload!.text!, payload!.voiceId!, payload!.phonemeVoice!)
+            : piper.synthesize(payload!.text!, payload!.voiceId!, {
+                espeakVoice: payload!.espeakVoice,
+                substitutions: payload!.substitutions,
+              })
+        );
         (self as unknown as Worker).postMessage({ id, ok: true, result: wav }, [wav]);
         break;
       }

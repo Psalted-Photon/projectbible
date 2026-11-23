@@ -1345,8 +1345,8 @@ function openingFits(
   return saved.lines.every((line, i) => line === lineKey(utterances[i]));
 }
 
-/** Stop making an opening: Read Aloud is about to want the voice. */
-function cancelOpening(): void {
+/** Stop making an opening (after the line in hand): Read Aloud wants the voice, or the app is being left. */
+export function cancelOpening(): void {
   openingGen++;
   openingInFlight = null;
 }

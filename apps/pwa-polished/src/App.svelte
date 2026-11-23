@@ -261,7 +261,7 @@
 
     // Re-enforce orientation lock on visibility resume (handles tablet app-switching)
     document.addEventListener("visibilitychange", handleVisibilityResume);
-    // Keep the next alarm's opening saved, refreshed on leaving the app.
+    // Keep the next alarm's opening saved, refreshed while the app is open and idle.
     const stopAlarmOpening = watchAlarmOpening();
     
     // Apply orientation lock based on saved setting
