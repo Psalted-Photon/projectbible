@@ -11,6 +11,7 @@ import { getDevotionalSettings, getEffectiveTimezone, type DevotionalSettings } 
 import { remindersInEffect as effective } from './slot';
 import { IS_ANDROID_APP } from '../platform';
 import { askPhoneNotifications, syncPhoneSchedule, type PhoneAlarmStatus } from '../android/alarms';
+import { onPhoneAppFor } from '../alarm/alarmSync';
 
 export type ReminderPushResult =
   | { ok: true }
@@ -30,7 +31,11 @@ export function remindersOn(settings: DevotionalSettings = getDevotionalSettings
   return e.morning_enabled || e.evening_enabled;
 }
 
-export async function pushReminders(settings: DevotionalSettings = getDevotionalSettings()): Promise<ReminderPushResult> {
+/** `fromScreen` is true only for a save someone made on the reminders screen (see onPhoneAppFor). */
+export async function pushReminders(
+  settings: DevotionalSettings = getDevotionalSettings(),
+  fromScreen = false,
+): Promise<ReminderPushResult> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return { ok: false, reason: 'offline', message: 'No internet — saved on this device, but the reminder is not set up yet.' };
   }
@@ -45,7 +50,7 @@ export async function pushReminders(settings: DevotionalSettings = getDevotional
   }
   const timezone = getEffectiveTimezone();
   try {
-    await upsertDevotionalReminders({ user_id: userId, timezone, ...effective(settings) });
+    await upsertDevotionalReminders({ user_id: userId, timezone, ...effective(settings), ...onPhoneAppFor(fromScreen) });
     try { localStorage.setItem(TZ_KEY, timezone); } catch { /* next start tries again */ }
     return { ok: true };
   } catch (err: any) {
@@ -68,7 +73,7 @@ export async function saveReminders(
     const push = await ensurePushSubscription();
     if (!push.ok && push.reason !== 'signed-out') warning = push.message.replace('the alarm cannot ring', 'the reminder cannot arrive');
   }
-  return { result: await pushReminders(settings), warning };
+  return { result: await pushReminders(settings, true), warning };
 }
 
 /**
@@ -87,7 +92,7 @@ async function savePhoneReminders(
     console.warn('[Devotionals] notification question failed:', err);
   }
   phone = (await syncPhoneSchedule(true)) ?? phone;
-  void pushReminders(settings);
+  void pushReminders(settings, true);
   if (!phone) {
     return { result: { ok: false, reason: 'error', message: 'Could not set the reminder on this phone.' } };
   }

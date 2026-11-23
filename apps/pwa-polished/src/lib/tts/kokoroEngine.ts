@@ -220,8 +220,26 @@ export async function canRunOnGraphicsChip(): Promise<boolean | null> {
   return graphicsChipWorks;
 }
 
-async function getSession(): Promise<ort.InferenceSession> {
-  if (session) return session;
+/**
+ * A load already under way. The 310 MB model takes seconds to open, and two
+ * requests arriving inside that window (the alarm screen warming the voice
+ * while it makes the saved opening, say) used to start two loads side by side,
+ * twice the memory on a phone that may not have it. The second now waits on
+ * the first.
+ */
+let sessionLoading: Promise<ort.InferenceSession> | null = null;
+
+function getSession(): Promise<ort.InferenceSession> {
+  if (session) return Promise.resolve(session);
+  if (!sessionLoading) {
+    sessionLoading = openSession().finally(() => {
+      sessionLoading = null;
+    });
+  }
+  return sessionLoading;
+}
+
+async function openSession(): Promise<ort.InferenceSession> {
   configureOrt();
   if (refuseGraphicsChip) {
     const file = await store.read(KOKORO_MODEL_FILE);

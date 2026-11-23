@@ -249,7 +249,10 @@ async function runScheduledSweep(admin: SupabaseClient, now: Date) {
   const { data, error } = await admin
     .from('wake_alarms')
     .select('user_id, enabled, time_local, days, timezone, source, book, chapter, last_fired_on')
-    .eq('enabled', true);
+    .eq('enabled', true)
+    // Set in the Android app, which rings it on the phone itself. A browser
+    // notification on top would cut that ringing off (migration 020).
+    .eq('on_phone_app', false);
 
   if (error) throw error;
 

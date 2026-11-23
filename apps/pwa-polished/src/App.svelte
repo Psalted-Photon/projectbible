@@ -37,6 +37,7 @@
   import JournalLockDialog from "./components/JournalLockDialog.svelte";
   import { quickLockSetup } from "./lib/journalLock/fingerprintOffer";
   import { wakeAlarmStartOpen } from "./stores/wakeAlarmStore";
+  import { watchAlarmOpening } from "./lib/alarm/alarmOpening";
   import ProfileModal from "./components/ProfileModal.svelte";
   import WindowContainer from "./components/WindowContainer.svelte";
   import PaneContainer from "./components/PaneContainer.svelte";
@@ -260,6 +261,8 @@
 
     // Re-enforce orientation lock on visibility resume (handles tablet app-switching)
     document.addEventListener("visibilitychange", handleVisibilityResume);
+    // Keep the next alarm's opening saved, refreshed on leaving the app.
+    const stopAlarmOpening = watchAlarmOpening();
     
     // Apply orientation lock based on saved setting
     void applyOrientationLock();
@@ -414,6 +417,7 @@
     }
 
     return () => {
+      stopAlarmOpening();
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("pagehide", saveSession);
       document.removeEventListener('visibilitychange', handleVisibilityUpdateCheck);

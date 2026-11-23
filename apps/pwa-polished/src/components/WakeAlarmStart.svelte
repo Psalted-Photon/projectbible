@@ -7,27 +7,37 @@
    * than pressing one button, and a real tap is also the one thing every
    * browser accepts as permission to play audio.
    *
-   * While this screen sits waiting, the speech engine warms up in the
-   * background so the press starts talking immediately.
+   * The press speaks at once because the first stretch of the reading is
+   * already made: saved ahead of time (lib/alarm/alarmOpening.ts), or made
+   * here while the screen waits when nothing fitting was saved. "Ready" shows
+   * only once that opening really exists. The voice starts loading the moment
+   * the screen opens, so the part after the opening is ready sooner.
    */
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
   import { SpeakerHigh } from "phosphor-svelte";
   import { fade } from "../lib/motion";
   import { navigationStore } from "../stores/navigationStore";
   import { wakeAlarmStartOpen } from "../stores/wakeAlarmStore";
   import { continuousPlay } from "../stores/audioStore";
-  import { startReading } from "../lib/tts/readingEngine";
+  import { startReading, makeOpening, openingReady } from "../lib/tts/readingEngine";
   import { resolveAlarmPassage, type AlarmPassage } from "../lib/alarm/resolvePassage";
   import { synthesizeSpeech, isVoiceInstalled, isTtsSupported } from "../adapters/tts";
   import { getTtsSettings } from "../adapters/settings";
-  import { IndexedDBTextStore } from "../lib/adapters";
-  import { extractSpeechText } from "../lib/verseRendering";
+
+  /**
+   * How much is made live when nothing fitting was saved. Less than the saved
+   * minute, so "Ready" comes sooner; the voice is warm by then, so the engine
+   * keeps ahead of it.
+   */
+  const LIVE_OPENING_SECONDS = 20;
 
   let passage: AlarmPassage | null = null;
   let greeting = "Good morning";
   let warm: "idle" | "warming" | "ready" | "no-voice" = "idle";
   let clock = "";
   let clockTimer: ReturnType<typeof setInterval> | null = null;
+  /** Bumped on every open and close, so an earlier open's slow work can't change this one. */
+  let openCount = 0;
 
   function timeGreeting(hour: number): string {
     if (hour < 5) return "Still up";
@@ -42,49 +52,59 @@
     greeting = timeGreeting(now.getHours());
   }
 
-  onMount(() => {
+  // Only when the screen opens. It is mounted on every launch, and warming up
+  // in onMount loaded the 310 MB voice on every launch, alarm or not.
+  $: if ($wakeAlarmStartOpen) opened();
+  else closed();
+
+  function opened() {
+    const id = ++openCount;
     passage = resolveAlarmPassage();
     updateClock();
-    clockTimer = setInterval(updateClock, 20_000);
-    void warmUpVoice();
-  });
-
-  onDestroy(() => {
     if (clockTimer) clearInterval(clockTimer);
-  });
+    clockTimer = setInterval(updateClock, 20_000);
+    warm = "idle";
+    void prepare(id);
+  }
 
-  /**
-   * Load the voice model and synthesize the first verse, then throw the audio
-   * away. The point is the side effect: the model stays cached in the worker,
-   * so the player's own first verse comes back fast instead of after a wait.
-   */
-  async function warmUpVoice() {
+  function closed() {
+    openCount++;
+    if (clockTimer) {
+      clearInterval(clockTimer);
+      clockTimer = null;
+    }
+  }
+
+  onDestroy(closed);
+
+  /** Have an opening ready for the press: the saved one, or one made now. */
+  async function prepare(id: number) {
     if (!passage || !isTtsSupported()) return;
-    const settings = getTtsSettings();
+    const { book, chapter } = passage;
+    const translation = $navigationStore.translation;
+    const voiceId = getTtsSettings().voiceId;
+    const current = () => id === openCount;
 
     try {
-      if (!(await isVoiceInstalled(settings.voiceId))) {
-        warm = "no-voice";
+      if (!(await isVoiceInstalled(voiceId))) {
+        if (current()) warm = "no-voice";
         return;
       }
+      // Load the voice now, so what comes after the opening is made sooner.
+      // The audio is thrown away; loading the model is the point.
+      void synthesizeSpeech("Good morning.", voiceId).catch(() => {});
+
+      if (await openingReady(translation, book, chapter)) {
+        if (current()) warm = "ready";
+        return;
+      }
+      if (!current()) return;
       warm = "warming";
-
-      const rows = await new IndexedDBTextStore().getChapter(
-        $navigationStore.translation,
-        passage.book,
-        passage.chapter
-      );
-      const first = rows.map((r) => extractSpeechText(r.text)).find((t) => t.length > 0);
-      if (!first) {
-        warm = "ready"; // nothing to warm on, but not an error worth showing
-        return;
-      }
-
-      await synthesizeSpeech(first, settings.voiceId);
-      warm = "ready";
+      const made = await makeOpening(translation, book, chapter, LIVE_OPENING_SECONDS);
+      if (current()) warm = made ? "ready" : "idle";
     } catch {
-      // A failed warm-up costs a couple of seconds later, nothing more.
-      warm = "ready";
+      // Pressing still works; it just starts the ordinary way.
+      if (current()) warm = "idle";
     }
   }
 
@@ -136,7 +156,7 @@
             for reading instead of speaking.
           </p>
         {:else if warm === "warming"}
-          <p class="warm-note">Warming up the voice…</p>
+          <p class="warm-note">Getting the reading ready…</p>
         {:else if warm === "ready"}
           <p class="warm-note warm-ready">Ready — starts the moment you press.</p>
         {/if}

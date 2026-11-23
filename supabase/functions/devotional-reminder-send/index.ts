@@ -188,7 +188,9 @@ async function runScheduledSweep(admin: SupabaseClient, now: Date) {
   const { data, error } = await admin
     .from('devotional_reminders')
     .select('user_id, morning_enabled, morning_time, evening_enabled, evening_time, timezone, last_morning_on, last_evening_on')
-    .or('morning_enabled.eq.true,evening_enabled.eq.true');
+    .or('morning_enabled.eq.true,evening_enabled.eq.true')
+    // Set in the Android app, which shows them on the phone itself (migration 020).
+    .eq('on_phone_app', false);
 
   if (error) throw error;
 

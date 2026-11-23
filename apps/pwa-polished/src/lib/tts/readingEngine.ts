@@ -55,6 +55,7 @@ import { showNotice } from '../../stores/noticeStore';
 // the engine listens to it. The reverse would be a circular import.
 import { stopAtChapterEnd, sleepStopNonce, cancelSleepTimer } from './sleepTimer';
 import { readWav, silencePcm, joinPcm, pcmSeconds } from './stitchAudio';
+import { readSavedOpening, writeSavedOpening, type SavedOpening } from './savedOpening';
 
 // ── tuning dials ────────────────────────────────────────────────────────────
 
@@ -495,10 +496,12 @@ async function loadChapterUtterances(
   chapter: number,
   announce: AnnounceMode,
   range: VerseRange | null = null,
-  passageIndex = 0
+  passageIndex = 0,
+  /** The session's own unless given: the saved opening is made outside a session. */
+  tr: string = translation
 ): Promise<Utterance[]> {
   const settings = getTtsSettings();
-  const rows = await textStore.getChapter(translation, book, chapter);
+  const rows = await textStore.getChapter(tr, book, chapter);
 
   const out: Utterance[] = [];
 
@@ -530,8 +533,8 @@ async function loadChapterUtterances(
 
   // Original-language chapters read from the per-word morphology rather than the
   // verse prose, so the spoken words line up with the highlighted ones.
-  const greek = isGreekTranslation(translation)
-    ? await loadGreekVerses(book, chapter)
+  const greek = isGreekTranslation(tr)
+    ? await loadGreekVerses(book, chapter, tr)
     : null;
 
   // The same headings the reader shows for this translation. They live in
@@ -539,8 +542,8 @@ async function loadChapterUtterances(
   // this setting used to do nothing. Greek texts have none of their own and
   // borrow the BSB's English ones, which would land between Greek verses, so
   // they are left out there.
-  const headings = settings.readHeadings && !isGreekTranslation(translation)
-    ? await headingsStore.getChapterHeadings(book, chapter, translation)
+  const headings = settings.readHeadings && !isGreekTranslation(tr)
+    ? await headingsStore.getChapterHeadings(book, chapter, tr)
     : null;
 
   let first = true;
@@ -590,7 +593,7 @@ async function loadChapterUtterances(
       // is missing. Deciding this from the morphology instead of the
       // translation is what let Greek text reach an English voice, which
       // reads it out letter by letter.
-      const route = isGreekTranslation(translation) ? greekSpeechRoute() : null;
+      const route = isGreekTranslation(tr) ? greekSpeechRoute() : null;
       out.push({
         kind: 'verse', text: speech, book, chapter, verse: row.verse, gapBefore, passageIndex,
         voiceId: route?.voiceId,
@@ -632,10 +635,11 @@ function spokenHeading(raw: string): string {
 /** Speakable Greek text per verse, or null when this chapter has no word data. */
 async function loadGreekVerses(
   book: string,
-  chapter: number
+  chapter: number,
+  tr: string = translation
 ): Promise<Map<number, string> | null> {
-  if (!canSpeakOriginal(translation)) return null;
-  const rows = await getMorphologyForChapter(translation, book, chapter);
+  if (!canSpeakOriginal(tr)) return null;
+  const rows = await getMorphologyForChapter(tr, book, chapter);
   if (rows.length === 0) return null;
 
   const byVerse = new Map<number, typeof rows>();
@@ -862,10 +866,21 @@ async function renderUtterance(u: Utterance, gen: number): Promise<boolean> {
 }
 
 /**
+ * How much more the head start wants before the first word, and when its wait
+ * runs out. Without it a build during the head start ran to a full segment
+ * (30 seconds of audio, ~20 seconds of waiting) no matter what the 6-second
+ * limit said: the third build was no longer "starving", so nothing cut it short.
+ */
+interface BuildLimit {
+  seconds: number;
+  deadline: number;
+}
+
+/**
  * Build one segment: render utterances and join them, with their pauses as real
  * silence, until the target length is reached.
  */
-async function buildSegment(gen: number): Promise<boolean> {
+async function buildSegment(gen: number, limit?: BuildLimit): Promise<boolean> {
   const pieces: Uint8Array[] = [];
   const marks: Mark[] = [];
   /** Chapters this segment reached into, so their offsets are redone once each. */
@@ -931,6 +946,8 @@ async function buildSegment(gen: number): Promise<boolean> {
     touched.add(u.passageIndex);
 
     if (seconds >= segmentSeconds()) break;
+    // The head start has what it needs, or has waited as long as it may.
+    if (limit && (seconds >= limit.seconds || Date.now() >= limit.deadline)) break;
     // Playing the last thing we have: get this out now rather than making it
     // wait for ninety seconds of audio to finish generating.
     if (starving() && seconds > 0) break;
@@ -1026,8 +1043,8 @@ function kickFiller(): void {
 }
 
 /** Build exactly one segment, waiting for any build already running. */
-function buildOne(gen: number): Promise<boolean> {
-  return serialize(() => (gen === generation ? buildSegment(gen) : Promise.resolve(false)));
+function buildOne(gen: number, limit?: BuildLimit): Promise<boolean> {
+  return serialize(() => (gen === generation ? buildSegment(gen, limit) : Promise.resolve(false)));
 }
 
 /**
@@ -1056,7 +1073,7 @@ async function buildHeadStart(gen: number): Promise<void> {
       if (Date.now() - started >= HEAD_START_MAX_WAIT_MS) break;
       // Build one at a time so the wall-clock cap is checked between them, and a
       // build that yields nothing ends the wait instead of spinning.
-      if (!(await buildOne(gen))) break;
+      if (!(await buildOne(gen, { seconds: HEAD_START_SECONDS - ready, deadline: started + HEAD_START_MAX_WAIT_MS }))) break;
     }
   } finally {
     priming = false;
@@ -1293,6 +1310,174 @@ function finish(): void {
   stopReading();
 }
 
+// ── saved opening ───────────────────────────────────────────────────────────
+// The alarm's Start reading used to begin from nothing: load the voice, bank
+// a head start, then speak. The opening is the first minute or so of a
+// chapter made ahead of time and kept on the device (savedOpening.ts). A start
+// whose first lines are exactly the saved ones plays it at once and builds on
+// from the line after it while it plays.
+
+/**
+ * How much the saved opening holds. Long enough for a cold voice to load and
+ * the next pieces to be made before it runs out.
+ */
+export const OPENING_SECONDS = 60;
+
+let openingGen = 0;
+let openingInFlight: { key: string; promise: Promise<boolean> } | null = null;
+
+/** A line as the voice would say it: words, voice, pronunciation and pause. */
+function lineKey(u: Utterance): string {
+  return JSON.stringify([u.kind, u.text, u.voiceId ?? '', u.espeakVoice ?? '', u.substitutions ?? null, u.gapBefore]);
+}
+
+function openingFits(
+  saved: SavedOpening,
+  tr: string,
+  book: string,
+  chapter: number,
+  voice: string,
+  utterances: Utterance[]
+): boolean {
+  if (saved.translation !== tr || saved.book !== book || saved.chapter !== chapter) return false;
+  if (saved.voiceId !== voice) return false;
+  if (saved.lines.length === 0 || saved.lines.length > utterances.length) return false;
+  return saved.lines.every((line, i) => line === lineKey(utterances[i]));
+}
+
+/** Stop making an opening: Read Aloud is about to want the voice. */
+function cancelOpening(): void {
+  openingGen++;
+  openingInFlight = null;
+}
+
+/** Whether a saved opening fits this chapter as Read Aloud would read it now. */
+export async function openingReady(tr: string, book: string, chapter: number): Promise<boolean> {
+  try {
+    const saved = await readSavedOpening();
+    if (!saved) return false;
+    const utterances = await loadChapterUtterances(book, chapter, 'opening', null, 0, tr);
+    return openingFits(saved, tr, book, chapter, getTtsSettings().voiceId, utterances);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Make and save the opening of a chapter, the same lines, announcement and
+ * voice a real start would use. Does nothing when the saved one already fits,
+ * and stands aside while Read Aloud is on. True once a fitting opening is saved.
+ * A second call for the same chapter while one is being made shares it.
+ */
+export function makeOpening(
+  tr: string,
+  book: string,
+  chapter: number,
+  targetSeconds = OPENING_SECONDS
+): Promise<boolean> {
+  const key = JSON.stringify([tr, book, chapter]);
+  if (openingInFlight?.key === key) return openingInFlight.promise;
+  const gen = ++openingGen;
+  const promise: Promise<boolean> = buildOpening(gen, tr, book, chapter, targetSeconds).finally(() => {
+    if (openingInFlight?.promise === promise) openingInFlight = null;
+  });
+  openingInFlight = { key, promise };
+  return promise;
+}
+
+async function buildOpening(
+  gen: number,
+  tr: string,
+  book: string,
+  chapter: number,
+  targetSeconds: number
+): Promise<boolean> {
+  const stale = () => gen !== openingGen || get(isReadingActive);
+  try {
+    if (stale()) return false;
+    const voice = getTtsSettings().voiceId;
+    if (!(await isVoiceInstalled(voice))) return false;
+    const utterances = await loadChapterUtterances(book, chapter, 'opening', null, 0, tr);
+    if (utterances.length === 0 || stale()) return false;
+
+    const saved = await readSavedOpening();
+    if (
+      saved &&
+      openingFits(saved, tr, book, chapter, voice, utterances) &&
+      (saved.seconds >= targetSeconds || saved.lines.length === utterances.length)
+    ) {
+      return true;
+    }
+
+    const needed = utterances.find((u) => u.voiceId && u.voiceId !== voice)?.voiceId;
+    if (needed && !(await isVoiceInstalled(needed))) return false;
+
+    const pieces: Uint8Array[] = [];
+    const marks: SavedOpening['marks'] = [];
+    const lines: string[] = [];
+    let seconds = 0;
+    let rate = 0;
+    for (const u of utterances) {
+      if (stale()) return false;
+      const blob = await synthesizeSpeech(u.text, u.voiceId ?? voice, {
+        espeakVoice: u.espeakVoice,
+        substitutions: u.substitutions,
+      });
+      if (stale()) return false;
+      const wav = readWav(await blob.arrayBuffer());
+      // One WAV has one rate; the engine starts a new segment at a change too.
+      if (rate && wav.sampleRate !== rate) break;
+      rate = wav.sampleRate;
+      if (u.gapBefore > 0) {
+        pieces.push(silencePcm(u.gapBefore, rate));
+        seconds += u.gapBefore;
+      }
+      marks.push({ startSeconds: seconds, seconds: wav.seconds });
+      pieces.push(wav.pcm);
+      seconds += wav.seconds;
+      lines.push(lineKey(u));
+      if (seconds >= targetSeconds) break;
+    }
+    if (marks.length === 0 || stale()) return false;
+
+    await writeSavedOpening({
+      translation: tr,
+      book,
+      chapter,
+      voiceId: voice,
+      lines,
+      wav: joinPcm(pieces, rate),
+      sampleRate: rate,
+      marks,
+      seconds: pcmSeconds(pieces, rate),
+      madeAt: Date.now(),
+    });
+    console.log(`🔊 Saved opening for ${book} ${chapter}: ${lines.length} lines, ${seconds.toFixed(0)} s`);
+    return true;
+  } catch (err) {
+    console.warn('[Opening] could not make the saved opening:', err);
+    return false;
+  }
+}
+
+/**
+ * Hand the saved opening to the engine as its first segment, as if it had just
+ * been built: its lines get their lengths, and building carries on after them.
+ */
+function useOpening(opening: SavedOpening, utterances: Utterance[]): void {
+  const marks: Mark[] = opening.marks.map((m, i) => {
+    const u = utterances[i];
+    u.seconds = m.seconds;
+    u.sampleRate = opening.sampleRate;
+    measuredChars += u.text.length;
+    measuredSeconds += m.seconds;
+    return { utterance: u, startSeconds: m.startSeconds };
+  });
+  sampleRate = opening.sampleRate;
+  segments = [{ blob: opening.wav, seconds: opening.seconds, bytes: opening.wav.size, marks }];
+  renderCursor = marks.length;
+}
+
 // ── public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -1309,6 +1494,7 @@ export async function startReading(
   unlockTtsAudio();
 
   stopReading();
+  cancelOpening();
   const gen = ++generation;
 
   const settings = getTtsSettings();
@@ -1350,6 +1536,12 @@ export async function startReading(
     }
     if (gen !== generation) return;
 
+    // Made ahead of time for the alarm: used only when its lines are exactly
+    // the ones this start would read.
+    const saved = verse === null ? await readSavedOpening() : null;
+    if (gen !== generation) return;
+    const opening = saved && openingFits(saved, translationId, book, chapter, voiceId, utterances) ? saved : null;
+
     queue = utterances;
     renderCursor = verse === null ? 0 : Math.max(0, utterances.findIndex((u) => u.verse === verse));
     segments = [];
@@ -1358,10 +1550,16 @@ export async function startReading(
     tailChapter = chapter;
     tailPassageIndex = 0;
     lastVerseKey = '';
+    if (opening) useOpening(opening, utterances);
     recomputeChapterOffsets(0);
     refreshChapterInfo(0, verse);
 
-    await buildHeadStart(gen);
+    if (opening) {
+      console.log(`🔊 Read Aloud starting from the saved opening (${opening.seconds.toFixed(0)} s)`);
+      kickFiller();
+    } else {
+      await buildHeadStart(gen);
+    }
     if (gen !== generation) return;
 
     await playSegment(gen);
@@ -1387,6 +1585,7 @@ export async function startReadingPlaylist(
   unlockTtsAudio();
 
   stopReading();
+  cancelOpening();
   if (passages.length === 0) return;
   const gen = ++generation;
 
@@ -1471,6 +1670,7 @@ export async function startReadingText(passage: TextPassage): Promise<void> {
   // A timer set for scripture is not this reading's; its controls are hidden
   // while text plays, so it could not be seen or cancelled.
   cancelSleepTimer();
+  cancelOpening();
   const gen = ++generation;
 
   const settings = getTtsSettings();

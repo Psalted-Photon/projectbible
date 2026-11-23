@@ -18,10 +18,15 @@ export interface WakeAlarmRow {
   book: string | null;
   chapter: number | null;
   last_fired_on: string | null;
+  /** Set in the Android app, which rings it itself; the sender skips it (migration 020). */
+  on_phone_app: boolean;
   updated_at: string;
 }
 
-export type WakeAlarmUpsert = Omit<WakeAlarmRow, 'last_fired_on' | 'updated_at'>;
+/** on_phone_app left out keeps whatever the row already says. */
+export type WakeAlarmUpsert = Omit<WakeAlarmRow, 'last_fired_on' | 'on_phone_app' | 'updated_at'> & {
+  on_phone_app?: boolean;
+};
 
 export async function upsertWakeAlarm(row: WakeAlarmUpsert): Promise<WakeAlarmRow> {
   const { data, error } = await supabase

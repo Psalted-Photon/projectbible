@@ -22,6 +22,7 @@ import { pullAlarmIfUnset } from '../alarm/alarmSync';
 import { refreshPushSubscription } from '../alarm/pushSubscription';
 import { remindersOn, resyncReminderTimezone } from '../devotionals/reminderSync';
 import { getWakeAlarmSettings } from '../../adapters/settings';
+import { markOnPhoneApp } from '../supabase/devotionalReminders';
 import { IS_ANDROID_APP } from '../platform';
 import type { SyncState, SyncTable } from './types';
 
@@ -407,6 +408,19 @@ class SyncService {
           // without a service worker (dev) it waits out a 10 s timeout. The
           // app sets them on the phone instead (lib/android/alarms.ts).
           if (!IS_ANDROID_APP && (getWakeAlarmSettings().enabled || remindersOn())) void refreshPushSubscription();
+          // The app rings what's switched on here, including reminders that
+          // synced in from the website, so tell the server's senders to stay
+          // quiet (migration 020). A browser notification on the same phone
+          // would cut the app's ringing off.
+          if (IS_ANDROID_APP) {
+            const alarmOn = getWakeAlarmSettings().enabled;
+            const remindOn = remindersOn();
+            if (alarmOn || remindOn) {
+              markOnPhoneApp(userId, alarmOn, remindOn).catch((err) => {
+                console.warn('[SyncService] Could not mark alarms as rung by the app:', err);
+              });
+            }
+          }
         } else {
           console.debug('[SyncService] Skipping pull — synced recently');
         }

@@ -9,6 +9,7 @@
     type WakeAlarmSettings,
   } from "../../adapters/settings";
   import { pushAlarm, sendTestAlarm } from "../../lib/alarm/alarmSync";
+  import { refreshAlarmOpening } from "../../lib/alarm/alarmOpening";
   import {
     ensurePushSubscription,
     pushSupport,
@@ -230,6 +231,8 @@
       chapter: source === "chapter" ? chapter : undefined,
     };
     updateWakeAlarmSettings(alarm);
+    // Have the first minute of the reading ready, so Start reading speaks at once.
+    void refreshAlarmOpening();
 
     if (IS_ANDROID_APP) {
       await savePhoneAlarm(alarm);
@@ -249,7 +252,7 @@
       if (!push.ok) pushProblem = push.message;
     }
 
-    const result = await pushAlarm(alarm);
+    const result = await pushAlarm(alarm, true);
     saving = false;
 
     if (pushProblem) {
@@ -278,7 +281,7 @@
     phone = (await syncPhoneSchedule(true)) ?? phone;
     // After the phone has it, so the change this sends finds nothing new to set.
     window.dispatchEvent(new CustomEvent("settingsUpdated"));
-    void pushAlarm(alarm);
+    void pushAlarm(alarm, true);
     saving = false;
 
     if (!phone) {

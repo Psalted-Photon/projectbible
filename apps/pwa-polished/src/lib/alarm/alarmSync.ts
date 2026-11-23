@@ -30,10 +30,22 @@ async function currentUserId(): Promise<string | null> {
 }
 
 /**
+ * Whose job it is to ring this alarm (migration 020). The app always takes it:
+ * it rings on the phone, and a browser notification on top would cut it off.
+ * The website's alarm screen hands it back to the server; background saves on
+ * the website (backup restore) leave it as it was.
+ */
+export function onPhoneAppFor(fromScreen: boolean): { on_phone_app?: boolean } {
+  if (IS_ANDROID_APP) return { on_phone_app: true };
+  return fromScreen ? { on_phone_app: false } : {};
+}
+
+/**
  * Send the current local alarm settings to the server. Callers should surface
  * the failure reason — a silently unsaved alarm is a missed morning.
+ * `fromScreen` is true only for a save someone made on the alarm screen.
  */
-export async function pushAlarm(settings?: WakeAlarmSettings): Promise<AlarmPushResult> {
+export async function pushAlarm(settings?: WakeAlarmSettings, fromScreen = false): Promise<AlarmPushResult> {
   const alarm = settings ?? getWakeAlarmSettings();
 
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -60,6 +72,7 @@ export async function pushAlarm(settings?: WakeAlarmSettings): Promise<AlarmPush
       source: alarm.source,
       book: alarm.source === 'chapter' ? (alarm.book ?? null) : null,
       chapter: alarm.source === 'chapter' ? (alarm.chapter ?? null) : null,
+      ...onPhoneAppFor(fromScreen),
     });
     return { ok: true };
   } catch (err: any) {

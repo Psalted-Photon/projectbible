@@ -39,10 +39,10 @@ function currentPosition(): AlarmPassage {
 }
 
 /**
- * The first chapter of today's reading in the most recently added plan.
- * Returns null when there is no plan, or today is not a reading day.
+ * The first chapter of a day's reading in the most recently added plan.
+ * Returns null when there is no plan, or that day is not a reading day.
  */
-function planPassage(): AlarmPassage | null {
+function planPassage(at: Date): AlarmPassage | null {
   try {
     let data: { id: string; plan: any } | null = null;
 
@@ -58,8 +58,8 @@ function planPassage(): AlarmPassage | null {
     const days = data?.plan?.days;
     if (!Array.isArray(days)) return null;
 
-    const today = localDateStr(new Date());
-    const day = days.find((d: any) => planDayDateStr(d.date) === today);
+    const date = localDateStr(at);
+    const day = days.find((d: any) => planDayDateStr(d.date) === date);
     const first = day?.chapters?.[0];
     if (!first?.book || !first?.chapter) return null;
 
@@ -84,11 +84,12 @@ function clamp(passage: AlarmPassage): AlarmPassage {
 }
 
 /**
- * What to read now. Always returns something — a broken plan or a missing
- * setting falls back to the current position rather than leaving the start
- * screen with nothing to offer.
+ * What to read now, or at `at`: the saved opening is made ahead of time for
+ * the next ring, which for a plan can be tomorrow's reading. Always returns
+ * something — a broken plan or a missing setting falls back to the current
+ * position rather than leaving the start screen with nothing to offer.
  */
-export function resolveAlarmPassage(): AlarmPassage {
+export function resolveAlarmPassage(at: Date = new Date()): AlarmPassage {
   const alarm = getWakeAlarmSettings();
 
   if (alarm.source === 'chapter' && alarm.book) {
@@ -101,7 +102,7 @@ export function resolveAlarmPassage(): AlarmPassage {
   }
 
   if (alarm.source === 'plan') {
-    const fromPlan = planPassage();
+    const fromPlan = planPassage(at);
     if (fromPlan) return clamp(fromPlan);
     // Plan finished, not started, or today is a rest day.
     return clamp({ ...currentPosition(), because: 'where you left off — no plan reading today' });
