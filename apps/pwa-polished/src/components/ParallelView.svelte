@@ -195,9 +195,9 @@
   }
 
   /**
-   * Escape. Back is deliberately not caught here: inside the app it does
-   * nothing, so the phone's back gesture goes straight to Android. × and
-   * Escape are the ways out of this view.
+   * Escape. The phone's Back never closes this view: it is a wall in the Back
+   * list (lib/back/views.ts), so Back walks only what was opened over it,
+   * then does nothing until ×. × and Escape are the ways out of this view.
    */
   function onKeydown(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;

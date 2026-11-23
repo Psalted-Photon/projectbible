@@ -9,6 +9,7 @@
    */
   import "./theme.css";
   import { onDestroy, onMount } from "svelte";
+  import { mountWall } from "../lib/back/backList";
   import { get } from "svelte/store";
   import { tutorial } from "./state";
   import { installShield } from "./engine/shield";
@@ -69,6 +70,17 @@
    * section it was in, the same as after a restart.
    */
   let leaving = false;
+
+  // While the splash or a tour card is on screen, the phone's Back does
+  // nothing, so the tour can't be lost by accident. The tips (Hotspots) and
+  // the install chip leave Back alone.
+  const backWall = mountWall();
+  $: backWall.set(
+    ($tutorial.stage === "start" && showSplash) ||
+      leaving ||
+      $tutorial.stage === "part1" ||
+      $tutorial.stage === "part2",
+  );
 </script>
 
 <!-- The shield stops presses on anything in here reaching the app's

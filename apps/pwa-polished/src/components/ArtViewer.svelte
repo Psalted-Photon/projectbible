@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowSquareOut } from "phosphor-svelte";
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { whileMounted } from '../lib/back/backList';
   import { fade } from '../lib/motion';
   import CloseX from './CloseX.svelte';
 
@@ -311,6 +312,9 @@
   function close() {
     dispatch('close');
   }
+
+  // × only: the phone's Back does nothing while the picture is up.
+  whileMounted();
 
   onMount(() => {
     measureStage();

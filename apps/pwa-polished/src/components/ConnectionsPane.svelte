@@ -25,6 +25,7 @@
    * cream, the reader's pick (canvasPalette).
    */
   import { onMount, onDestroy, tick } from 'svelte';
+  import { mountWall } from '../lib/back/backList';
   import { get } from 'svelte/store';
   import { windowStore } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
@@ -1922,6 +1923,11 @@
   }
 
   $: if ((missing || error) && (fullscreen || askingTurn)) void setFullscreen(false);
+
+  // × only: full screen, and the turn card on the way in. The phone's Back
+  // does nothing over them; in the window it's just a window.
+  const backWall = mountWall();
+  $: backWall.set(fullscreen || askingTurn);
 
   /** Turned sideways, the card gives way to full screen; turned upright, full screen ends. */
   function onTurn() {

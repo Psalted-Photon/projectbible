@@ -825,8 +825,37 @@ function readerFor(id: string): Reader {
     readers.set(id, r);
     // A harmony pane never keeps a trail, so it never writes one either.
     if (!id.startsWith('harmony-')) trail.subscribe(() => persistWindowTrails());
+    for (const w of readerWatchers) startWatch(w, id, r);
   }
   return r;
+}
+
+/**
+ * Something that follows every reader's trail as readers come and go: the
+ * phone's Back list (lib/back/views.ts), which makes each crumb a step. It is
+ * handed each reader as it is made, and the call it returns runs when that
+ * reader goes (its window closed).
+ */
+export type ReaderWatcher = (readerId: string, trail: ReaderTrail) => () => void;
+const readerWatchers = new Set<ReaderWatcher>();
+const readerStops = new Map<string, Array<() => void>>();
+
+function startWatch(w: ReaderWatcher, id: string, r: Reader): void {
+  const stop = w(id, r.api);
+  const list = readerStops.get(id) ?? [];
+  list.push(stop);
+  readerStops.set(id, list);
+}
+
+function stopWatches(id: string): void {
+  for (const stop of readerStops.get(id) ?? []) stop();
+  readerStops.delete(id);
+}
+
+/** Follow every reader there is now, and each one made from here on. */
+export function watchReaders(w: ReaderWatcher): void {
+  readerWatchers.add(w);
+  for (const [id, r] of readers) startWatch(w, id, r);
 }
 
 /**
@@ -849,6 +878,7 @@ function pruneWindowTrails(windows: WindowState[]): void {
     r.trail.set(emptyTrail());
     r.pendingRestore.set(null);
     readers.delete(id);
+    stopWatches(id);
     changed = true;
   }
   if (changed) persistWindowTrails();

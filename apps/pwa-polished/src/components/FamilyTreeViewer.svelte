@@ -651,8 +651,9 @@
   }
 
   // ── Closing ────────────────────────────────────────────────────────────
-  // × and Escape only. The phone's Back is deliberately not caught: inside
-  // the app it does nothing, so it goes straight to Android.
+  // × and Escape only. The phone's Back never closes the tree: it is a wall
+  // in the Back list (lib/back/views.ts), so Back walks only what was opened
+  // over it, then does nothing until ×.
 
   /** The sheet's own back arrow/Escape: close the sheet, leave the tree. */
   function closeSheetOnly() {

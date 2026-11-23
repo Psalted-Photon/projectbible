@@ -26,6 +26,8 @@
   import { profileModalStore } from '../stores/profileModalStore';
   import { windowStore } from '../lib/stores/windowStore';
   import { showNotice } from '../stores/noticeStore';
+  import { onDestroy } from 'svelte';
+  import { backStep } from '../lib/back/backList';
   import { formatJoinCode } from '../lib/shared/joinCode';
 
   type Stage =
@@ -79,6 +81,12 @@
   function dismiss() {
     stage = { at: 'idle' };
   }
+
+  // The phone's Back closes the "can't open" card, as a tap outside does.
+  // (The join card reports its own: SharedNotebookJoin.)
+  const backStepRefused = backStep(dismiss);
+  $: backStepRefused.set(stage.at === 'refused');
+  onDestroy(() => backStepRefused.dispose());
 
   /**
    * Joined — say which one, and put it on screen.

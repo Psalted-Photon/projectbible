@@ -47,6 +47,7 @@
    * past it never loses it by accident.
    */
   import { tick } from "svelte";
+  import { mountWall } from "../lib/back/backList";
   import CloseX from "./CloseX.svelte";
   import { displayId, glossHead, languageColor } from "../lib/strongs/entry";
   import { openStrongsWord } from "../lib/openWork";
@@ -68,6 +69,10 @@
     left = Math.min(Math.max(EDGE, rect.left), window.innerWidth - w - EDGE);
     top = rect.bottom + GAP + h > window.innerHeight - EDGE ? Math.max(EDGE, rect.top - GAP - h) : rect.bottom + GAP;
   }
+
+  // × only: the phone's Back does nothing while the word is up.
+  const backWall = mountWall();
+  $: backWall.set(!!$shown);
 
   function openEntry(word: OriginalWord) {
     const open = $shown?.open;

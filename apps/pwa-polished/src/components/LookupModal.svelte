@@ -23,6 +23,7 @@
   import { windowStore } from "../lib/stores/windowStore";
   import { closeLookupCard, openWorkIndex, type WorkKey } from "../lib/openWork";
   import PackUpdateNotice from "./PackUpdateNotice.svelte";
+  import { backStep } from "../lib/back/backList";
 
   /** The packs behind each work, so the card can say when one has a new version. */
   const WORK_PACKS: Record<string, string[]> = {
@@ -195,6 +196,11 @@
   function handleBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget) close();
   }
+
+  // The phone's Back closes the card, as a tap outside it does.
+  const backStepCard = backStep(close);
+  $: backStepCard.set(!!work);
+  onDestroy(() => backStepCard.dispose());
 
   /** Move what's on screen into a docked window, exactly as it stands. Same
    *  edge convention throughout: beside the text on a wide screen, under it on

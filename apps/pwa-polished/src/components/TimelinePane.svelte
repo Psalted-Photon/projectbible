@@ -27,6 +27,7 @@
    * opening the map from there drops it back into the window first.
    */
   import { onMount, onDestroy, tick } from 'svelte';
+  import { mountWall } from '../lib/back/backList';
   import { get } from 'svelte/store';
   import { windowStore } from '../lib/stores/windowStore';
   import { navigationStore } from '../stores/navigationStore';
@@ -595,6 +596,11 @@
       },
     };
   }
+
+  // × only in full screen: the phone's Back does nothing over it. In the
+  // window it's just a window.
+  const backWall = mountWall();
+  $: backWall.set(fullscreen);
 
   /** In or out, keeping the year in the middle of the strip in the middle. */
   async function setFullscreen(on: boolean) {

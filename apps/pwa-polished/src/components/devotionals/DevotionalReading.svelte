@@ -19,6 +19,7 @@
    * chosen colors on custom): the X closes it back to the Devotionals tab.
    */
   import { createEventDispatcher, tick } from 'svelte';
+  import { whileMounted } from '../../lib/back/backList';
   import { get } from 'svelte/store';
   import { fade } from '../../lib/motion';
   import { SunHorizon, MoonStars, CalendarBlank, CalendarDots, CaretLeft, CaretRight, ShareNetwork, Info } from 'phosphor-svelte';
@@ -56,6 +57,9 @@
   let reading: DevotionalReading | null = null;
   let loading = true;
   let scrollEl: HTMLElement;
+
+  // × only: the phone's Back does nothing while a reading is open.
+  whileMounted();
 
   /**
    * Move the viewer to the end of <body>, as ArtViewer does: on the light and

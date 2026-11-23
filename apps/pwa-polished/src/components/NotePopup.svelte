@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
+  import { whileMounted } from '../lib/back/backList';
   import RefAwareEditor from '../lib/components/RefAwareEditor.svelte';
   import { syncedUserDataStore } from '../adapters/SyncedUserDataStore';
   import { getEditorTheme } from '../adapters/settings';
@@ -20,6 +21,9 @@
   export let height: number = 240;
 
   const dispatch = createEventDispatcher();
+
+  // × only: the phone's Back does nothing while a note is open.
+  whileMounted();
   const userDataStore = syncedUserDataStore;
 
   // Position & size (mutable local state)

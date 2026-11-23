@@ -15,6 +15,7 @@
    * work at all: a tag holds a URL, so the link is already the whole of it.
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { whileMounted } from '../lib/back/backList';
   import QrCode from './QrCode.svelte';
   import { sharedNotebookStore } from '../adapters/SharedNotebookStore';
   import type { SharedNotebook } from '../adapters/SharedNotebookStore';
@@ -126,6 +127,12 @@
   function handleBackdropClick(e: MouseEvent) {
     if ((e.target as HTMLElement).classList.contains('sj-backdrop')) close();
   }
+
+  // The phone's Back closes it as a tap outside does; while busy it waits.
+  whileMounted(() => {
+    if (busy) return false;
+    close();
+  });
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') close();

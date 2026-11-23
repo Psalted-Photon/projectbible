@@ -44,6 +44,7 @@
   import { navesModalStore } from "../stores/navesModalStore";
   import { openDevotional } from "../stores/devotionalStore";
   import { isbeReturnStore } from "../stores/isbeReturnStore";
+  import { goToCrumb as goToCrumbIn } from "../lib/back/crumbs";
   import { get } from "svelte/store";
   import { barScale } from "../lib/barSize";
   import {
@@ -156,7 +157,6 @@
   const myTrail = trailFor(windowId);
   const keepsTrail = !windowId?.startsWith("harmony-");
   const canGoBack = myTrail.canGoBack;
-  const historyDepth = myTrail.historyDepth;
   const navTrail = myTrail.navTrail;
   const navAhead = myTrail.navAhead;
   const pendingRestore = myTrail.pendingRestore;
@@ -1436,15 +1436,8 @@
    * drops the crumbs after it rather than leaving them ahead of you.
    */
   function goToCrumb(depth: number, clearAfter = false) {
-    // The ISBE return belongs to the main reader's trail.
-    const ret = windowId ? null : get(isbeReturnStore);
-    // Checked before the pop: a crumb at position N undoes the
-    // step that was recorded at depth N. Reading the depth afterwards would
-    // always be one short and never match.
-    const undoingTheJump = !!ret && depth === ret.depth;
-    myTrail.goToDepth(depth, clearAfter);
-    if (undoingTheJump) isbeModalStore.open(ret!.modal);
-    else if (ret && get(historyDepth) < ret.depth) isbeReturnStore.set(null);
+    // Shared with the phone's Back, which taps the nearest crumb.
+    goToCrumbIn(windowId, depth, clearAfter);
   }
 
   /**

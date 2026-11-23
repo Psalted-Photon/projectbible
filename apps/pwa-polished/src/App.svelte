@@ -29,6 +29,8 @@
   import { IS_ANDROID_APP } from "./lib/platform";
   import { onPhoneAlarmTap, takeLaunchTap, watchPhoneSchedule } from "./lib/android/alarms";
   import { startAppUpdates } from "./lib/android/appUpdate";
+  import { startAppBack } from "./lib/android/back";
+  import { startBackViews } from "./lib/back/views";
   import { syncFrontScreenJump } from "./lib/frontScreen";
   import AppUpdateCard from "./components/AppUpdateCard.svelte";
   import JournalLockDialog from "./components/JournalLockDialog.svelte";
@@ -359,6 +361,15 @@
 
     // The app sets the alarm and reminders on the phone. Hand it the times
     // now and whenever settings change, and hear taps while it is running.
+    // The phone's Back: one list of what it can undo (lib/back). In the app,
+    // the IrisBack plugin presses it; the website doesn't use it yet.
+    try {
+      startBackViews();
+      if (IS_ANDROID_APP) startAppBack();
+    } catch (err) {
+      console.warn("[back] couldn't start", err);
+    }
+
     if (IS_ANDROID_APP) {
       watchPhoneSchedule();
       onPhoneAlarmTap(openPhoneTap);
