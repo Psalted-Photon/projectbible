@@ -1,12 +1,12 @@
 {
-  "versionCode": 470232,
-  "versionName": "2026.11.23",
+  "versionCode": 470322,
+  "versionName": "2026.11.23.2",
   "published": "2026-11-23",
-  "notes": "Back now steps back one thing at a time: it closes popups and menus, walks back through crumbs, and leaves the app when nothing is left.",
+  "notes": "The alarm rings once, with no second notification cutting it off, and Start reading speaks right away. Read Aloud starts faster everywhere.",
   "apk": {
-    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.23/irisBible-2026.11.23.apk",
-    "bytes": 987374208,
-    "sha256": "1a5b4d00553cd6bb2a4aeb90e32aa672903b7fdff6019baf6132dfa6024dd89e"
+    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.23.2/irisBible-2026.11.23.2.apk",
+    "bytes": 987375748,
+    "sha256": "4575675a21ff2de2ba13e64e39c7ed333f456fc65bcb1e4282a2699349e556f8"
   },
   "minAndroid": "7.0"
 }
