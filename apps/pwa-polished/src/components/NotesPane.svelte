@@ -67,6 +67,7 @@
   import { navigationStore } from '../stores/navigationStore';
   import { windowStore, type DockEdge } from '../lib/stores/windowStore';
   import { showNotice } from '../stores/noticeStore';
+  import { mountDepth } from '../lib/back/backList';
 
   export let windowId: string | undefined = undefined;
   export let contentState: any = {};
@@ -1268,6 +1269,22 @@
     );
     persistState();
   }
+
+  // The phone's Back does what the page's Back button does: an open page goes
+  // back to the list. Leaving the shared editor stops at the page first, so
+  // that is two steps.
+  const backSteps = mountDepth(() => {
+    if (view === 'browse') return false;
+    void backToBrowse();
+    return true;
+  });
+  $: backSteps.set(
+    !isSignedIn || view === 'browse'
+      ? 0
+      : view === 'editor' && target?.kind === 'shared' && !sharedBlocked
+        ? 2
+        : 1,
+  );
 
   async function backToBrowse() {
     // Leaving the shared editor goes back to the page, not all the way out to

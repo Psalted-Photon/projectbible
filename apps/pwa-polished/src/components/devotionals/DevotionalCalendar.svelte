@@ -14,7 +14,7 @@
   import { CaretLeft, CaretRight, CaretDown } from 'phosphor-svelte';
   import { monthName } from '../../lib/devotionals/devotionalsData';
   import { todayMonthDay } from '../../lib/devotionals/slot';
-  import { whileMounted } from '../../lib/back/backList';
+  import { mountStep, whileMounted } from '../../lib/back/backList';
 
   /** The date being shown, which the calendar opens on and marks. */
   export let month: number;
@@ -33,6 +33,12 @@
 
   let view: 'days' | 'months' = 'days';
   let viewMonth = month;
+
+  // From the year view, Back goes back to the days first, as Escape does.
+  const monthsStep = mountStep(() => {
+    view = 'days';
+  });
+  $: monthsStep.set(view === 'months');
 
   $: days = Array.from({ length: DAYS_IN_MONTH[viewMonth - 1] }, (_, i) => i + 1);
   // Empty boxes before the 1st, so it sits under this year's weekday for it.

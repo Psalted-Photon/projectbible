@@ -336,3 +336,15 @@ export function backDepth(
     },
   };
 }
+
+/**
+ * For a component with its own crumb row or back arrow: a crumb trail (see
+ * backDepth) to `set` as it changes, gone when the component unmounts. Back
+ * calls `back`, which does what the on-screen arrow does and says whether it
+ * moved. Call while the component starts up.
+ */
+export function mountDepth(back: () => boolean): BackDepthHandle {
+  const steps = backDepth(back);
+  onDestroy(() => steps.dispose());
+  return steps;
+}

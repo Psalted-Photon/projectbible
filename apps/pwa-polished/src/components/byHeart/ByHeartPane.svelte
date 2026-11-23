@@ -33,6 +33,7 @@
   import ByHeartRow from './ByHeartRow.svelte';
   import ByHeartVerse from './ByHeartVerse.svelte';
   import TranslationTag from './TranslationTag.svelte';
+  import { mountDepth } from '../../lib/back/backList';
 
   export let windowId: string;
   /** A passage sent from elsewhere (the Verse of the Day card), taken once. */
@@ -188,6 +189,16 @@
     draft = null;
     view = fromPage ? 'verse' : readerId ? 'pick' : 'home';
   }
+
+  // The phone's Back does what the Back button at the top does: a card goes
+  // back to the verse page or the pick screen it came from, and those go home.
+  const backSteps = mountDepth(() => {
+    if (view === 'home') return false;
+    if (view === 'card') backFromCard();
+    else goHome();
+    return true;
+  });
+  $: backSteps.set(view === 'home' ? 0 : view === 'card' && (draft?.verseId || readerId) ? 2 : 1);
 
   function toCard(p: PickedPassage) {
     draft = { passage: p.passage, ref: p.ref, translation: p.translation, parts: splitParts(p.passage) };

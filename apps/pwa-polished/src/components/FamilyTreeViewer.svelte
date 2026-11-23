@@ -40,6 +40,7 @@
   import FamilyTreeBioSheet from './FamilyTreeBioSheet.svelte';
   import { motionLevel } from '../lib/motion';
   import CloseX from './CloseX.svelte';
+  import { mountStep } from '../lib/back/backList';
 
   /**
    * The tree, full screen on black — opened from People, over everything the
@@ -659,6 +660,11 @@
   function closeSheetOnly() {
     sheetOpen = false;
   }
+
+  // The phone's Back does what the sheet's back arrow does, after walking the
+  // people followed inside the bio (PersonContent's own steps, newer than this).
+  const sheetStep = mountStep(closeSheetOnly);
+  $: sheetStep.set(sheetOpen && !!(sheetPersonId || sheetTribe));
 
   /**
    * Every key is stopped here while the tree is open, not just Escape.

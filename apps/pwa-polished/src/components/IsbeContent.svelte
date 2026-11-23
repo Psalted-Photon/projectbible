@@ -45,6 +45,7 @@
   } from "../lib/isbeFormat";
   import { reveal } from "../lib/motion";
   import CloseX from "./CloseX.svelte";
+  import { mountDepth } from "../lib/back/backList";
 
   // The encyclopedia article itself, independent of what is holding it. Two
   // hosts: IsbeModal, a centered card over the reader; and a docked window,
@@ -416,6 +417,17 @@
     goBack();
     return true;
   }
+
+  // The phone's Back walks the back trail, as the back arrow does: each article
+  // you followed is a step. Not the last step out to the contents, which you
+  // never went through; once the trail is walked, Back closes the card (a
+  // docked window stays). In the card and in a window alike.
+  const backSteps = mountDepth(() => {
+    if (showContents || !trail.length) return false;
+    popTrailTo(trail.length - 1);
+    return true;
+  });
+  $: backSteps.set(showContents ? 0 : trail.length);
 
   function flip() {
     if (!showContents) {

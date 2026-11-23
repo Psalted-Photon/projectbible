@@ -14,6 +14,7 @@
   } from '../adapters/settings';
   import ArtViewer from './ArtViewer.svelte';
   import GetPacksCard from './GetPacksCard.svelte';
+  import { mountStep } from '../lib/back/backList';
 
   // Populated from the window's contentState (see WindowContainer)
   export let sceneId: string | undefined = undefined;
@@ -179,6 +180,10 @@
   function backToList() {
     selected = null;
   }
+
+  // The phone's Back does what All scenes does: an open scene goes back to the list.
+  const sceneStep = mountStep(backToList);
+  $: sceneStep.set(browse && !!selected);
 
   /** Jump the reader to the scene's anchor verse, leaving a crumb to come back. */
   function goToScene(scene: ArtScene) {

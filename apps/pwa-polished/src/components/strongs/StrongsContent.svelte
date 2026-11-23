@@ -47,6 +47,7 @@
     type EntryView,
   } from "../../lib/strongs/entry";
   import CloseX from "../CloseX.svelte";
+  import { mountDepth } from "../../lib/back/backList";
 
   /**
    * Strong's, as a work of its own beside the encyclopedia, Nave's, the people
@@ -268,6 +269,17 @@
     goBack();
     return true;
   }
+
+  // The phone's Back walks the back trail, as the back arrow does: each entry
+  // you followed is a step. Not the last step out to the contents, which you
+  // never went through; once the trail is walked, Back closes the card (a
+  // docked window stays). In the card and in a window alike.
+  const backSteps = mountDepth(() => {
+    if (showContents || !trail.length) return false;
+    popTrailTo(trail.length - 1);
+    return true;
+  });
+  $: backSteps.set(showContents ? 0 : trail.length);
 
   function flip() {
     if (!showContents) {
