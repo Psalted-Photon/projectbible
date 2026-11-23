@@ -10,10 +10,13 @@
 //   data-ground  cream before noon, night after: the grounds of the wordmark
 //                schedule in src/lib/wordmark.ts
 //   data-boot    "skip" when the app was closed under two seconds ago (a fold
-//                handing the app to the other screen): no splash at all
+//                handing the app to the other screen), or when the Android
+//                app says this start carries on where you just were (a Flip's
+//                front-screen jump, which can take longer): no splash at all
 (function() {
   var root = document.documentElement;
   root.dataset.ground = new Date().getHours() < 12 ? 'cream' : 'night';
+  if (window.__irisQuietStart) root.dataset.boot = 'skip';
   try {
     var raw = localStorage.getItem('projectbible_session');
     var savedAt = raw ? JSON.parse(raw).savedAt : null;

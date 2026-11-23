@@ -102,6 +102,9 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     // Android's fingerprint prompt, for the journal lock (IrisFingerprintPlugin).
     implementation "androidx.biometric:biometric:1.1.0"
+    // A script that runs before the page's own, to tell a front-screen jump's
+    // fresh start to skip the splash (MainActivity). Capacitor already uses it.
+    implementation "androidx.webkit:webkit:$androidxWebkitVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

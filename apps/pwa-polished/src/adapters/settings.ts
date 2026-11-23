@@ -251,6 +251,9 @@ export interface UserSettings {
   wakeAlarm?: WakeAlarmSettings; // Wake alarm push schedule (needs internet at the set time)
   devotionals?: DevotionalSettings; // Devotionals tab: main work, morning/evening, reminder times (synced)
   allowRotation?: boolean; // Allow screen to rotate to landscape (default false = portrait locked)
+  // Android app on a folding phone: closing a Flip with the app open reopens it
+  // on the front screen (lib/frontScreen.ts). Per-device; unset means on.
+  frontScreenJump?: boolean;
   autoCheckUpdates?: boolean; // Automatically check for updates on app open (default true)
   // Pin the navigation bar so it stops hiding itself as you scroll down.
   // Per-device for the same reason as the editor bars above — a phone wants the

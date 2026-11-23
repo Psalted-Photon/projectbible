@@ -29,6 +29,7 @@
   import { IS_ANDROID_APP } from "./lib/platform";
   import { onPhoneAlarmTap, takeLaunchTap, watchPhoneSchedule } from "./lib/android/alarms";
   import { startAppUpdates } from "./lib/android/appUpdate";
+  import { syncFrontScreenJump } from "./lib/frontScreen";
   import AppUpdateCard from "./components/AppUpdateCard.svelte";
   import JournalLockDialog from "./components/JournalLockDialog.svelte";
   import { quickLockSetup } from "./lib/journalLock/fingerprintOffer";
@@ -363,6 +364,9 @@
       onPhoneAlarmTap(openPhoneTap);
       // The APK from irisbible.com looks for a newer version of itself.
       startAppUpdates();
+      // The phone acts on "Jump to the front screen" when it is closed, so it
+      // keeps a copy; Settings hands over each change itself.
+      syncFrontScreenJump();
     }
 
     const handleSwMessage = (event: MessageEvent) => {

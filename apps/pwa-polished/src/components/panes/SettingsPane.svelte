@@ -73,6 +73,7 @@
   import { isInstalledApp, isIOS, isPhoneOrTablet } from "../../lib/device";
   import { canInstall, promptInstall } from "../../lib/installPrompt";
   import { IS_ANDROID_APP } from "../../lib/platform";
+  import { frontScreenJumpOn, phoneFolds, setFrontScreenJump } from "../../lib/frontScreen";
   import { appInfo, checkForAppUpdate } from "../../lib/android/appUpdate";
   import { journalLock, getRelockAfterMs, setRelockAfterMs, RELOCK_OPTIONS } from "../../lib/journalLock/lockState";
   import { userProfileStore } from "../../stores/userProfileStore";
@@ -598,6 +599,16 @@
   }
 
   // Load settings on mount
+  // "Jump to the front screen": its own write, outside the payload above,
+  // because the phone has to hear of each change (lib/frontScreen.ts).
+  let frontScreenJump = frontScreenJumpOn();
+  let phoneFoldsHere = false;
+  if (IS_ANDROID_APP) void phoneFolds().then((f) => (phoneFoldsHere = f));
+  function frontScreenJumpChanged(e: Event) {
+    frontScreenJump = (e.currentTarget as HTMLInputElement).checked;
+    setFrontScreenJump(frontScreenJump);
+  }
+
   onMount(() => {
     refreshExternalSummaries();
     window.addEventListener("settingsUpdated", refreshExternalSummaries);
@@ -1667,6 +1678,22 @@
         <span class="label-text">Allow screen rotation</span>
       </label>
     </div>
+
+    <!-- Android app on a folding phone only (lib/frontScreen.ts). -->
+    {#if IS_ANDROID_APP && phoneFoldsHere}
+      <div class="setting-group">
+        <label class="checkbox-label">
+          <input type="checkbox" checked={frontScreenJump} on:change={frontScreenJumpChanged} />
+          <span class="label-text">Jump to the front screen</span>
+        </label>
+        <p class="section-description il-hint">
+          Close the phone while irisBible is open and it opens again on the front
+          screen, where you were. It stays ahead of the lock screen until you leave
+          irisBible or the screen goes dark. While Read Aloud is reading, the phone
+          just goes dark and the reading carries on.
+        </p>
+      </div>
+    {/if}
   </SettingsSection>
 
   <SettingsSection title="Privacy" summary={privacySummary} bind:open={openSections.privacy}>

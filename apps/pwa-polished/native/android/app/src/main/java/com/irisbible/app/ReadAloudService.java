@@ -92,6 +92,11 @@ public class ReadAloudService extends Service {
     private static ReadAloudService running;
     private static boolean starting;
 
+    /** Read Aloud is speaking, or making speech to start. FrontScreen holds off its jump meanwhile. */
+    static boolean speaking() {
+        return latest.busy();
+    }
+
     /** The page's latest word on what is playing. "none" ends it all. */
     static void update(Context context, NowPlaying now) {
         latest = now;

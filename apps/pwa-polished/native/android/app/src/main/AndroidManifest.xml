@@ -77,4 +77,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Jump to the front screen (FrontScreen): closing a Galaxy Flip with the
+         app open reopens it on the front screen, through a full-screen
+         notification, the only way an app may open itself while the phone
+         sleeps. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 </manifest>

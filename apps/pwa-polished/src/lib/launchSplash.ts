@@ -18,8 +18,9 @@
  *
  * With Motion reduced or off the iris does not travel: the one-color iris
  * gives way to the finished wordmark in place. Opening the app again under
- * two seconds after closing it (a fold handing it to the other screen) shows
- * no splash at all; public/startup.js decides that, as data-boot="skip".
+ * two seconds after closing it (a fold handing it to the other screen), or a
+ * Flip's front-screen jump in the Android app, shows no splash at all;
+ * public/startup.js decides that, as data-boot="skip".
  *
  * Step 1 starts before this code has loaded: index.html draws the same big
  * iris as #boot-splash, because Android keeps its own splash (the app icon on

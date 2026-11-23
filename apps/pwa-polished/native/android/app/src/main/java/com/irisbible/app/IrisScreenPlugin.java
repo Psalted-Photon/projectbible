@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.view.WindowManager;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -24,6 +25,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  *  keepAwake       keeps the screen from timing out while the app is on
  *                  screen. Android lets go by itself whenever the app is
  *                  hidden and takes it back when the app returns.
+ *  setFrontScreenJump  the "Jump to the front screen" setting (FrontScreen),
+ *                  kept here too because the phone acts on it at the close.
+ *  foldable        whether the phone has a hinge, so the setting only shows
+ *                  on phones that fold.
  */
 @CapacitorPlugin(name = "IrisScreen")
 public class IrisScreenPlugin extends Plugin {
@@ -54,6 +59,29 @@ public class IrisScreenPlugin extends Plugin {
             getActivity().setRequestedOrientation(orientationFor(mode));
             call.resolve();
         });
+    }
+
+    /**
+     * Settings → General → "Jump to the front screen" (FrontScreen). The phone
+     * keeps its own copy, because it acts on it when you close the phone.
+     */
+    @PluginMethod
+    public void setFrontScreenJump(PluginCall call) {
+        boolean on = !Boolean.FALSE.equals(call.getBoolean("on", true));
+        FrontScreen.setOn(getContext(), on);
+        getBridge().executeOnMainThread(() -> {
+            if (on) FrontScreen.watchHinge(getActivity());
+            else FrontScreen.stopWatching();
+            call.resolve();
+        });
+    }
+
+    /** Whether the phone folds, so the front screen switch only shows where it means something. */
+    @PluginMethod
+    public void foldable(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("foldable", FrontScreen.foldable(getContext()));
+        call.resolve(result);
     }
 
     @PluginMethod
