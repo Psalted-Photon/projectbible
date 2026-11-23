@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp, startWebHistory } from './lib/back/webHistory';
   import { dumpPreviousInstallLog } from "./lib/install-log";
   import BibleReader from "./components/BibleReader.svelte";
   import ParallelView from "./components/ParallelView.svelte";
@@ -159,7 +160,7 @@
       for (const p of DEVOTIONAL_PARAMS) rest.delete(p);
       const restQuery = rest.toString();
       window.history.replaceState(
-        {},
+        window.history.state,
         '',
         window.location.pathname + (restQuery ? `?${restQuery}` : ''),
       );
@@ -320,7 +321,7 @@
       // Covers the case where today's greeting was already dismissed and then
       // reopened from the navbar — checkAndShowDailyGreeting won't restore that.
       if (get(dailyGreetingOpen)) sessionStorage.setItem('pb-votd-open', '1');
-      window.location.reload();
+      reloadApp();
     };
     const checkForSwUpdate = () => {
       if (getSettings().autoCheckUpdates === false) return;
@@ -353,7 +354,7 @@
         params.delete('alarm');
         params.delete('test');
         const query = params.toString();
-        window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+        window.history.replaceState(window.history.state, '', window.location.pathname + (query ? `?${query}` : ''));
       }
     } catch {
       // A malformed URL must not stop the app from starting.
@@ -362,10 +363,12 @@
     // The app sets the alarm and reminders on the phone. Hand it the times
     // now and whenever settings change, and hear taps while it is running.
     // The phone's Back: one list of what it can undo (lib/back). In the app,
-    // the IrisBack plugin presses it; the website doesn't use it yet.
+    // the IrisBack plugin presses it; on the website, the browser's own Back
+    // does, through one history step per entry.
     try {
       startBackViews();
       if (IS_ANDROID_APP) startAppBack();
+      else startWebHistory();
     } catch (err) {
       console.warn("[back] couldn't start", err);
     }

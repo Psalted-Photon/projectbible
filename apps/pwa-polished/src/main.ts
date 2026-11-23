@@ -15,6 +15,7 @@ import { watchForInstallPrompt } from './lib/installPrompt';
 import { showLaunchSplash } from './lib/launchSplash';
 import { startCheckup } from './lib/packCheckup';
 import { IS_ANDROID_APP } from './lib/platform';
+import { reloadApp } from './lib/back/webHistory';
 
 // Before anything that awaits: the browser fires beforeinstallprompt early and
 // only once, and initApp() below can sit waiting on the starter text download
@@ -37,7 +38,7 @@ window.addEventListener('vite:preloadError', (event) => {
     return;
   }
   event.preventDefault();
-  window.location.reload();
+  reloadApp();
 });
 
 console.log('🔥 IMPORTS LOADED');

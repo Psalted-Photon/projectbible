@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../lib/back/webHistory';
   /**
    * "Get packs": what a feature shows when the pack it needs isn't on this
    * device, in place of a dead-end message.
@@ -149,7 +150,7 @@
   {#if $restartNeeded && !$installBusy}
     <div class="gp-restart">
       <span>{IS_ANDROID_APP ? 'Unpacked. It switches on after a restart.' : 'New packs switch on after a restart.'}</span>
-      <button type="button" class="gp-restart-btn" on:click={() => window.location.reload()}>
+      <button type="button" class="gp-restart-btn" on:click={() => reloadApp()}>
         <ArrowClockwise size={16} weight="bold" /> Restart
       </button>
     </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../../lib/back/webHistory';
   import { ArrowRight, X } from "phosphor-svelte";
   import { onMount, onDestroy } from "svelte";
   import {
@@ -756,7 +757,7 @@
         setTimeout(resolve, 15000);
       });
       sessionStorage.setItem('pb-updated', '1');
-      window.location.reload();
+      reloadApp();
     } catch (err) {
       console.error('Update check failed:', err);
       showNotice("Couldn't check for updates. Try again later.", 'error');
@@ -877,7 +878,7 @@
 
       // 6. Force reload from server (bypass cache)
       setTimeout(() => {
-        window.location.reload();
+        reloadApp();
       }, 500);
     } catch (error) {
       console.error('Error clearing cache:', error);

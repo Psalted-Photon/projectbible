@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../../lib/back/webHistory';
   /**
    * The small lime chip shown between the two halves of the tour, while packs
    * install.
@@ -68,7 +69,7 @@
       <span class="bar"><span class="fill" style="width:{Math.round(progress * 100)}%"></span></span>
     {:else if $restartNeeded}
       <span class="text">{IS_ANDROID_APP ? "Everything is unpacked" : "Packs installed"}</span>
-      <button class="tut-btn chip-btn" on:click={() => window.location.reload()}>Restart</button>
+      <button class="tut-btn chip-btn" on:click={() => reloadApp()}>Restart</button>
     {:else if remaining !== null && remaining > 0}
       <span class="text">
         {$installAllState.outOfSpace ? "Out of storage" : "Some packs didn’t finish"}

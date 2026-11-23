@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../lib/back/webHistory';
   /**
    * "A new version is available": what a feature shows when a pack it reads
    * has been updated on the release since it was installed.
@@ -121,7 +122,7 @@
           <span class="pu-desc">Restart the app to finish.</span>
         </span>
         <div class="pu-actions">
-          <button type="button" class="pu-restart" on:click={() => window.location.reload()}>
+          <button type="button" class="pu-restart" on:click={() => reloadApp()}>
             <ArrowClockwise size={16} weight="bold" /> Restart
           </button>
           <button type="button" class="pu-quiet" on:click={() => (restartClosed = true)}>Later</button>

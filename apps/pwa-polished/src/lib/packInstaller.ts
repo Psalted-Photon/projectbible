@@ -70,12 +70,13 @@ import {
 } from '../adapters/tts';
 import { showNotice, errorText } from '../stores/noticeStore';
 import { markInstalled, markUpdated, checkPackUpdates, unignoredUpdates } from './packUpdates';
+import { reloadApp } from './back/webHistory';
 
 /**
  * The Restart every finished download offers, wherever it was started from:
  * most features read their packs once, at startup.
  */
-const RESTART = { label: 'Restart', run: () => window.location.reload() };
+const RESTART = { label: 'Restart', run: () => reloadApp() };
 
 /**
  * Dev builds read packs straight out of public/; production goes through the

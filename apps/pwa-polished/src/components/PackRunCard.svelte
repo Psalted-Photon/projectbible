@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../lib/back/webHistory';
   /**
    * Finishing a pack run on launch: the card shown while the app installs
    * what a background download brought after it was closed (resumePackRun),
@@ -83,7 +84,7 @@
     {#if !running && IS_ANDROID_APP && failed.length > 0}
       <button type="button" class="pr-restart" on:click={tryAgain}>Try again</button>
     {:else if !running && $restartNeeded}
-      <button type="button" class="pr-restart" on:click={() => window.location.reload()}>
+      <button type="button" class="pr-restart" on:click={() => reloadApp()}>
         <ArrowClockwise size={16} weight="bold" /> Restart
       </button>
     {/if}

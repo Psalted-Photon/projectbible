@@ -80,6 +80,7 @@
 </script>
 
 <script lang="ts">
+  import { reloadApp } from '../lib/back/webHistory';
   import { CaretUp, CaretDown, CaretRight, CaretLeft, NotePencil, ArrowRight, CirclesThree } from "phosphor-svelte";
   import { onMount, tick } from "svelte";
   import { get, writable } from "svelte/store";
@@ -7759,7 +7760,7 @@
           If you opened this link inside another app, try opening it in your
           browser instead.
         </p>
-        <button class="no-text-retry" on:click={() => location.reload()}>Try again</button>
+        <button class="no-text-retry" on:click={() => reloadApp()}>Try again</button>
       </div>
     {:else if chapters.length === 0}
       <div class="no-content">

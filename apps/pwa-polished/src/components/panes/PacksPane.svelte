@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../../lib/back/webHistory';
   import { ArrowClockwise } from "phosphor-svelte";
   import { onMount } from "svelte";
   import {
@@ -616,7 +617,7 @@
   {#if $restartNeeded && !$installBusy}
     <div class="restart-bar">
       <span>New packs switch on after a restart.</span>
-      <button class="restart-btn" on:click={() => window.location.reload()}>Restart</button>
+      <button class="restart-btn" on:click={() => reloadApp()}>Restart</button>
     </div>
   {/if}
 

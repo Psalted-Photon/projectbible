@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../lib/back/webHistory';
   /**
    * The packs check-up button in Settings → Storage & updates: one tap that
    * finds every pack this device hasn't got, every newer version of one it
@@ -188,7 +189,7 @@
 {#if !running && $restartNeeded}
   <div class="restart-row">
     <span>Restart the app to finish.</span>
-    <button type="button" class="restart" on:click={() => window.location.reload()}>
+    <button type="button" class="restart" on:click={() => reloadApp()}>
       <ArrowClockwise size={16} weight="bold" /> Restart
     </button>
   </div>

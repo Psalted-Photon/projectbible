@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../../lib/back/webHistory';
   /**
    * The lime dots, once the tour is over.
    *
@@ -406,7 +407,7 @@
       <button class="tut-btn-ghost small" on:click={backToDots}>Got it</button>
       <span class="spacer"></span>
       {#if missingPack && packState === "installed"}
-        <button class="tut-btn small" on:click={() => window.location.reload()}>Restart</button>
+        <button class="tut-btn small" on:click={() => reloadApp()}>Restart</button>
       {:else if missingPack}
         <button
           class="tut-btn small"

@@ -19,7 +19,8 @@
  *   while a wall is up, whenever they were added.
  *
  * Who presses Back: the Android app (lib/android/back.ts) asks goBackOne()
- * on each press. Nothing else calls it yet.
+ * on each press. On the website and the installed web app, the browser's own
+ * Back does (lib/back/webHistory.ts).
  */
 
 import { onDestroy } from 'svelte';
@@ -63,12 +64,17 @@ const RANK_NOW = 2;
 let seq = 0;
 const entries: Entry[] = [];
 const active = writable(false);
+const size = writable(0);
 
 /** True while the list has anything in it, a wall included: Back is ours to answer. */
 export const backListActive: Readable<boolean> = { subscribe: active.subscribe };
 
+/** How many entries the list holds, walls included (the website keeps one history step per entry). */
+export const backListSize: Readable<number> = { subscribe: size.subscribe };
+
 function changed(): void {
   active.set(entries.length > 0);
+  size.set(entries.length);
 }
 
 function add(owner: Owner, opts: { wall?: boolean; reader?: boolean; rank?: number } = {}): Entry {

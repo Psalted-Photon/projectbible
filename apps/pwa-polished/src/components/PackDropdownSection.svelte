@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../lib/back/webHistory';
   /**
    * Packs offered inside a dropdown: "More Translations" under the installed
    * ones in the translation list, and the Commentaries pack in an empty
@@ -114,7 +115,7 @@
           {/if}
         </span>
         {#if justIn[row.packId]}
-          <button type="button" class="mt-btn mt-restart" on:click={() => window.location.reload()}>
+          <button type="button" class="mt-btn mt-restart" on:click={() => reloadApp()}>
             <ArrowClockwise size={14} weight="bold" /> Restart
           </button>
         {:else if $installingPackId === row.packId}
@@ -156,7 +157,7 @@
           {/if}
         </span>
         {#if justUpdated[row.packId]}
-          <button type="button" class="mt-btn mt-restart" on:click={() => window.location.reload()}>
+          <button type="button" class="mt-btn mt-restart" on:click={() => reloadApp()}>
             <ArrowClockwise size={14} weight="bold" /> Restart
           </button>
         {:else if $installingPackId === row.packId}

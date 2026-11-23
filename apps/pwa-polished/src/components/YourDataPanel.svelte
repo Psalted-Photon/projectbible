@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reloadApp } from '../lib/back/webHistory';
   /**
    * Profile → Settings → Your Data: download everything personal as one file,
    * or restore from one.
@@ -231,7 +232,7 @@
   }
 
   function finishRestore() {
-    window.location.reload();
+    reloadApp();
   }
 </script>
 
