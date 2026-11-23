@@ -1,12 +1,12 @@
 {
-  "versionCode": 469458,
-  "versionName": "2026.11.22",
+  "versionCode": 470232,
+  "versionName": "2026.11.23",
   "published": "2026-11-23",
-  "notes": "On a Galaxy Flip, close the phone with irisBible open and it opens again on the front screen, where you were. Switch it off in Settings → General → Jump to the front screen. Read Aloud keeps reading with the phone shut.",
+  "notes": "Back now steps back one thing at a time: it closes popups and menus, walks back through crumbs, and leaves the app when nothing is left.",
   "apk": {
-    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.22/irisBible-2026.11.22.apk",
-    "bytes": 987369808,
-    "sha256": "c3a71839ad3c4b91b4b93a5400faeb787e84cd882874fa472f7ab4f1c0e24752"
+    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.23/irisBible-2026.11.23.apk",
+    "bytes": 987374208,
+    "sha256": "1a5b4d00553cd6bb2a4aeb90e32aa672903b7fdff6019baf6132dfa6024dd89e"
   },
   "minAndroid": "7.0"
 }
