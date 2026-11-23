@@ -1,12 +1,12 @@
 {
-  "versionCode": 468134,
-  "versionName": "2026.11.21.3",
-  "published": "2026-11-22",
-  "notes": "Password boxes have an eye button: tap it to see what you typed, tap again to hide it. Fixes the app's update check, which couldn't reach irisbible.com.",
+  "versionCode": 469458,
+  "versionName": "2026.11.22",
+  "published": "2026-11-23",
+  "notes": "On a Galaxy Flip, close the phone with irisBible open and it opens again on the front screen, where you were. Switch it off in Settings → General → Jump to the front screen. Read Aloud keeps reading with the phone shut.",
   "apk": {
-    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.21.3/irisBible-2026.11.21.3.apk",
-    "bytes": 987364088,
-    "sha256": "6fd787886d42d960a010e0bb2e053f213e7f679b7f6bd4653c1221c380d25183"
+    "url": "https://github.com/Psalted-Photon/projectbible/releases/download/android-2026.11.22/irisBible-2026.11.22.apk",
+    "bytes": 987369808,
+    "sha256": "c3a71839ad3c4b91b4b93a5400faeb787e84cd882874fa472f7ab4f1c0e24752"
   },
   "minAndroid": "7.0"
 }
